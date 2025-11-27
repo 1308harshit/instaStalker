@@ -1,9 +1,15 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
 
 const app = express();
 app.use(cors());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SNAPSHOT_ROOT = path.join(__dirname, "snapshots");
+app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -27,7 +33,7 @@ app.get("/api/stalkers", async (req, res) => {
     const result = await scrape(username);
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     log(`✅ Scrape completed successfully in ${duration}s`);
-    log(`📊 Returning ${result.length} cards`);
+    log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
     res.json(result);
   } catch (err) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
