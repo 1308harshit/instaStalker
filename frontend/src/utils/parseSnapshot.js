@@ -158,23 +158,114 @@ export function parseResultsSnapshot(html) {
   );
   if (storiesHeading) {
     analysis.stories.heading = clean(storiesHeading.textContent || "");
-    const storiesWrapper = storiesHeading.nextElementSibling;
+    // Find the stories wrapper - could be nextElementSibling or within a parent container
+    let storiesWrapper = storiesHeading.nextElementSibling;
+    if (!storiesWrapper || !storiesWrapper.querySelector) {
+      // Try finding a parent container with carousel or grid
+      const parent = storiesHeading.parentElement;
+      if (parent) {
+        storiesWrapper = parent.querySelector('div[role="region"][aria-roledescription="carousel"], div[class*="carousel"], div[class*="grid"]');
+      }
+    }
+    
     if (storiesWrapper) {
-      analysis.stories.slides = queryAll(
+      let storyElements = queryAll(
         storiesWrapper,
         'div[role="group"][aria-roledescription="slide"]'
-      ).map((slide) => {
-        const cover = slide.querySelector("div.relative");
-        const image = cover
-          ? extractBackgroundImage(cover.querySelector("div"))
-          : extractBackgroundImage(slide.querySelector("div[style*='background-image']"));
-        const caption = slide.querySelector("p");
-        const meta = slide.querySelector("span");
+      );
+      // Fallback: try other selectors if no slides found
+      if (storyElements.length === 0) {
+        storyElements = queryAll(storiesWrapper, "div[class*='flex'] > div[class*='basis'], div[class*='grid'] > div, article, div[class*='card']");
+      }
+      
+      // Get hero profile image to exclude it from story images
+      const heroProfileImage = analysis.hero.profileImage || "";
+      
+      analysis.stories.slides = storyElements.map((slide) => {
+        let image = null;
+        
+        // Method 1: Check for img tag first (most reliable) - exclude hero image
+        const imgTags = queryAll(slide, "img");
+        for (const imgTag of imgTags) {
+          const src = imgTag.getAttribute("src") || "";
+          if (src && src !== heroProfileImage && !src.includes("data:image/svg")) {
+            image = src;
+            break;
+          }
+        }
+        
+        // Method 2: Check div.relative with nested div
+        if (!image) {
+          const cover = slide.querySelector("div.relative");
+          if (cover) {
+            const imgDiv = cover.querySelector("div[style*='background-image'], img");
+            if (imgDiv) {
+              const bgImg = extractBackgroundImage(imgDiv);
+              if (bgImg && bgImg !== heroProfileImage && bgImg !== "none" && !bgImg.includes("data:image/svg")) {
+                image = bgImg;
+              } else if (imgDiv.tagName === "IMG") {
+                const src = imgDiv.getAttribute("src") || "";
+                if (src && src !== heroProfileImage) {
+                  image = src;
+                }
+              }
+            }
+          }
+        }
+        
+        // Method 3: Check for any div with background-image directly in slide
+        if (!image) {
+          const bgDivs = queryAll(slide, "div[style*='background-image']");
+          for (const bgDiv of bgDivs) {
+            const bgImg = extractBackgroundImage(bgDiv);
+            if (bgImg && bgImg !== heroProfileImage && bgImg !== "none" && !bgImg.includes("data:image/svg")) {
+              image = bgImg;
+              break;
+            }
+          }
+        }
+        
+        // Method 4: Check if slide itself has background-image
+        if (!image) {
+          const slideStyle = slide.getAttribute("style") || "";
+          if (slideStyle.includes("background-image")) {
+            const bgImg = extractBackgroundImage(slide);
+            if (bgImg && bgImg !== heroProfileImage && bgImg !== "none" && !bgImg.includes("data:image/svg")) {
+              image = bgImg;
+            }
+          }
+        }
+        
+        // Method 5: Check all divs recursively for background-image (excluding hero image)
+        if (!image) {
+          const allDivs = queryAll(slide, "div");
+          for (const div of allDivs) {
+            const bgImg = extractBackgroundImage(div);
+            if (bgImg && bgImg !== heroProfileImage && bgImg !== "none" && !bgImg.includes("data:image/svg")) {
+              image = bgImg;
+              break;
+            }
+          }
+        }
+        
+        const caption = slide.querySelector("p, h4, h5, .caption, [class*='caption']");
+        const meta = slide.querySelector("span, small, .meta, [class*='meta']");
+        
         return {
           image,
           caption: clean(caption?.textContent || ""),
           meta: clean(meta?.textContent || ""),
         };
+      });
+      
+      console.log("Parsed stories:", analysis.stories.slides.length, "slides");
+      analysis.stories.slides.forEach((slide, idx) => {
+        console.log(`Story ${idx}:`, { 
+          hasImage: !!slide.image, 
+          imagePreview: slide.image?.substring(0, 50),
+          caption: slide.caption,
+          meta: slide.meta 
+        });
       });
     }
   }
