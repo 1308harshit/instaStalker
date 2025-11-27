@@ -74,7 +74,7 @@ function App() {
   const MirrorStage = ({ stepName, height = 640, fallback = null }) => {
     const url = getSnapshotUrl(stepName);
     if (!url) return fallback;
-    return (
+  return (
       <div className="mirror-stage">
         <iframe
           src={url}
@@ -403,11 +403,17 @@ function App() {
           <section className="slider-section">
             <h3>{slider.heading}</h3>
             <div className="slider-grid">
-              {slider.cards.slice(0, 6).map((card, index) => (
+              {(slider.cards.length ? slider.cards : cards).map((card, index) => {
+                const imageUrl =
+                  card.image || hero.profileImage || profile.avatar;
+                return (
                 <article className="slider-card" key={`${card.title}-${index}`}>
                   <div
                     className="slider-image"
-                    style={{ backgroundImage: `url(${card.image || ""})` }}
+                      style={{
+                        backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
+                        backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
+                      }}
                   />
                   <h4 className={card.blurred ? "blurred-text" : ""}>{card.title}</h4>
                   {card.lines.map((line, idx) => (
@@ -417,7 +423,8 @@ function App() {
                   ))}
                   {card.badge && <span className="slider-badge">{card.badge}</span>}
                 </article>
-              ))}
+                );
+              })}
             </div>
           </section>
 
