@@ -37,11 +37,16 @@ const INITIAL_PROFILE = {
 
 const DEFAULT_STATS = { mentions: 0, screenshots: 0, visits: 0 };
 const BLUR_KEYWORD_REGEX = /bluredus/i;
+const INVALID_USERNAME_REGEX = /unknown/i;
+const NON_EN_SUMMARY_REGEX = /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const randBetween = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
+
+const isValidUsername = (value = "") =>
+  Boolean(value) && !INVALID_USERNAME_REGEX.test(value);
 
 function App() {
   const [screen, setScreen] = useState(SCREEN.LANDING);
@@ -113,9 +118,10 @@ function App() {
   }, [screen]);
 
   useEffect(() => {
-    setNotifications(
-      cards.filter((item) => item && (item.image || item.username))
+    const filtered = cards.filter(
+      (item) => item && isValidUsername(item.username)
     );
+    setNotifications(filtered);
   }, [cards]);
 
   useEffect(() => {
@@ -157,14 +163,23 @@ function App() {
     let index = 0;
     let toggle = 0;
 
-    const schedule = (wait) => {
+           const schedule = (wait) => {
       notificationTimerRef.current = setTimeout(() => {
-        const item = notifications[index % notifications.length];
-        pushToast(
-          `${item.username || "Unknown user"} visited your profile`,
-          item.image
-        );
-        index += 1;
+               let item = null;
+               let attempts = 0;
+               while (attempts < notifications.length && !item) {
+                 const candidate = notifications[index % notifications.length];
+                 index += 1;
+                 attempts += 1;
+                 if (isValidUsername(candidate?.username)) {
+                   item = candidate;
+                 }
+               }
+
+               if (item) {
+                 pushToast(`${item.username} visited your profile`, item.image);
+               }
+
         toggle = toggle === 0 ? 1 : 0;
         const nextDelay = toggle === 0 ? 7000 : 10000;
         schedule(nextDelay);
@@ -386,7 +401,11 @@ function App() {
       );
     }
 
-    const { hero, summary, slider, screenshots, alert, addicted, table, ctas } = analysis;
+    const { hero, summary, slider, screenshots, stories, alert, addicted, ctas } = analysis;
+    const filteredSummaryCards = summary.cards.filter((card) => {
+      const text = `${card.title} ${card.detail}`.trim();
+      return text && !NON_EN_SUMMARY_REGEX.test(text);
+    });
 
     return (
       <section className="screen preview-screen">
@@ -433,7 +452,7 @@ function App() {
               {summary.weekRange && <span>{summary.weekRange}</span>}
             </div>
             <div className="summary-grid">
-              {summary.cards.map((card) => (
+              {(filteredSummaryCards.length ? filteredSummaryCards : summary.cards).map((card) => (
                 <article key={`${card.title}-${card.detail}`}>
                   <h3>{card.title}</h3>
                   <p>{card.detail}</p>
@@ -441,6 +460,29 @@ function App() {
               ))}
             </div>
           </section>
+
+          {stories?.slides?.length > 0 && (
+            <section className="stories-section">
+              <h3>{stories.heading || "Stories activity"}</h3>
+              <div className="stories-grid">
+                {stories.slides.map((story, index) => (
+                  <article key={`${story.caption}-${index}`} className="story-card">
+                    <div
+                      className="story-cover"
+                      style={{ backgroundImage: story.image ? `url(${story.image})` : "none" }}
+                    />
+                    <p>{story.caption}</p>
+                    {story.meta && <span>{story.meta}</span>}
+                  </article>
+                ))}
+              </div>
+              {ctas.primary && (
+                <div className="cta-inline">
+                  <button className="primary-btn">{ctas.primary}</button>
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="slider-section">
             <h3>{slider.heading}</h3>
@@ -494,6 +536,11 @@ function App() {
                         className="slider-image blurred-image"
                         style={{ backgroundImage: `url(${imageUrl})` }}
                       />
+                      <div className="blurred-lock">
+                        <span role="img" aria-label="locked">
+                          🔒
+                        </span>
+                      </div>
                     </article>
                   );
                 }
@@ -528,13 +575,6 @@ function App() {
             </div>
           </section>
 
-          <section className="cta-block">
-            {ctas.primary && <button className="primary-btn">{ctas.primary}</button>}
-            {ctas.secondary && (
-              <button className="secondary-btn">{ctas.secondary}</button>
-            )}
-          </section>
-
           <section className="screenshots-panel">
             <h3>{screenshots.heading}</h3>
             <p>{screenshots.description}</p>
@@ -555,6 +595,14 @@ function App() {
                 </div>
               ))}
             </div>
+            {screenshots.footer && (
+              <p className="screenshots-footer">{screenshots.footer}</p>
+            )}
+            {ctas.secondary && (
+              <div className="cta-inline">
+                <button className="secondary-btn">{ctas.secondary}</button>
+              </div>
+            )}
           </section>
 
           {alert.title && (
@@ -580,36 +628,19 @@ function App() {
               </div>
             </section>
           )}
-
-          {table.columns.length > 0 && table.rows.length > 0 && (
-            <section className="stalker-table">
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      {table.columns.map((column) => (
-                        <th key={column}>{column}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.rows.slice(0, 6).map((row, rIndex) => (
-                      <tr key={`row-${rIndex}`}>
-                        {row.map((cell, cIndex) => (
-                          <td
-                            key={`cell-${rIndex}-${cIndex}`}
-                            className={cell.blurred ? "blurred-text" : ""}
-                          >
-                            {renderSensitiveText(cell.text, cell.blurred)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {(addicted.footer || addicted.subfooter || ctas.tertiary) && (
+            <section className="cta-block final">
+              {addicted.footer && (
+                <p className="cta-banner">{addicted.footer}</p>
+              )}
+              {ctas.tertiary && (
+                <button className="primary-btn">{ctas.tertiary}</button>
+              )}
+              {addicted.subfooter && <small>{addicted.subfooter}</small>}
             </section>
           )}
+
+          {/* table removed per request */}
         </div>
       </section>
     );

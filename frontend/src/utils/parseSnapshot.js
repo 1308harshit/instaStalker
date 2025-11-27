@@ -65,6 +65,11 @@ export function parseResultsSnapshot(html) {
       description: "",
       bullets: [],
       chat: [],
+      footer: "",
+    },
+    stories: {
+      heading: "",
+      slides: [],
     },
     alert: {
       title: "",
@@ -74,6 +79,8 @@ export function parseResultsSnapshot(html) {
     addicted: {
       title: "",
       tiles: [],
+      footer: "",
+      subfooter: "",
     },
     table: {
       columns: [],
@@ -82,6 +89,7 @@ export function parseResultsSnapshot(html) {
     ctas: {
       primary: "",
       secondary: "",
+      tertiary: "",
     },
   };
 
@@ -145,6 +153,31 @@ export function parseResultsSnapshot(html) {
   const sliderHeading = findByText(doc, "h3", (text) =>
     text.includes("Visited your profile this week")
   );
+  const storiesHeading = findByText(doc, "h3", (text) =>
+    text.toLowerCase().includes("stories activity")
+  );
+  if (storiesHeading) {
+    analysis.stories.heading = clean(storiesHeading.textContent || "");
+    const storiesWrapper = storiesHeading.nextElementSibling;
+    if (storiesWrapper) {
+      analysis.stories.slides = queryAll(
+        storiesWrapper,
+        'div[role="group"][aria-roledescription="slide"]'
+      ).map((slide) => {
+        const cover = slide.querySelector("div.relative");
+        const image = cover
+          ? extractBackgroundImage(cover.querySelector("div"))
+          : extractBackgroundImage(slide.querySelector("div[style*='background-image']"));
+        const caption = slide.querySelector("p");
+        const meta = slide.querySelector("span");
+        return {
+          image,
+          caption: clean(caption?.textContent || ""),
+          meta: clean(meta?.textContent || ""),
+        };
+      });
+    }
+  }
   if (sliderHeading) {
     const headingText = clean(sliderHeading.textContent || "");
     const colonIndex = headingText.indexOf(":");
@@ -154,7 +187,7 @@ export function parseResultsSnapshot(html) {
     analysis.slider.heading = sanitized || beforeColon || headingText;
   }
 
-  analysis.slider.cards = queryAll(
+  const rawSliderCards = queryAll(
     doc,
     'div[role="group"][aria-roledescription="slide"]'
   ).map((slide) => {
@@ -202,6 +235,21 @@ export function parseResultsSnapshot(html) {
     };
   });
 
+  const deduped = [];
+  const seen = new Set();
+
+  rawSliderCards.forEach((card) => {
+    const key = card.isLocked
+      ? `locked::${card.lockText}`
+      : `user::${card.username || card.title}`;
+    if (!card.username && !card.isLocked) return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    deduped.push(card);
+  });
+
+  analysis.slider.cards = deduped;
+
   const screenshotHeading = findByText(doc, "h3", (text) =>
     text.includes("Screenshots")
   );
@@ -224,6 +272,16 @@ export function parseResultsSnapshot(html) {
       text: clean(span.textContent || ""),
       blurred: span.className.includes("blur"),
     }));
+    if (!analysis.screenshots.footer) {
+      const footerCandidate = findByText(
+        chatWrapper.parentElement,
+        "p",
+        (text) => /uncensored|relat[óo]rio/i.test(text)
+      );
+      analysis.screenshots.footer = clean(
+        footerCandidate?.textContent || ""
+      );
+    }
   }
 
   const alertHeading = findByText(doc, "h3", (text) =>
@@ -255,6 +313,20 @@ export function parseResultsSnapshot(html) {
         body: clean(body?.textContent || ""),
       };
     });
+    const addictedFooter = findByText(
+      addictedHeading.parentElement,
+      "p",
+      (text) => /full report/i.test(text)
+    );
+    const addictedSubfooter = findByText(
+      addictedHeading.parentElement,
+      "p",
+      (text) => /limited time/i.test(text)
+    );
+    analysis.addicted.footer = clean(addictedFooter?.textContent || "");
+    analysis.addicted.subfooter = clean(
+      addictedSubfooter?.textContent || ""
+    );
   }
 
   const table = doc.querySelector("table");
@@ -279,6 +351,11 @@ export function parseResultsSnapshot(html) {
     buttons.find((text) => text.toLowerCase().includes("stalker")) || "";
   analysis.ctas.secondary =
     buttons.find((text) => text.toLowerCase().includes("uncensored")) || "";
+  analysis.ctas.tertiary =
+    buttons.find((text) =>
+      text.toLowerCase().includes("full report") ||
+      text.toLowerCase().includes("relatório")
+    ) || "";
 
   return analysis;
 }
