@@ -494,6 +494,55 @@ body {
   gap: 8px;
 }
 
+.slider-card .username {
+  margin: 0;
+  font-weight: 600;
+}
+
+.slider-card--blurred {
+  padding: 0;
+  background: #f4f4f4;
+  border-style: dashed;
+  justify-content: center;
+}
+
+.slider-card--locked {
+  position: relative;
+  background: #050505;
+  color: #fff;
+  padding: 0;
+  overflow: hidden;
+  justify-content: center;
+  align-items: center;
+}
+
+.lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  text-align: center;
+  gap: 12px;
+}
+
+.lock-icon {
+  font-size: 3.2rem;
+}
+
+.lock-text {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.blurred-image,
+.slider-card--blurred .slider-image {
+  filter: blur(10px) saturate(0);
+}
+
 .slider-image {
   width: 100%;
   height: 140px;

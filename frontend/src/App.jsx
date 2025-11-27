@@ -36,6 +36,7 @@ const INITIAL_PROFILE = {
 };
 
 const DEFAULT_STATS = { mentions: 0, screenshots: 0, visits: 0 };
+const BLUR_KEYWORD_REGEX = /bluredus/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -238,6 +239,47 @@ function App() {
     setSnapshots(data.steps || []);
   };
 
+  const splitSensitiveSegments = (text = "") => {
+    if (!text) return [];
+    const regex = new RegExp(BLUR_KEYWORD_REGEX.source, "gi");
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push({
+          text: text.slice(lastIndex, match.index),
+          blurred: false,
+        });
+      }
+      segments.push({ text: match[0], blurred: true });
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+      segments.push({ text: text.slice(lastIndex), blurred: false });
+    }
+
+    return segments.length ? segments : [{ text, blurred: false }];
+  };
+
+  const renderSensitiveText = (text = "", baseBlurred = false) => {
+    if (!text) return null;
+    if (baseBlurred) {
+      return <span className="blurred-text">{text}</span>;
+    }
+
+    return splitSensitiveSegments(text).map((segment, index) => (
+      <span
+        key={`${segment.text}-${index}-${segment.blurred}`}
+        className={segment.blurred ? "blurred-text" : ""}
+      >
+        {segment.text}
+      </span>
+    ));
+  };
+
   const renderAnalyzingFallback = () => (
     <div className="mirror-loader">
       <div className="spinner" />
@@ -406,23 +448,81 @@ function App() {
               {(slider.cards.length ? slider.cards : cards).map((card, index) => {
                 const imageUrl =
                   card.image || hero.profileImage || profile.avatar;
+                const isLocked = Boolean(
+                  card?.isLocked || card?.title?.includes("🔒")
+                );
+                const shouldBlurImage = Boolean(
+                  card?.blurImage || (!card?.username && imageUrl)
+                );
+        const lockText =
+                  card?.lockText ||
+                  card?.lines?.[0]?.text ||
+                  card?.title ||
+                  "Profile locked";
+                const showLines =
+                  !isLocked &&
+                  !shouldBlurImage &&
+                  Array.isArray(card?.lines) &&
+                  card.lines.length > 0;
+
+                if (isLocked) {
+                  return (
+                    <article
+                      className="slider-card slider-card--locked"
+                      key={`locked-${card?.username || index}`}
+                    >
+                      <div className="lock-overlay">
+                        <span className="lock-icon">🔒</span>
+                        <p className="lock-text">
+                          {renderSensitiveText(
+                            lockText,
+                            card.lockTextBlurred
+                          )}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                }
+
+                if (shouldBlurImage && imageUrl) {
+                  return (
+                    <article
+                      className="slider-card slider-card--blurred"
+                      key={`blurred-${card?.username || index}`}
+                    >
+                      <div
+                        className="slider-image blurred-image"
+                        style={{ backgroundImage: `url(${imageUrl})` }}
+                      />
+                    </article>
+                  );
+                }
+
                 return (
-                <article className="slider-card" key={`${card.title}-${index}`}>
-                  <div
-                    className="slider-image"
+                  <article className="slider-card" key={`${card.title}-${index}`}>
+                    <div
+                      className="slider-image"
                       style={{
                         backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
                         backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
                       }}
-                  />
-                  <h4 className={card.blurred ? "blurred-text" : ""}>{card.title}</h4>
-                  {card.lines.map((line, idx) => (
-                    <p key={`${line.text}-${idx}`} className={line.blurred ? "blurred-text" : ""}>
-                      {line.text}
-                    </p>
-                  ))}
-                  {card.badge && <span className="slider-badge">{card.badge}</span>}
-                </article>
+                    />
+                    {card?.username && (
+                      <h4 className="username">{card.username}</h4>
+                    )}
+                    {showLines &&
+                      card.lines.map((line, idx) => (
+                        <p
+                          key={`${line.text}-${idx}`}
+                          className={line.blurred ? "blurred-text" : ""}
+                        >
+                          {renderSensitiveText(line.text, line.blurred)}
+                        </p>
+                      ))}
+                    {card?.badge && (
+                      <span className="slider-badge">{card.badge}</span>
+                    )}
+                  </article>
                 );
               })}
             </div>
@@ -447,11 +547,11 @@ function App() {
               {screenshots.chat.map((bubble, index) => (
                 <div
                   key={`${bubble.text}-${index}`}
-                  className={`chat-bubble ${index % 2 === 0 ? "from-me" : "from-them"} ${
-                    bubble.blurred ? "blurred-text" : ""
-                  }`}
+                  className={`chat-bubble ${
+                    index % 2 === 0 ? "from-me" : "from-them"
+                  } ${bubble.blurred ? "blurred-text" : ""}`}
                 >
-                  {bubble.text}
+                  {renderSensitiveText(bubble.text, bubble.blurred)}
                 </div>
               ))}
             </div>
@@ -471,7 +571,9 @@ function App() {
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => (
                   <article key={`${tile.body}-${index}`}>
-                    <h4 className={tile.blurred ? "blurred-text" : ""}>{tile.title}</h4>
+                    <h4 className={tile.blurred ? "blurred-text" : ""}>
+                      {renderSensitiveText(tile.title, tile.blurred)}
+                    </h4>
                     <p>{tile.body}</p>
                   </article>
                 ))}
@@ -498,7 +600,7 @@ function App() {
                             key={`cell-${rIndex}-${cIndex}`}
                             className={cell.blurred ? "blurred-text" : ""}
                           >
-                            {cell.text}
+                            {renderSensitiveText(cell.text, cell.blurred)}
                           </td>
                         ))}
                       </tr>

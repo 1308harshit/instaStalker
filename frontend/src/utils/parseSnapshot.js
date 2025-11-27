@@ -8,6 +8,26 @@ const extractBackgroundImage = (element) => {
   return match[1].replace(/['"&]/g, "");
 };
 
+const hasBlurClass = (node) => {
+  if (!node) return false;
+  const className = node.className || "";
+  return /\bblur\b|\bblur-/.test(className);
+};
+
+const isElementBlurred = (element) => {
+  if (!element) return false;
+  if (hasBlurClass(element)) return true;
+  return queryAll(element, "[class*='blur']").length > 0;
+};
+
+const extractUsername = (raw = "") => {
+  const text = clean(raw);
+  if (!text) return "";
+  if (text.startsWith("@")) return text;
+  const match = text.match(/@\S+/);
+  return match ? match[0] : "";
+};
+
 const queryAll = (root, selector) =>
   root ? Array.from(root.querySelectorAll(selector)) : [];
 
@@ -15,15 +35,6 @@ const findByText = (root, selector, predicate) =>
   queryAll(root, selector).find((el) =>
     predicate(el.textContent ? el.textContent.trim() : "")
   );
-
-const readBlurValue = (container) => {
-  if (!container) return null;
-  const blurNode = container.querySelector(".blur-sm");
-  return {
-    text: clean(container.textContent || ""),
-    blurred: Boolean(blurNode),
-  };
-};
 
 export function parseResultsSnapshot(html) {
   if (typeof window === "undefined" || typeof DOMParser === "undefined") {
@@ -135,7 +146,12 @@ export function parseResultsSnapshot(html) {
     text.includes("Visited your profile this week")
   );
   if (sliderHeading) {
-    analysis.slider.heading = clean(sliderHeading.textContent || "");
+    const headingText = clean(sliderHeading.textContent || "");
+    const colonIndex = headingText.indexOf(":");
+    const beforeColon =
+      colonIndex >= 0 ? headingText.slice(0, colonIndex + 1) : headingText;
+    const sanitized = beforeColon.split("🔒")[0].trim();
+    analysis.slider.heading = sanitized || beforeColon || headingText;
   }
 
   analysis.slider.cards = queryAll(
@@ -143,20 +159,46 @@ export function parseResultsSnapshot(html) {
     'div[role="group"][aria-roledescription="slide"]'
   ).map((slide) => {
     const titleNode = slide.querySelector("h4");
-    const descNodes = queryAll(slide, "p");
-    const badgeNode = slide.querySelector(
-      ".text-sm, .text-base, span.font-medium"
-    );
     const art = slide.querySelector('div[style*="background-image"]');
+    const textNodes = queryAll(slide, "p, h2, h5, span.text-sm, span.text-base");
+    const badgeNode = slide.querySelector(
+      ".text-sm.badge, .text-base.badge, span.font-medium.badge"
+    );
+    const lockTextNode =
+      slide.querySelector("h2") ||
+      textNodes.find((node) => node.textContent?.includes("visited"));
+
+    const lines = textNodes
+      .map((node) => ({
+        text: clean(node.textContent || ""),
+        blurred: false,
+      }))
+      .filter((line) => Boolean(line.text));
+
+    const image = extractBackgroundImage(art);
+    const username = extractUsername(titleNode?.textContent);
+    const cardHasUsername = Boolean(username);
+    const lockIcon = slide.querySelector("h1");
+    const isLocked =
+      lockIcon?.textContent?.includes("🔒") ||
+      slide.className?.toLowerCase().includes("locked");
+
+    let lockText = clean(lockTextNode?.textContent || "");
+    if (!lockText && lines.length) {
+      lockText = lines[0].text;
+    }
+    const lockTextBlurred = false;
+
     return {
       title: clean(titleNode?.textContent || ""),
-      blurred: Boolean(titleNode?.querySelector(".blur-sm")),
-      lines: descNodes.map((p) => ({
-        text: clean(p.textContent || ""),
-        blurred: Boolean(p.querySelector(".blur-sm")),
-      })),
+      username,
+      lines: isLocked ? [] : lines,
       badge: clean(badgeNode?.textContent || ""),
-      image: extractBackgroundImage(art),
+      image,
+      isLocked,
+      lockText,
+      lockTextBlurred,
+      blurImage: (!cardHasUsername && Boolean(image)) || hasBlurClass(art),
     };
   });
 
