@@ -1,5 +1,6 @@
 import "./App.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { parseResultsSnapshot } from "./utils/parseSnapshot";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() ||
@@ -14,9 +15,6 @@ const API_BASE = (() => {
 })();
 const SNAPSHOT_BASE =
   import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
-
-const SAMPLE_FEED_PATH =
-  import.meta.env.VITE_SAMPLE_PATH?.trim() || "/sample.txt";
 
 const SCREEN = {
   LANDING: "landing",
@@ -38,6 +36,7 @@ const INITIAL_PROFILE = {
 };
 
 const DEFAULT_STATS = { mentions: 0, screenshots: 0, visits: 0 };
+const BLUR_KEYWORD_REGEX = /bluredus/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,7 +49,8 @@ function App() {
   const [usernameInput, setUsernameInput] = useState("");
   const [cards, setCards] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
-  const [runInfo, setRunInfo] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -59,14 +59,42 @@ function App() {
   const notificationTimerRef = useRef(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
-    loadNotificationSeeds();
-    return () => {
+  const snapshotLookup = useMemo(() => {
+    return snapshots.reduce((acc, step) => {
+      acc[step.name] = step;
+      return acc;
+    }, {});
+  }, [snapshots]);
+
+  const getSnapshotUrl = (stepName) => {
+    const step = snapshotLookup[stepName];
+    if (!step) return null;
+    return buildSnapshotUrl(step.htmlPath);
+  };
+
+  const MirrorStage = ({ stepName, height = 640, fallback = null }) => {
+    const url = getSnapshotUrl(stepName);
+    if (!url) return fallback;
+  return (
+      <div className="mirror-stage">
+        <iframe
+          src={url}
+          loading="lazy"
+          title={`snapshot-${stepName}`}
+          style={{ height: `${height}px` }}
+        />
+      </div>
+    );
+  };
+
+  useEffect(
+    () => () => {
       Object.values(toastTimers.current).forEach(clearTimeout);
       clearInterval(tickerRef.current);
       clearTimeout(notificationTimerRef.current);
-    };
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     if (screen !== SCREEN.PROCESSING) {
@@ -83,6 +111,43 @@ function App() {
     }, 1000);
     return () => clearInterval(tickerRef.current);
   }, [screen]);
+
+  useEffect(() => {
+    setNotifications(
+      cards.filter((item) => item && (item.image || item.username))
+    );
+  }, [cards]);
+
+  useEffect(() => {
+    const resultsStep = snapshots.find((step) => step.name === "results");
+    if (!resultsStep) return;
+    const url = buildSnapshotUrl(resultsStep.htmlPath);
+    if (!url) return;
+    let cancelled = false;
+
+    const loadAnalysis = async () => {
+      try {
+        setAnalysisLoading(true);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Unable to download analyzer snapshot");
+        const html = await res.text();
+        if (cancelled) return;
+        const parsed = parseResultsSnapshot(html);
+        setAnalysis(parsed);
+      } catch (err) {
+        console.error("Failed to parse analyzer snapshot", err);
+      } finally {
+        if (!cancelled) {
+          setAnalysisLoading(false);
+        }
+      }
+    };
+
+    loadAnalysis();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshots]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -106,36 +171,9 @@ function App() {
       }, wait);
     };
 
-    schedule(2000);
+    schedule(100000);
     return () => clearTimeout(notificationTimerRef.current);
   }, [screen, notifications]);
-
-  const loadNotificationSeeds = async () => {
-    try {
-      const res = await fetch(SAMPLE_FEED_PATH);
-      if (!res.ok) return;
-      const html = await res.text();
-      const parsed = parseCardsFromHtml(html);
-      setNotifications(parsed);
-    } catch (err) {
-      console.warn("Unable to load notification seeds", err);
-    }
-  };
-
-  const parseCardsFromHtml = (html) => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    return Array.from(doc.querySelectorAll("div[role='group']"))
-      .map((group) => {
-        const imageDiv = group.querySelector("div[style*='background-image']");
-        const name = group.querySelector("h4")?.textContent?.trim();
-        const style = imageDiv?.getAttribute("style") ?? "";
-        const match = style.match(/url\((.*?)\)/);
-        const image = match?.[1]?.replace(/&quot;/g, "") || "";
-        return { username: name, image };
-      })
-      .filter((item) => item.image);
-  };
 
   const buildSnapshotUrl = (htmlPath = "") => {
     if (!htmlPath) return null;
@@ -143,40 +181,11 @@ function App() {
     return `${SNAPSHOT_BASE}${normalized}`;
   };
 
-  const renderSnapshotGallery = () => {
-    if (!snapshots.length) return null;
-    return (
-      <section className="snapshot-gallery">
-        <h2>Captured flow direct from Instagram analyzer</h2>
-        <div className="snapshot-grid">
-          {snapshots.map((step) => {
-            const url = buildSnapshotUrl(step.htmlPath);
-            return (
-              <article className="snapshot-card" key={`${step.name}-${step.htmlPath}`}>
-                <header>
-                  <span>{step.name}</span>
-                  {step.meta?.capturedAt && (
-                    <small>
-                      {new Date(step.meta.capturedAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </small>
-                  )}
-                </header>
-                {url ? (
-                  <iframe src={url} loading="lazy" title={step.name} />
-                ) : (
-                  <p>Snapshot unavailable</p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      </section>
-    );
-  };
+  const profileStatsFromState = () => ([
+    { value: profile.posts, label: "posts" },
+    { value: profile.followers, label: "followers" },
+    { value: profile.following, label: "following" },
+  ]);
 
   const pushToast = (message, image) => {
     const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -197,8 +206,13 @@ function App() {
     setUsernameInput("");
     setErrorMessage("");
     setSnapshots([]);
-    setRunInfo(null);
     setCards([]);
+    setNotifications([]);
+    setToasts([]);
+    Object.values(toastTimers.current).forEach(clearTimeout);
+    toastTimers.current = {};
+    setAnalysis(null);
+    setAnalysisLoading(false);
 
     try {
       setScreen(SCREEN.ANALYZING);
@@ -223,11 +237,55 @@ function App() {
     }
     setCards(data.cards);
     setSnapshots(data.steps || []);
-    setRunInfo({
-      runId: data.runId,
-      totalTime: data.totalTime,
-    });
   };
+
+  const splitSensitiveSegments = (text = "") => {
+    if (!text) return [];
+    const regex = new RegExp(BLUR_KEYWORD_REGEX.source, "gi");
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push({
+          text: text.slice(lastIndex, match.index),
+          blurred: false,
+        });
+      }
+      segments.push({ text: match[0], blurred: true });
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+      segments.push({ text: text.slice(lastIndex), blurred: false });
+    }
+
+    return segments.length ? segments : [{ text, blurred: false }];
+  };
+
+  const renderSensitiveText = (text = "", baseBlurred = false) => {
+    if (!text) return null;
+    if (baseBlurred) {
+      return <span className="blurred-text">{text}</span>;
+    }
+
+    return splitSensitiveSegments(text).map((segment, index) => (
+      <span
+        key={`${segment.text}-${index}-${segment.blurred}`}
+        className={segment.blurred ? "blurred-text" : ""}
+      >
+        {segment.text}
+      </span>
+    ));
+  };
+
+  const renderAnalyzingFallback = () => (
+    <div className="mirror-loader">
+      <div className="spinner" />
+      <p>Mirroring the analyzer...</p>
+    </div>
+  );
 
   const renderLanding = () => (
     <section className="screen hero">
@@ -278,121 +336,281 @@ function App() {
     </section>
   );
 
+  const renderProfileFallback = () => (
+    <div className="mirror-loader">
+      <div className="spinner" />
+      <p>Loading mirrored profile confirmation...</p>
+    </div>
+  );
+
+  const renderProcessingFallback = () => (
+    <div className="mirror-loader">
+      <div className="spinner" />
+      <p>Waiting for the processing mirror...</p>
+    </div>
+  );
+
   const renderAnalyzing = () => (
     <section className="screen processing-wrapper">
-      <div className="spinner" />
-      <h1>Analyzing...</h1>
-      <p>We are capturing your profile information, please wait a few seconds.</p>
-      <div className="progress-bar">
-        <div className="progress-fill" id="progress-fill" />
-      </div>
-      <p>Analyzing your profile 🔍</p>
+      <MirrorStage stepName="analyzing" height={780} fallback={renderAnalyzingFallback()} />
     </section>
   );
 
   const renderProfile = () => (
     <section className="screen">
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: "55%" }} />
-      </div>
-      <div className="profile-card">
-        <div className="profile-avatar">
-          <img src={profile.avatar} alt="Profile" />
-        </div>
-        <div className="profile-meta">
-          <p>{profile.username}</p>
-          <h2>Hello, {profile.name}</h2>
-          <p>Is this your profile? We already started the analysis in the background.</p>
-          <div className="stats-grid">
-            <div className="stat-box">
-              <strong>{profile.posts}</strong>
-              <span>posts</span>
-            </div>
-            <div className="stat-box">
-              <strong>{profile.followers}</strong>
-              <span>followers</span>
-            </div>
-            <div className="stat-box">
-              <strong>{profile.following}</strong>
-              <span>following</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <MirrorStage stepName="profile-confirm" height={820} fallback={renderProfileFallback()} />
     </section>
   );
 
   const renderProcessing = () => (
     <section className="screen processing-wrapper">
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: "78%" }} />
-      </div>
-      <div className="scan-area">
-        <img src={profile.avatar} alt="Profile" />
-        <div className="scan-line" />
-      </div>
-      <h1>Processing data</h1>
-      <p>Our robots are analyzing the behavior of your followers</p>
-      <div className="processing-metrics">
-        <p>
-          Found <strong>{processingStats.mentions} mentions</strong> of {profile.username}
-        </p>
-        <p>
-          Detected <strong>{processingStats.screenshots} screenshots</strong> about you
-        </p>
-        <p>
-          Someone visited your profile <strong>{processingStats.visits}</strong> times today
-        </p>
-      </div>
+      <MirrorStage stepName="processing" height={900} fallback={renderProcessingFallback()} />
     </section>
   );
 
   const renderPreview = () => {
-    const topCards = cards.slice(0, 5);
+    if (analysisLoading && !analysis) {
+      return (
+        <section className="screen processing-wrapper">
+          <div className="spinner" />
+          <p>Loading analyzer data...</p>
+        </section>
+      );
+    }
+
+    if (!analysis) {
+      return (
+        <section className="screen processing-wrapper">
+          <p>Analyzer data is not available yet. Please retry the scan.</p>
+        </section>
+      );
+    }
+
+    const { hero, summary, slider, screenshots, alert, addicted, table, ctas } = analysis;
+
     return (
-      <section className="screen">
-        <div className="progress-bar">
-          <div className="progress-fill" style={{ width: "92%" }} />
+      <section className="screen preview-screen">
+        <div className="analyzer-shell">
+          <section className="hero-panel">
+            <div className="hero-top">
+              <div className="hero-avatar">
+                <img src={hero.profileImage || profile.avatar} alt={hero.name || profile.name} />
+              </div>
+              <div className="hero-meta">
+                <h1>{hero.name || profile.name}</h1>
+                <div className="hero-stats">
+                  {(hero.stats.length ? hero.stats : profileStatsFromState()).map((stat) => (
+                    <div key={`${stat.label}-${stat.value}`}>
+                      <strong>{stat.value}</strong>
+                      <span>{stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {hero.visitorSummary && (
+              <p className="hero-summary">{hero.visitorSummary}</p>
+            )}
+            {hero.visitors?.length > 0 && (
+              <div className="hero-visitors">
+                <div className="visitor-stack">
+                  {hero.visitors.slice(0, 6).map((visitor, index) => (
+                    <img
+                      key={`${visitor.alt}-${index}`}
+                      src={visitor.image}
+                      alt={visitor.alt || `visitor-${index + 1}`}
+                    />
+                  ))}
+                </div>
+                <small>Live data from the remote analyzer</small>
+              </div>
+            )}
+          </section>
+
+          <section className="preview-header">
+            <div className="preview-titles">
+              <p>{summary.warning || "Don't leave this page."}</p>
+              {summary.weekRange && <span>{summary.weekRange}</span>}
+            </div>
+            <div className="summary-grid">
+              {summary.cards.map((card) => (
+                <article key={`${card.title}-${card.detail}`}>
+                  <h3>{card.title}</h3>
+                  <p>{card.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="slider-section">
+            <h3>{slider.heading}</h3>
+            <div className="slider-grid">
+              {(slider.cards.length ? slider.cards : cards).map((card, index) => {
+                const imageUrl =
+                  card.image || hero.profileImage || profile.avatar;
+                const isLocked = Boolean(
+                  card?.isLocked || card?.title?.includes("🔒")
+                );
+                const shouldBlurImage = Boolean(
+                  card?.blurImage || (!card?.username && imageUrl)
+                );
+        const lockText =
+                  card?.lockText ||
+                  card?.lines?.[0]?.text ||
+                  card?.title ||
+                  "Profile locked";
+                const showLines =
+                  !isLocked &&
+                  !shouldBlurImage &&
+                  Array.isArray(card?.lines) &&
+                  card.lines.length > 0;
+
+                if (isLocked) {
+                  return (
+                    <article
+                      className="slider-card slider-card--locked"
+                      key={`locked-${card?.username || index}`}
+                    >
+                      <div className="lock-overlay">
+                        <span className="lock-icon">🔒</span>
+                        <p className="lock-text">
+                          {renderSensitiveText(
+                            lockText,
+                            card.lockTextBlurred
+                          )}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                }
+
+                if (shouldBlurImage && imageUrl) {
+                  return (
+                    <article
+                      className="slider-card slider-card--blurred"
+                      key={`blurred-${card?.username || index}`}
+                    >
+                      <div
+                        className="slider-image blurred-image"
+                        style={{ backgroundImage: `url(${imageUrl})` }}
+                      />
+                    </article>
+                  );
+                }
+
+                return (
+                  <article className="slider-card" key={`${card.title}-${index}`}>
+                    <div
+                      className="slider-image"
+                      style={{
+                        backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
+                        backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
+                      }}
+                    />
+                    {card?.username && (
+                      <h4 className="username">{card.username}</h4>
+                    )}
+                    {showLines &&
+                      card.lines.map((line, idx) => (
+                        <p
+                          key={`${line.text}-${idx}`}
+                          className={line.blurred ? "blurred-text" : ""}
+                        >
+                          {renderSensitiveText(line.text, line.blurred)}
+                        </p>
+                      ))}
+                    {card?.badge && (
+                      <span className="slider-badge">{card.badge}</span>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="cta-block">
+            {ctas.primary && <button className="primary-btn">{ctas.primary}</button>}
+            {ctas.secondary && (
+              <button className="secondary-btn">{ctas.secondary}</button>
+            )}
+          </section>
+
+          <section className="screenshots-panel">
+            <h3>{screenshots.heading}</h3>
+            <p>{screenshots.description}</p>
+            <ul>
+              {screenshots.bullets.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <div className="chat-preview">
+              {screenshots.chat.map((bubble, index) => (
+                <div
+                  key={`${bubble.text}-${index}`}
+                  className={`chat-bubble ${
+                    index % 2 === 0 ? "from-me" : "from-them"
+                  } ${bubble.blurred ? "blurred-text" : ""}`}
+                >
+                  {renderSensitiveText(bubble.text, bubble.blurred)}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {alert.title && (
+            <section className="alert-panel">
+              <h3 dangerouslySetInnerHTML={{ __html: alert.title }} />
+              {alert.badge && <span className="alert-badge">{alert.badge}</span>}
+              <p dangerouslySetInnerHTML={{ __html: alert.copy }} />
+            </section>
+          )}
+
+          {addicted.tiles.length > 0 && (
+            <section className="addicted-panel">
+              <h3 dangerouslySetInnerHTML={{ __html: addicted.title }} />
+              <div className="addicted-grid">
+                {addicted.tiles.map((tile, index) => (
+                  <article key={`${tile.body}-${index}`}>
+                    <h4 className={tile.blurred ? "blurred-text" : ""}>
+                      {renderSensitiveText(tile.title, tile.blurred)}
+                    </h4>
+                    <p>{tile.body}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {table.columns.length > 0 && table.rows.length > 0 && (
+            <section className="stalker-table">
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      {table.columns.map((column) => (
+                        <th key={column}>{column}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.rows.slice(0, 6).map((row, rIndex) => (
+                      <tr key={`row-${rIndex}`}>
+                        {row.map((cell, cIndex) => (
+                          <td
+                            key={`cell-${rIndex}-${cIndex}`}
+                            className={cell.blurred ? "blurred-text" : ""}
+                          >
+                            {renderSensitiveText(cell.text, cell.blurred)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </div>
-        <div className="preview-header">
-          <div>
-            <p>Preview</p>
-            <h1>Don't leave this page.</h1>
-          </div>
-          <div className="preview-cards">{
-            topCards.map((card, index) => (
-              <div
-                key={`${card.username}-${index}`}
-                className="profile-img"
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  border: "3px solid #fff",
-                  backgroundImage: `url(${card.image})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }}
-              />
-            ))
-          }</div>
-        </div>
-        <p>8 people visited your profile this week</p>
-        {runInfo && (
-          <p className="run-info">
-            Session #{runInfo.runId} • took {runInfo.totalTime || "0"}s to mirror the
-            remote flow
-          </p>
-        )}
-        <div className="preview-grid">{renderPreviewTiles(topCards)}</div>
-        <div className="cta-section">
-          <p>Visited your profile this week between 2 to 7 times.</p>
-          <button className="primary-btn" id="view-full-report" onClick={showFullReport}>
-            View Full Report
-          </button>
-        </div>
-        <section className="full-report" id="full-report" />
-        {renderSnapshotGallery()}
       </section>
     );
   };
