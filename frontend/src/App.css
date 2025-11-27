@@ -517,6 +517,80 @@ body {
   background-size: cover;
   background-position: center;
   background-color: #050505;
+  position: relative;
+  overflow: hidden;
+}
+
+.story-hero-info {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px 10px;
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.story-hero-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+}
+
+.story-hero-username {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.story-bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  z-index: 2;
+}
+
+.story-lock-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.story-bottom-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.story-caption {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: left;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.story-meta {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #fff;
+  text-align: left;
+  line-height: 1.2;
 }
 
 .story-card span {
