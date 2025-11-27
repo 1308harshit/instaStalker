@@ -575,9 +575,25 @@ function App() {
                         backgroundImage: story.image ? `url(${story.image})` : "none",
                         backgroundColor: story.image ? "transparent" : "#000"
                       }}
-                    />
-                    {story.caption && <p>{story.caption}</p>}
-                    {story.meta && <span>{story.meta}</span>}
+                    >
+                      <div className="story-hero-info">
+                        <img 
+                          src={hero.profileImage || profile.avatar} 
+                          alt={hero.name || profile.name}
+                          className="story-hero-avatar"
+                        />
+                        <span className="story-hero-username">{hero.name || profile.name}</span>
+                      </div>
+                      {(story.caption || story.meta) && (
+                        <div className="story-bottom-overlay">
+                          <span className="story-lock-icon">🔒</span>
+                          <div className="story-bottom-text">
+                            {story.caption && <p className="story-caption">{story.caption}</p>}
+                            {story.meta && <span className="story-meta">{story.meta}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </article>
                 ))}
               </div>
