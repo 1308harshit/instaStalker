@@ -443,7 +443,13 @@ function App() {
 
           <section className="preview-header">
             <div className="preview-titles">
-              <p>{summary.warning || "Don't leave this page."}</p>
+              {(() => {
+                const warningText =
+                  summary.warning && summary.warning.length < 200
+                    ? summary.warning
+                    : "Don't leave this page.";
+                return <p>{warningText}</p>;
+              })()}
               {summary.weekRange && <span>{summary.weekRange}</span>}
             </div>
             <div className="summary-grid">
@@ -508,6 +514,11 @@ function App() {
                         className="slider-image blurred-image"
                         style={{ backgroundImage: `url(${imageUrl})` }}
                       />
+                      <div className="blurred-lock">
+                        <span role="img" aria-label="locked">
+                          🔒
+                        </span>
+                      </div>
                     </article>
                   );
                 }

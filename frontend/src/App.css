@@ -501,9 +501,11 @@ body {
 
 .slider-card--blurred {
   padding: 0;
-  background: #f4f4f4;
-  border-style: dashed;
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
 .slider-card--locked {
@@ -544,6 +546,19 @@ body {
 .blurred-image,
 .slider-card--blurred .slider-image {
   filter: blur(10px) saturate(0);
+}
+
+.slider-card--blurred .slider-image {
+  height: 200px;
+}
+
+.blurred-lock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3rem;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
 .slider-image {
