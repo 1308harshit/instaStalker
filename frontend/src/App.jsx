@@ -37,11 +37,15 @@ const INITIAL_PROFILE = {
 
 const DEFAULT_STATS = { mentions: 0, screenshots: 0, visits: 0 };
 const BLUR_KEYWORD_REGEX = /bluredus/i;
+const INVALID_USERNAME_REGEX = /unknown/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const randBetween = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
+
+const isValidUsername = (value = "") =>
+  Boolean(value) && !INVALID_USERNAME_REGEX.test(value);
 
 function App() {
   const [screen, setScreen] = useState(SCREEN.LANDING);
@@ -113,9 +117,10 @@ function App() {
   }, [screen]);
 
   useEffect(() => {
-    setNotifications(
-      cards.filter((item) => item && (item.image || item.username))
+    const filtered = cards.filter(
+      (item) => item && isValidUsername(item.username)
     );
+    setNotifications(filtered);
   }, [cards]);
 
   useEffect(() => {
@@ -157,14 +162,23 @@ function App() {
     let index = 0;
     let toggle = 0;
 
-    const schedule = (wait) => {
+           const schedule = (wait) => {
       notificationTimerRef.current = setTimeout(() => {
-        const item = notifications[index % notifications.length];
-        pushToast(
-          `${item.username || "Unknown user"} visited your profile`,
-          item.image
-        );
-        index += 1;
+               let item = null;
+               let attempts = 0;
+               while (attempts < notifications.length && !item) {
+                 const candidate = notifications[index % notifications.length];
+                 index += 1;
+                 attempts += 1;
+                 if (isValidUsername(candidate?.username)) {
+                   item = candidate;
+                 }
+               }
+
+               if (item) {
+                 pushToast(`${item.username} visited your profile`, item.image);
+               }
+
         toggle = toggle === 0 ? 1 : 0;
         const nextDelay = toggle === 0 ? 7000 : 10000;
         schedule(nextDelay);
