@@ -1,9 +1,18 @@
 import { launchBrowser } from "./browser.js";
 import { elements } from "./selectors.js";
+import path from "path";
+import { fileURLToPath } from "url";
+import { mkdir, writeFile } from "fs/promises";
+
+const DEBUG_SCRAPE = process.env.DEBUG_SCRAPE === "1";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SNAPSHOT_DIR = path.join(__dirname, "..", "snapshots");
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data || '');
+  console.log(`[${timestamp}] ${message}`, data || "");
 };
 
 export async function scrape(username) {
@@ -16,6 +25,36 @@ export async function scrape(username) {
   const page = await browser.newPage();
   log('✅ New page created');
 
+  const runId = `${Date.now()}`;
+  const snapshotBaseDir = path.join(SNAPSHOT_DIR, username || "unknown", runId);
+  const steps = [];
+  let stepIndex = 0;
+
+  const captureStep = async (name, meta = {}) => {
+    try {
+      stepIndex += 1;
+      const html = await page.content();
+      await mkdir(snapshotBaseDir, { recursive: true });
+      const fileName = `${String(stepIndex).padStart(2, "0")}-${name}.html`;
+      const filePath = path.join(snapshotBaseDir, fileName);
+      await writeFile(filePath, html, "utf8");
+      const relativePath = path
+        .relative(path.join(__dirname, ".."), filePath)
+        .replace(/\\/g, "/");
+      const entry = {
+        name,
+        htmlPath: `/${relativePath}`,
+        meta: { ...meta, capturedAt: new Date().toISOString() },
+      };
+      steps.push(entry);
+      log(`📝 Snapshot saved for "${name}" -> ${relativePath}`);
+      return entry;
+    } catch (snapshotErr) {
+      log(`⚠️  Failed to capture snapshot for "${name}"`, snapshotErr.message);
+      return null;
+    }
+  };
+
   try {
     // Step 1: Navigate to page - use domcontentloaded for faster load
     log('📍 Navigating to page...');
@@ -24,6 +63,7 @@ export async function scrape(username) {
       timeout: 20000,
     });
     log('✅ Page loaded');
+    await captureStep("landing", { url: page.url() });
 
     // Step 2: Find and click "Reveal Stalkers" button immediately (no start button exists)
     log('🔍 Looking for "Reveal Stalkers" button...');
@@ -62,6 +102,7 @@ export async function scrape(username) {
       // Fill username immediately
       await input.fill(username);
       log(`✅ Username "${username}" entered`);
+      await captureStep("username-entry", { username });
     } catch (err) {
       log('❌ Error finding username input:', err.message);
       const inputs = await page.$$eval('input, textarea', inputs => 
@@ -92,6 +133,13 @@ export async function scrape(username) {
       
       // Minimal wait for page to update (just 100ms)
       await page.waitForTimeout(100);
+      log("⏳ Waiting for analyzing view...");
+      try {
+        await page.waitForSelector("text=Analyzing", { timeout: 8000 });
+        await captureStep("analyzing");
+      } catch (waitErr) {
+        log("⚠️  Could not capture analyzing view:", waitErr.message);
+      }
     } catch (err) {
       log('❌ Error finding Continue button:', err.message);
       throw new Error(`Could not find Continue button: ${err.message}`);
@@ -117,6 +165,19 @@ export async function scrape(username) {
         log('✅ Profile confirmation button found (generic Continue)');
       }
       
+      try {
+        const displayedHandle = await page
+          .locator("text=/^@/i")
+          .first()
+          .textContent();
+        await captureStep("profile-confirm", {
+          displayedHandle: displayedHandle?.trim() || null,
+        });
+      } catch (handleErr) {
+        await captureStep("profile-confirm");
+        log("⚠️  Unable to capture profile confirm metadata:", handleErr.message);
+      }
+
       // Click immediately - no wait
       await confirmButton.click();
       log('✅ Clicked "Continue, the profile is correct" button');
@@ -126,6 +187,14 @@ export async function scrape(username) {
     } catch (err) {
       log('❌ Error finding profile confirmation button:', err.message);
       throw new Error(`Could not find profile confirmation button: ${err.message}`);
+    }
+
+    try {
+      log("⏳ Waiting for processing view...");
+      await page.waitForSelector("text=Processing data", { timeout: 10000 });
+      await captureStep("processing");
+    } catch (procErr) {
+      log("⚠️  Could not capture processing view:", procErr.message);
     }
 
     // Step 6: Wait for analysis to complete and cards to appear (~35 seconds)
@@ -181,6 +250,8 @@ export async function scrape(username) {
       throw new Error('Cards did not appear within timeout period');
     }
 
+    await captureStep("results");
+
     // Cards are already verified in step 6 polling, proceed to extraction
 
     log('📦 Extracting card data...');
@@ -204,6 +275,25 @@ export async function scrape(username) {
     log(`✅ Successfully extracted ${data.length} cards`);
     log('📊 Card data:', data);
 
+    try {
+      const viewFullReportBtn = await page.waitForSelector(
+        'button:has-text("View Full Report")',
+        { timeout: 5000 }
+      );
+      await viewFullReportBtn.click();
+      await page.waitForTimeout(500);
+      await captureStep("full-report");
+      log("📸 Captured full report snapshot");
+    } catch (reportErr) {
+      log("ℹ️ View Full Report button not available:", reportErr.message);
+    }
+
+    if (DEBUG_SCRAPE) {
+      const html = await page.content();
+      await writeFile('debug-latest.html', html, 'utf8');
+      log('📝 Debug HTML saved to debug-latest.html');
+    }
+
     await browser.close();
     log('✅ Browser closed');
     
@@ -211,7 +301,12 @@ export async function scrape(username) {
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log(`⏱️  Total scraping time: ${totalTime} seconds`);
     
-    return data;
+    return {
+      runId,
+      steps,
+      cards: data,
+      totalTime,
+    };
   } catch (error) {
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log('❌ Scraping failed:', error.message);
