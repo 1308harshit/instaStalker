@@ -154,7 +154,7 @@ export function parseResultsSnapshot(html) {
     analysis.slider.heading = sanitized || beforeColon || headingText;
   }
 
-  analysis.slider.cards = queryAll(
+  const rawSliderCards = queryAll(
     doc,
     'div[role="group"][aria-roledescription="slide"]'
   ).map((slide) => {
@@ -201,6 +201,21 @@ export function parseResultsSnapshot(html) {
       blurImage: (!cardHasUsername && Boolean(image)) || hasBlurClass(art),
     };
   });
+
+  const deduped = [];
+  const seen = new Set();
+
+  rawSliderCards.forEach((card) => {
+    const key = card.isLocked
+      ? `locked::${card.lockText}`
+      : `user::${card.username || card.title}`;
+    if (!card.username && !card.isLocked) return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    deduped.push(card);
+  });
+
+  analysis.slider.cards = deduped;
 
   const screenshotHeading = findByText(doc, "h3", (text) =>
     text.includes("Screenshots")
