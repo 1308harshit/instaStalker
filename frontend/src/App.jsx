@@ -477,7 +477,7 @@ function App() {
     let bulletTimer = null;
     let finalDelayTimer = null;
     
-    // Show remaining bullets one by one with 1 second delay (starting from second bullet)
+    // Show remaining bullets one by one with 1.5 second delay (starting from second bullet)
     bulletTimer = setInterval(() => {
       setProcessingMessageIndex((prev) => {
         const nextIndex = prev + 1;
@@ -492,7 +492,7 @@ function App() {
         }
         return nextIndex;
       });
-    }, 1000); // 1 second delay between each bullet
+    }, 1500); // 1.5 second delay between each bullet
     
     return () => {
       if (bulletTimer) {

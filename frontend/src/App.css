@@ -1156,6 +1156,12 @@ body {
     padding: 0 16px;
   }
 
+  /* Processing bullet points - slightly bigger on mobile */
+  .processing-card ul.processing-list li {
+    font-size: 17px;
+    line-height: 1.5;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
