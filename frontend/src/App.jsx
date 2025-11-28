@@ -2,6 +2,9 @@ import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { parseResultsSnapshot } from "./utils/parseSnapshot";
 import { parseFullReport } from "./utils/parseFullReport";
+import b1Image from "./assets/b1.jpg";
+import g1Image from "./assets/g1.jpg";
+import g2Image from "./assets/g2.jpg";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() ||
@@ -24,6 +27,7 @@ const SCREEN = {
   PROCESSING: "processing",
   PREVIEW: "preview",
   FULL_REPORT: "full-report",
+  PAYMENT: "payment",
   ERROR: "error",
 };
 
@@ -272,6 +276,16 @@ function App() {
   const [fullReportLoading, setFullReportLoading] = useState(false);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
+  
+  // Payment page state
+  const [paymentForm, setPaymentForm] = useState({
+    email: "",
+    fullName: "",
+    phoneNumber: "",
+  });
+  const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
+  const [quantity, setQuantity] = useState(1);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const snapshotLookup = useMemo(() => {
@@ -1473,7 +1487,12 @@ function App() {
 
           {/* CTA Button */}
           <div className="full-report-cta">
-            <button className="full-report-cta-button">I want the complete report</button>
+            <button 
+              className="full-report-cta-button"
+              onClick={() => setScreen(SCREEN.PAYMENT)}
+            >
+              I want the complete report
+            </button>
           </div>
 
           {/* Footer */}
@@ -1491,6 +1510,327 @@ function App() {
           className="full-report-content"
           dangerouslySetInnerHTML={{ __html: fullReportHtml }}
         />
+      </section>
+    );
+  };
+
+  // Countdown timer effect for payment page
+  useEffect(() => {
+    if (screen === SCREEN.PAYMENT && paymentCountdown > 0) {
+      const timer = setInterval(() => {
+        setPaymentCountdown((prev) => {
+          if (prev <= 1) return 0;
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [screen, paymentCountdown]);
+
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    setPaymentLoading(true);
+
+    try {
+      // Save user data to MongoDB
+      const saveResponse = await fetch(`${API_BASE}/api/payment/save-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paymentForm),
+      });
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to save user data");
+      }
+
+      // Create payment session
+      const amount = 199 * quantity; // 199₹ per item
+      const sessionResponse = await fetch(`${API_BASE}/api/payment/create-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...paymentForm,
+          amount,
+        }),
+      });
+
+      if (!sessionResponse.ok) {
+        const errorData = await sessionResponse.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Payment session error:", errorData);
+        throw new Error(errorData.message || errorData.error || "Failed to create payment session");
+      }
+
+      const sessionData = await sessionResponse.json();
+      console.log("Payment session created:", sessionData);
+      
+      // Check if payment session ID exists
+      if (!sessionData.paymentSessionId) {
+        throw new Error("Payment session ID not received from server");
+      }
+
+      // Wait a bit for Cashfree SDK to load if not already loaded
+      let retries = 0;
+      const maxRetries = 10;
+      while (!window.Cashfree && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+
+      // Initialize Cashfree payment
+      if (window.Cashfree) {
+        try {
+          const cashfree = new window.Cashfree({
+            mode: "sandbox", // Test mode
+          });
+          
+          console.log("Initializing Cashfree checkout with session:", sessionData.paymentSessionId);
+          
+          cashfree.checkout({
+            paymentSessionId: sessionData.paymentSessionId,
+            redirectTarget: "_self",
+          }).catch((err) => {
+            console.error("Cashfree checkout error:", err);
+            alert(`Payment initialization failed: ${err.message || "Unknown error"}`);
+            setPaymentLoading(false);
+          });
+        } catch (initErr) {
+          console.error("Cashfree initialization error:", initErr);
+          alert(`Failed to initialize payment gateway: ${initErr.message || "Unknown error"}`);
+          setPaymentLoading(false);
+        }
+      } else {
+        console.error("Cashfree SDK not loaded after waiting");
+        console.log("Window.Cashfree:", window.Cashfree);
+        alert("Payment gateway SDK not loaded. Please refresh the page and try again.");
+        setPaymentLoading(false);
+      }
+    } catch (err) {
+      console.error("Payment error:", err);
+      console.error("Error details:", err.message, err.stack);
+      // Show more detailed error message
+      const errorMsg = err.message || "Failed to process payment. Please try again.";
+      alert(errorMsg);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const renderPayment = () => {
+    const originalPrice = 1299;
+    const currentPrice = 199;
+    const subtotal = currentPrice * quantity;
+    const total = subtotal;
+
+    // Indian reviews/testimonials
+    const reviews = [
+      {
+        name: "Priya Sharma",
+        rating: 5,
+        text: "I discovered I had 3 secret admirers lol, I loved it!",
+        avatar: g1Image,
+      },
+      {
+        name: "Rahul Patel",
+        rating: 5,
+        text: "Worse still, it's true lol, it showed that my ex is looking at my profile every day, and I even discovered the name of his fake account lol, whoever created this app is brilliant",
+        avatar: b1Image,
+      },
+      {
+        name: "Anjali Mehta",
+        rating: 5,
+        text: "This app is amazing! Found out who's been stalking my profile. Worth every rupee!",
+        avatar: g2Image,
+      },
+    ];
+
+    return (
+      <section className="screen payment-screen">
+        <div className="payment-container">
+          {/* Top Banner - Countdown */}
+          <div className="payment-banner">
+            <span>Your report expires in {formatCountdown(paymentCountdown)}</span>
+          </div>
+
+          {/* Main Content */}
+          <div className="payment-content">
+            {/* Left Column */}
+            <div className="payment-left">
+              {/* Marketing Text */}
+              <div className="payment-marketing">
+                <h2>Discover the truth.</h2>
+                <h2>You deserve to know.</h2>
+                <h2>Unlock your full report today.</h2>
+              </div>
+
+              {/* Discount Badge */}
+              <div className="payment-discount-badge">
+                <span>80% OFF</span>
+              </div>
+
+              {/* Contact Form */}
+              <div className="payment-form-section">
+                <h3 className="payment-form-title">Contact</h3>
+                <form onSubmit={handlePaymentSubmit} className="payment-form">
+                  <div className="payment-form-group">
+                    <label htmlFor="email">E-mail*</label>
+                    <input
+                      type="email"
+                      id="email"
+                      required
+                      value={paymentForm.email}
+                      onChange={(e) =>
+                        setPaymentForm({ ...paymentForm, email: e.target.value })
+                      }
+                      placeholder="your.email@example.com"
+                    />
+                  </div>
+
+                  <div className="payment-form-group">
+                    <label htmlFor="fullName">Full name*</label>
+                    <input
+                      type="text"
+                      id="fullName"
+                      required
+                      value={paymentForm.fullName}
+                      onChange={(e) =>
+                        setPaymentForm({ ...paymentForm, fullName: e.target.value })
+                      }
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+
+                  <div className="payment-form-group">
+                    <label htmlFor="phoneNumber">Phone number*</label>
+                    <div className="phone-input-wrapper">
+                      <span className="phone-prefix">🇮🇳 +91</span>
+                      <input
+                        type="tel"
+                        id="phoneNumber"
+                        required
+                        value={paymentForm.phoneNumber}
+                        onChange={(e) =>
+                          setPaymentForm({
+                            ...paymentForm,
+                            phoneNumber: e.target.value.replace(/\D/g, ""),
+                          })
+                        }
+                        placeholder="9876543210"
+                        maxLength={10}
+                      />
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Guarantee Section */}
+              <div className="payment-guarantee">
+                <div className="guarantee-icon">✓</div>
+                <div className="guarantee-content">
+                  <h4>14-Day Money-Back Guarantee</h4>
+                  <p>
+                    Try it risk-free. If you're not happy within 14 days, we'll refund you — no
+                    questions asked.
+                  </p>
+                </div>
+              </div>
+
+              {/* Urgency Countdown */}
+              <div className="payment-urgency">
+                <div className="urgency-icon">⚠️</div>
+                <div className="urgency-content">
+                  <p>Your report expires in</p>
+                  <div className="urgency-timer">{formatCountdown(paymentCountdown)}</div>
+                </div>
+              </div>
+
+              {/* Reviews */}
+              <div className="payment-reviews">
+                {reviews.map((review, index) => (
+                  <div key={index} className="payment-review-card">
+                    <img src={review.avatar} alt={review.name} className="review-avatar" />
+                    <div className="review-content">
+                      <div className="review-name">{review.name}</div>
+                      <div className="review-stars">
+                        {Array.from({ length: review.rating }).map((_, i) => (
+                          <span key={i}>⭐</span>
+                        ))}
+                      </div>
+                      <div className="review-text">{review.text}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column - Order Summary */}
+            <div className="payment-right">
+              <div className="payment-order-summary">
+                <h3 className="order-summary-title">Order Summary</h3>
+
+                {/* Product Item */}
+                <div className="order-item">
+                  <div className="order-item-icon">📱</div>
+                  <div className="order-item-details">
+                    <div className="order-item-name">Unlock Insta Full Report</div>
+                    <div className="order-item-price">₹{currentPrice.toLocaleString("en-IN")}</div>
+                  </div>
+                  <div className="order-item-quantity">
+                    <button
+                      type="button"
+                      className="quantity-btn"
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    >
+                      -
+                    </button>
+                    <span className="quantity-value">{quantity}</span>
+                    <button
+                      type="button"
+                      className="quantity-btn"
+                      onClick={() => setQuantity(quantity + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Price Breakdown */}
+                <div className="order-breakdown">
+                  <div className="breakdown-row">
+                    <span>Retail price</span>
+                    <span className="strikethrough">
+                      ₹{(originalPrice * quantity).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div className="breakdown-row">
+                    <span>Subtotal</span>
+                    <span>₹{subtotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="breakdown-row breakdown-total">
+                    <span>Total</span>
+                    <span>₹{total.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+
+                {/* Place Order Button */}
+                <button
+                  type="submit"
+                  className="place-order-btn"
+                  onClick={handlePaymentSubmit}
+                  disabled={paymentLoading}
+                >
+                  {paymentLoading ? "Processing..." : "PLACE ORDER"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     );
   };
@@ -1519,6 +1859,8 @@ function App() {
         return renderPreview();
       case SCREEN.FULL_REPORT:
         return renderFullReport();
+      case SCREEN.PAYMENT:
+        return renderPayment();
       case SCREEN.ERROR:
         return renderError();
       default:
