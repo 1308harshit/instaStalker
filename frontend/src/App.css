@@ -1110,6 +1110,474 @@ body {
   background: #fff;
 }
 
+.full-report-screen {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  box-shadow: none;
+  background: #fff;
+  overflow-y: auto;
+}
+
+.full-report-container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+  background: #fff;
+}
+
+/* Progress Bar */
+.full-report-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: #f43f3f;
+  margin-bottom: 24px;
+}
+
+/* Header Section */
+.full-report-header {
+  padding: 0 0 24px;
+}
+
+.full-report-header-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.full-report-avatar {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: 4px solid #f43f3f;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.full-report-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.full-report-title {
+  font-size: 34px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.2;
+  flex: 1;
+}
+
+.full-report-subtitle {
+  font-size: 18px;
+  color: #666;
+  margin: 0;
+  text-align: center;
+  width: 100%;
+}
+
+/* Features Grid */
+.full-report-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 32px 0;
+}
+
+.full-report-feature-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.full-report-feature-icon {
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.full-report-feature-card h3 {
+  font-size: 21px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 12px;
+}
+
+.full-report-feature-card p {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Marketing Section */
+.full-report-marketing {
+  margin: 40px 0;
+  text-align: center;
+}
+
+.full-report-more {
+  font-size: 26px;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 20px;
+  text-align: center;
+}
+
+.full-report-system,
+.full-report-emotional,
+.full-report-not-going,
+.full-report-direction {
+  font-size: 18px;
+  color: #1a1a1a;
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.full-report-disappointment {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f43f3f;
+  margin: 0 0 24px;
+}
+
+.full-report-divider {
+  width: 40px;
+  height: 2px;
+  background: #1a1a1a;
+  margin: 24px auto;
+}
+
+.full-report-goal {
+  font-size: 45px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 20px 0;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.full-report-certainty {
+  font-size: 18px;
+  color: #1a1a1a;
+  margin: 12px 0 0;
+  line-height: 1.6;
+}
+
+.full-report-certainty strong {
+  font-weight: 700;
+}
+
+/* Urgency Section */
+.full-report-urgency {
+  margin: 32px 0;
+  text-align: center;
+}
+
+.full-report-countdown {
+  background: #fff9e6;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #8b6f00;
+  text-align: center;
+}
+
+.full-report-countdown .countdown-timer {
+  font-weight: 700;
+}
+
+.full-report-warning {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.full-report-warning-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.full-report-warning-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  color: #ffa500;
+}
+
+.full-report-warning-text {
+  flex: 1;
+}
+
+.full-report-warning-text p {
+  font-size: 18px;
+  color: #1a1a1a;
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.full-report-warning-text p strong {
+  font-weight: 700;
+}
+
+/* Pricing Section */
+.full-report-pricing {
+  margin: 40px 0;
+}
+
+.full-report-pricing-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.full-report-pricing-header {
+  margin-bottom: 24px;
+  min-height: 40px;
+}
+
+.full-report-pricing-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.full-report-lock-icon {
+  font-size: 26px;
+  color: #ff8c00;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.full-report-pricing-header h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.full-report-discount-badge {
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 1;
+}
+
+.full-report-pricing-details {
+  text-align: left;
+  margin-top: 8px;
+}
+
+.full-report-original-price {
+  font-size: 16px;
+  color: #999;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+}
+
+.full-report-current-price {
+  font-size: 48px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.full-report-current-price .price-number {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.full-report-current-price .price-currency {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.full-report-payment-type {
+  font-size: 16px;
+  color: #999;
+  margin: 0;
+}
+
+.full-report-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.full-report-benefit-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: left;
+}
+
+.full-report-benefit-card h4 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 8px;
+}
+
+.full-report-benefit-card p {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.full-report-bonus {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: left;
+}
+
+.full-report-bonus h4 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 8px;
+}
+
+.full-report-bonus p {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* CTA Button */
+.full-report-cta {
+  margin: 40px 0;
+}
+
+.full-report-cta-button {
+  width: 100%;
+  background: #f43f3f;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 18px 24px;
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.full-report-cta-button:hover {
+  background: #d32f2f;
+}
+
+/* Footer */
+.full-report-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.full-report-footer p {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.full-report-footer a {
+  color: #4a90e2;
+  text-decoration: none;
+}
+
+.full-report-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .full-report-container {
+    padding: 0 16px 32px;
+  }
+
+  .full-report-title {
+    font-size: 24px;
+  }
+
+  .full-report-features {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .full-report-goal {
+    font-size: 28px;
+  }
+
+  .full-report-benefits {
+    grid-template-columns: 1fr;
+  }
+
+  .full-report-current-price {
+    font-size: 32px;
+  }
+}
+
+/* Fallback for raw HTML rendering */
+.full-report-content {
+  width: 100%;
+  min-height: 100vh;
+  background: #fff;
+}
+
+.full-report-content * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.full-report-content img {
+  max-width: 100%;
+  height: auto;
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -1154,6 +1622,12 @@ body {
 
   .profile-message {
     padding: 0 16px;
+  }
+
+  /* Processing bullet points - slightly bigger on mobile */
+  .processing-card ul.processing-list li {
+    font-size: 17px;
+    line-height: 1.5;
   }
 
   .stats-grid {

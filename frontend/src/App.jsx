@@ -1,6 +1,7 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { parseResultsSnapshot } from "./utils/parseSnapshot";
+import { parseFullReport } from "./utils/parseFullReport";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() ||
@@ -22,6 +23,7 @@ const SCREEN = {
   PROFILE: "profile",
   PROCESSING: "processing",
   PREVIEW: "preview",
+  FULL_REPORT: "full-report",
   ERROR: "error",
 };
 
@@ -265,6 +267,9 @@ function App() {
     "profile-confirm": null,
     processing: null,
   });
+  const [fullReportHtml, setFullReportHtml] = useState(null);
+  const [fullReportData, setFullReportData] = useState(null);
+  const [fullReportLoading, setFullReportLoading] = useState(false);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const activeRequestRef = useRef(0);
@@ -477,7 +482,7 @@ function App() {
     let bulletTimer = null;
     let finalDelayTimer = null;
     
-    // Show remaining bullets one by one with 1 second delay (starting from second bullet)
+    // Show remaining bullets one by one with 1.5 second delay (starting from second bullet)
     bulletTimer = setInterval(() => {
       setProcessingMessageIndex((prev) => {
         const nextIndex = prev + 1;
@@ -492,7 +497,7 @@ function App() {
         }
         return nextIndex;
       });
-    }, 1000); // 1 second delay between each bullet
+    }, 1500); // 1.5 second delay between each bullet
     
     return () => {
       if (bulletTimer) {
@@ -799,6 +804,48 @@ function App() {
     }
     setCards(data.cards);
     setSnapshots((prev) => mergeSnapshotSteps(prev, data.steps || []));
+  };
+
+  const handleViewFullReport = async () => {
+    // Find the full-report snapshot
+    const fullReportStep = snapshots.find((step) => step.name === "full-report");
+    if (!fullReportStep) {
+      console.error("Full report snapshot not found");
+      return;
+    }
+
+    setFullReportLoading(true);
+    setScreen(SCREEN.FULL_REPORT);
+
+    try {
+      const url = buildSnapshotUrl(fullReportStep.htmlPath);
+      if (!url) {
+        throw new Error("Could not build snapshot URL");
+      }
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("Failed to fetch full report");
+      }
+
+      const html = await res.text();
+      
+      // Parse the HTML to extract structured data
+      const parsedData = parseFullReport(html);
+      if (parsedData) {
+        setFullReportData(parsedData);
+        setFullReportHtml(html); // Keep raw HTML for reference
+      } else {
+        // Fallback: use raw HTML if parsing fails
+        setFullReportHtml(html);
+      }
+    } catch (err) {
+      console.error("Failed to load full report:", err);
+      setErrorMessage("Failed to load full report. Please try again.");
+      setScreen(SCREEN.ERROR);
+    } finally {
+      setFullReportLoading(false);
+    }
   };
 
   const splitSensitiveSegments = (text = "") => {
@@ -1260,7 +1307,12 @@ function App() {
                 <p className="cta-banner">{addicted.footer}</p>
               )}
               {ctas.tertiary && (
-                <button className="primary-btn">{ctas.tertiary}</button>
+                <button 
+                  className="primary-btn"
+                  onClick={handleViewFullReport}
+                >
+                  {ctas.tertiary}
+                </button>
               )}
               {addicted.subfooter && <small>{addicted.subfooter}</small>}
             </section>
@@ -1268,6 +1320,177 @@ function App() {
 
           {/* table removed per request */}
         </div>
+      </section>
+    );
+  };
+
+  const renderFullReport = () => {
+    if (fullReportLoading) {
+      return (
+        <section className="screen hero">
+          <div className="spinner" />
+          <p>Loading full report...</p>
+        </section>
+      );
+    }
+
+    if (!fullReportData && !fullReportHtml) {
+      return (
+        <section className="screen hero">
+          <h1>Full Report Not Available</h1>
+          <p>The full report could not be loaded.</p>
+          <button className="primary-btn" onClick={() => setScreen(SCREEN.PREVIEW)}>
+            Back to Preview
+          </button>
+        </section>
+      );
+    }
+
+    // Extract avatar from parsed data or use profile avatar
+    const profileAvatar = fullReportData?.avatar || profile.avatar;
+    
+    // Debug: Log avatar source
+    if (fullReportData?.avatar) {
+      console.log("✅ Using avatar from fullReportData");
+    } else if (profile.avatar) {
+      console.log("⚠️ Using fallback avatar from profile");
+    } else {
+      console.warn("⚠️ No avatar available");
+    }
+
+    return (
+      <section className="screen full-report-screen">
+        <div className="full-report-container">
+          {/* Progress Bar */}
+          <div className="full-report-progress-bar"></div>
+
+          {/* Header Section */}
+          <div className="full-report-header">
+            <div className="full-report-header-top">
+              {profileAvatar && (
+                <div className="full-report-avatar">
+                  <img src={profileAvatar} alt="Profile" />
+                </div>
+              )}
+              <h1 className="full-report-title">Unlock Complete Report</h1>
+            </div>
+            <p className="full-report-subtitle">You will have access to:</p>
+          </div>
+
+          {/* Features Grid */}
+          <div className="full-report-features">
+            <div className="full-report-feature-card">
+              <div className="full-report-feature-icon">🔍</div>
+              <h3>Story Repeats</h3>
+              <p>People who viewed and re-viewed your stories</p>
+            </div>
+
+            <div className="full-report-feature-card">
+              <div className="full-report-feature-icon">🔍</div>
+              <h3>Visit Tracking</h3>
+              <p>Discover who is visiting your profile</p>
+            </div>
+
+            <div className="full-report-feature-card">
+              <div className="full-report-feature-icon">🔍</div>
+              <h3>Mention Tracking</h3>
+              <p>Find out which followers talk about you the most</p>
+            </div>
+
+            <div className="full-report-feature-card">
+              <div className="full-report-feature-icon">🔍</div>
+              <h3>Who's Watching You</h3>
+              <p>See who took SCREENSHOTS of your profile and stories</p>
+            </div>
+          </div>
+
+          {/* Marketing Section */}
+          <div className="full-report-marketing">
+            <p className="full-report-more">And much more...</p>
+            <p className="full-report-system">Our reporting system is the only truly functional system on the market.</p>
+            <p className="full-report-emotional">We could charge what you've already spent on dates, clothes and dinners that never led to anything.</p>
+            <p className="full-report-disappointment">Where you only got disappointed.</p>
+            
+            <div className="full-report-divider"></div>
+            
+            <p className="full-report-not-going">But we're not going to do that,</p>
+            <h2 className="full-report-goal">We want you to have a goal</h2>
+            <p className="full-report-direction">We're here giving you the only thing you're still missing, direction.</p>
+            <p className="full-report-certainty">
+              It's not worth humiliating yourself for someone who doesn't want you, <strong>this is your chance to have certainty.</strong>
+            </p>
+          </div>
+
+          {/* Urgency Section */}
+          <div className="full-report-urgency">
+            <div className="full-report-countdown">
+              <span>Limited time offer: <span className="countdown-timer">14:57</span></span>
+            </div>
+            <div className="full-report-warning">
+              <div className="full-report-warning-content">
+                <span className="full-report-warning-icon">⚠️</span>
+                <div className="full-report-warning-text">
+                  <p><strong>Don't leave this page!</strong></p>
+                  <p>We only allow viewing the<br />preview <strong>ONCE</strong></p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing Section */}
+          <div className="full-report-pricing">
+            <div className="full-report-pricing-card">
+              <span className="full-report-discount-badge">80% OFF PROMOTION</span>
+              <div className="full-report-pricing-header">
+                <div className="full-report-pricing-left">
+                  <span className="full-report-lock-icon">🔓</span>
+                  <h3>Complete<br />Report</h3>
+                </div>
+              </div>
+              <div className="full-report-pricing-details">
+                <p className="full-report-original-price">from <span className="strikethrough">90 USD</span> for:</p>
+                <p className="full-report-current-price"><span className="price-number">17</span> <span className="price-currency">USD</span></p>
+                <p className="full-report-payment-type">one-time payment</p>
+              </div>
+            </div>
+
+            <div className="full-report-benefits">
+              <div className="full-report-benefit-card">
+                <h4>Lifetime Access</h4>
+                <p>No monthly fees, one-time payment</p>
+              </div>
+              <div className="full-report-benefit-card">
+                <h4>14-Day Guarantee</h4>
+                <p>Full refund if not satisfied</p>
+              </div>
+            </div>
+
+            <div className="full-report-bonus">
+              <h4>Bonus</h4>
+              <p>Ebook: Manual for attraction and re-attraction</p>
+            </div>
+          </div>
+
+          {/* CTA Button */}
+          <div className="full-report-cta">
+            <button className="full-report-cta-button">I want the complete report</button>
+          </div>
+
+          {/* Footer */}
+          <div className="full-report-footer">
+            <p>2025 © Cartpanda Inc. (United States) Inc. and/or its licensors. Review <a href="#">legal terms of use here</a> and <a href="#">privacy policy here</a>. <a href="#">Contact us here</a>.</p>
+          </div>
+        </div>
+      </section>
+    );
+
+    // Fallback to raw HTML rendering
+    return (
+      <section className="screen full-report-screen">
+        <div 
+          className="full-report-content"
+          dangerouslySetInnerHTML={{ __html: fullReportHtml }}
+        />
       </section>
     );
   };
@@ -1294,6 +1517,8 @@ function App() {
         return renderProcessing();
       case SCREEN.PREVIEW:
         return renderPreview();
+      case SCREEN.FULL_REPORT:
+        return renderFullReport();
       case SCREEN.ERROR:
         return renderError();
       default:
