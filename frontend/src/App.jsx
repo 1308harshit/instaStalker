@@ -42,12 +42,198 @@ const NON_EN_SUMMARY_REGEX = /(seus seguidores|amoroso|vista\(o\)|você é|dos s
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const ANALYZING_STAGE_HOLD_MS = 1500;
+const PROFILE_STAGE_HOLD_MS = 5000;
+const PROCESSING_STAGE_HOLD_MS = 2000;
 
 const randBetween = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
 const isValidUsername = (value = "") =>
   Boolean(value) && !INVALID_USERNAME_REGEX.test(value);
+
+const createProfileStageData = (
+  username = INITIAL_PROFILE.username,
+  avatar = INITIAL_PROFILE.avatar,
+  name = INITIAL_PROFILE.name
+) => ({
+  avatar,
+  progressPercent: 55,
+  username,
+  greeting: `Hello, ${name || username.replace("@", "")}`,
+  question: "Is this your profile?",
+  primaryCta: "Continue, the profile is correct",
+  secondaryCta: "No, I want to correct it",
+});
+
+const createProcessingStageData = (
+  username = INITIAL_PROFILE.username,
+  avatar = INITIAL_PROFILE.avatar
+) => ({
+  avatar,
+  title: "Processing data",
+  subtitle:
+    "Our robots are analyzing the behavior of your followers",
+  bullets: [
+    `Found 10 mentions of ${username} in messages from your followers`,
+    "Our AI detected a possible screenshot of someone talking about you",
+    "It was detected that someone you know visited your profile 9 times yesterday",
+    "2 people from your region shared one of your stories",
+  ],
+});
+
+const extractInlineAvatar = (doc) => {
+  const candidate = Array.from(doc.querySelectorAll("[style]")).find((node) =>
+    /background-image/i.test(node.getAttribute("style") || "")
+  );
+  if (candidate) {
+    const match = candidate
+      .getAttribute("style")
+      .match(/url\((['"]?)(.+?)\1\)/i);
+    if (match?.[2]) {
+      return match[2];
+    }
+  }
+  const imgNode = doc.querySelector("img[src]");
+  return imgNode?.getAttribute("src") || INITIAL_PROFILE.avatar;
+};
+
+const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username) => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const avatar = extractInlineAvatar(doc);
+    const usernameNode = Array.from(doc.querySelectorAll("span, div, p")).find(
+      (node) => /^@/.test((node.textContent || "").trim())
+    );
+    const greetingNode = doc.querySelector("h1, h2");
+    const questionNode = Array.from(doc.querySelectorAll("p, span")).find((node) =>
+      /profile/i.test((node.textContent || "").trim())
+    );
+    const buttons = Array.from(doc.querySelectorAll("button"));
+    const progressNode = Array.from(doc.querySelectorAll("[style]")).find((node) =>
+      /width:\s*\d+%/i.test(node.getAttribute("style") || "")
+    );
+
+    let progressPercent = 55;
+    if (progressNode) {
+      const match = progressNode
+        .getAttribute("style")
+        .match(/width:\s*([\d.]+)%/i);
+      if (match?.[1]) {
+        progressPercent = Number(match[1]);
+      }
+    }
+
+    // Extract clean username - only get the @username part, not any concatenated text
+    let cleanUsername = fallbackUsername;
+    if (usernameNode) {
+      const rawText = usernameNode.textContent?.trim() || "";
+      // Try to extract just the @username part
+      // Match @username pattern and stop before "Hello", "Is", or any capital letter that starts a new word
+      const usernameMatch = rawText.match(/^(@[\w_]+)/i);
+      if (usernameMatch) {
+        cleanUsername = usernameMatch[1];
+        // Additional cleanup: remove common concatenated words
+        // If username ends with common words like "Hello", "Is", etc., remove them
+        const cleaned = cleanUsername.replace(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i, '');
+        if (cleaned.startsWith('@')) {
+          cleanUsername = cleaned;
+        }
+      } else if (rawText.startsWith("@")) {
+        // If it starts with @, extract up to first non-username character or common words
+        const parts = rawText.split(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i);
+        cleanUsername = parts[0] || fallbackUsername;
+      }
+    }
+
+    return {
+      avatar,
+      progressPercent,
+      username: cleanUsername,
+      greeting: (greetingNode?.textContent || "Hello").trim(),
+      question: (questionNode?.textContent || "Is this your profile?").trim(),
+      primaryCta:
+        (buttons[0]?.textContent || "Continue, the profile is correct").trim(),
+      secondaryCta:
+        (buttons[1]?.textContent || "No, I want to correct it").trim(),
+    };
+  } catch (err) {
+    console.error("Failed to parse profile snapshot", err);
+    return null;
+  }
+};
+
+const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const avatar = extractInlineAvatar(doc) || fallbackAvatar;
+    const titleNode = doc.querySelector("h1, h2");
+    const subtitleNode = doc.querySelector("p");
+    // Extract bullet points - focus on list items first, then individual paragraphs
+    const bullets = [];
+    
+    // First, try to get list items (most reliable for bullet points)
+    const listItems = Array.from(doc.querySelectorAll("li"));
+    listItems.forEach((li) => {
+      // Get direct text content, excluding nested list items
+      const directText = Array.from(li.childNodes)
+        .filter(node => node.nodeType === 3) // Text nodes only
+        .map(node => node.textContent.trim())
+        .join(" ")
+        .trim();
+      
+      if (directText && directText.length > 20) {
+        // Also check if it has nested elements with text
+        const nestedText = li.textContent.trim();
+        // Use nested text if it's reasonable length (not concatenated)
+        const text = nestedText.length < 200 ? nestedText : directText;
+        if (text && /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      }
+    });
+    
+    // If no list items found, look for individual paragraphs
+    if (bullets.length === 0) {
+      const paragraphs = Array.from(doc.querySelectorAll("p"));
+      paragraphs.forEach((p) => {
+        const text = p.textContent.trim();
+        // Only include if it looks like a bullet point (not too long, contains keywords)
+        if (text.length > 20 && text.length < 200 && 
+            /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      });
+    }
+    
+    // Remove duplicates and filter out very long concatenated text
+    const uniqueBullets = bullets
+      .filter((text, index, arr) => arr.indexOf(text) === index)
+      .filter(text => text.length < 200); // Filter out concatenated long text
+
+    return {
+      avatar,
+      title: titleNode?.textContent?.trim() || "Processing data",
+      subtitle:
+        subtitleNode?.textContent?.trim() ||
+        "Our robots are analyzing the behavior of your followers",
+      bullets:
+        uniqueBullets.length > 0
+          ? uniqueBullets
+          : [
+              `Found 10 mentions of ${fallbackUsername} in messages from your followers`,
+              "Our AI detected a possible screenshot of someone talking about you",
+              "It was detected that someone you know visited your profile 9 times yesterday",
+              "2 people from your region shared one of your stories",
+            ],
+    };
+  } catch (err) {
+    console.error("Failed to parse processing snapshot", err);
+    return null;
+  }
+};
 
 function App() {
   const [screen, setScreen] = useState(SCREEN.LANDING);
@@ -58,13 +244,31 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
+  const [profileStage, setProfileStage] = useState(createProfileStageData());
+  const [processingStage, setProcessingStage] = useState(
+    createProcessingStageData(INITIAL_PROFILE.username, INITIAL_PROFILE.avatar)
+  );
+  const [canAdvanceFromProfile, setCanAdvanceFromProfile] = useState(false);
+  const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
+  const profileHoldTimerRef = useRef(null);
+  const processingHoldTimerRef = useRef(null);
+  const analyzingTimerRef = useRef(null);
+  const analyzingStartRef = useRef(null);
   const notificationTimerRef = useRef(null);
   const [errorMessage, setErrorMessage] = useState("");
-
+  const [snapshotHtml, setSnapshotHtml] = useState({
+    analyzing: null,
+    "profile-confirm": null,
+    processing: null,
+  });
+  const [analyzingProgress, setAnalyzingProgress] = useState(0);
+  const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
+  const activeRequestRef = useRef(0);
+  const stepHtmlFetchRef = useRef({});
   const snapshotLookup = useMemo(() => {
     return snapshots.reduce((acc, step) => {
       acc[step.name] = step;
@@ -72,31 +276,84 @@ function App() {
     }, {});
   }, [snapshots]);
 
-  const getSnapshotUrl = (stepName) => {
-    const step = snapshotLookup[stepName];
-    if (!step) return null;
-    return buildSnapshotUrl(step.htmlPath);
+  // Fetch HTML content for a snapshot
+  const fetchSnapshotHtml = async (stepName, htmlPath) => {
+    const url = buildSnapshotUrl(htmlPath);
+    if (!url) return null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const html = await res.text();
+      if (typeof DOMParser !== "undefined") {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        doc.querySelectorAll("script").forEach((node) => node.remove());
+        const body = doc.querySelector("body");
+        const styles = doc.querySelectorAll("style, link[rel='stylesheet']");
+        const headMarkup = Array.from(styles)
+          .map((node) => node.outerHTML)
+          .join("");
+        if (body) {
+          return `${headMarkup}${body.innerHTML}`;
+        }
+      }
+      return html;
+    } catch (err) {
+      console.error(`Failed to fetch snapshot HTML for ${stepName}:`, err);
+      return null;
+    }
   };
 
-  const MirrorStage = ({ stepName, height = 640, fallback = null }) => {
-    const url = getSnapshotUrl(stepName);
-    if (!url) return fallback;
-  return (
-      <div className="mirror-stage">
-        <iframe
-          src={url}
-          loading="lazy"
-          title={`snapshot-${stepName}`}
-          style={{ height: `${height}px` }}
-        />
-      </div>
-    );
-  };
+  // Effect to fetch HTML when snapshots become available
+  useEffect(() => {
+    const loadSnapshotHtml = async (stepName) => {
+      const step = snapshotLookup[stepName];
+      if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName]) return;
+      stepHtmlFetchRef.current[stepName] = true;
+      const html = await fetchSnapshotHtml(stepName, step.htmlPath);
+      if (html) {
+        setSnapshotHtml((prev) => {
+          if (prev[stepName]) return prev;
+          return {
+            ...prev,
+            [stepName]: html,
+          };
+        });
+        if (stepName === "profile-confirm") {
+          const parsed = parseProfileSnapshot(html, profile.username);
+          if (parsed) {
+            setProfileStage(parsed);
+          }
+        }
+        if (stepName === "processing") {
+          const parsed = parseProcessingSnapshot(html, profile.avatar, profile.username);
+          if (parsed) {
+            setProcessingStage(parsed);
+          }
+        }
+      }
+      stepHtmlFetchRef.current[stepName] = false;
+    };
+
+    // Load HTML for each available snapshot (only if not already loaded)
+    if (snapshotLookup["analyzing"]) {
+      loadSnapshotHtml("analyzing");
+    }
+    if (snapshotLookup["profile-confirm"]) {
+      loadSnapshotHtml("profile-confirm");
+    }
+    if (snapshotLookup["processing"]) {
+      loadSnapshotHtml("processing");
+    }
+  }, [snapshotLookup, snapshotHtml, profile.avatar, profile.username]);
 
   useEffect(
     () => () => {
       Object.values(toastTimers.current).forEach(clearTimeout);
       clearInterval(tickerRef.current);
+      clearTimeout(profileHoldTimerRef.current);
+      clearTimeout(processingHoldTimerRef.current);
+      clearInterval(analyzingTimerRef.current);
       clearTimeout(notificationTimerRef.current);
     },
     []
@@ -119,11 +376,133 @@ function App() {
   }, [screen]);
 
   useEffect(() => {
+    if (screen === SCREEN.PREVIEW || screen === SCREEN.ERROR) {
+      return;
+    }
+
+    if (
+      screen === SCREEN.ANALYZING &&
+      snapshotHtml["profile-confirm"] &&
+      analyzingProgress >= 100 &&
+      (!analyzingStartRef.current ||
+        Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
+    ) {
+      setScreen(SCREEN.PROFILE);
+      setCanAdvanceFromProfile(false);
+      clearTimeout(profileHoldTimerRef.current);
+      profileHoldTimerRef.current = setTimeout(() => {
+        setCanAdvanceFromProfile(true);
+      }, PROFILE_STAGE_HOLD_MS);
+      return;
+    }
+
+    if (
+      screen === SCREEN.PROFILE &&
+      snapshotHtml.processing &&
+      canAdvanceFromProfile
+    ) {
+      setScreen(SCREEN.PROCESSING);
+      setCanAdvanceFromProcessing(false);
+      clearTimeout(processingHoldTimerRef.current);
+      processingHoldTimerRef.current = setTimeout(() => {
+        setCanAdvanceFromProcessing(true);
+      }, PROCESSING_STAGE_HOLD_MS);
+      return;
+    }
+  }, [
+    screen,
+    snapshotHtml["profile-confirm"],
+    snapshotHtml.processing,
+    canAdvanceFromProfile,
+    analyzingProgress,
+  ]);
+
+  useEffect(() => {
     const filtered = cards.filter(
       (item) => item && isValidUsername(item.username)
     );
     setNotifications(filtered);
   }, [cards]);
+
+  useEffect(() => {
+    if (screen !== SCREEN.ANALYZING || snapshotHtml.analyzing) {
+      return;
+    }
+    analyzingStartRef.current = Date.now();
+    setAnalyzingProgress(0);
+    clearInterval(analyzingTimerRef.current);
+    analyzingTimerRef.current = setInterval(() => {
+      setAnalyzingProgress((prev) => {
+        if (prev >= 98) {
+          clearInterval(analyzingTimerRef.current);
+          return 98;
+        }
+        return Math.min(98, prev + randBetween(2, 5));
+      });
+    }, 800);
+    return () => clearInterval(analyzingTimerRef.current);
+  }, [screen, snapshotHtml.analyzing]);
+
+  useEffect(() => {
+    if (!snapshotHtml.analyzing) return;
+    clearInterval(analyzingTimerRef.current);
+    const timer = setInterval(() => {
+      setAnalyzingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        return prev + 1;
+      });
+    }, 40);
+    return () => clearInterval(timer);
+  }, [snapshotHtml.analyzing]);
+
+  useEffect(() => {
+    if (screen !== SCREEN.PROCESSING) {
+      return;
+    }
+    // Show first bullet immediately (no delay)
+    setProcessingMessageIndex(0);
+    setCanAdvanceFromProcessing(false); // Reset when processing starts
+    
+    // If there's only one bullet, wait 1 second then allow transition
+    if (processingStage.bullets.length <= 1) {
+      const singleBulletTimer = setTimeout(() => {
+        setCanAdvanceFromProcessing(true);
+      }, 1000);
+      return () => clearTimeout(singleBulletTimer);
+    }
+    
+    let bulletTimer = null;
+    let finalDelayTimer = null;
+    
+    // Show remaining bullets one by one with 1 second delay (starting from second bullet)
+    bulletTimer = setInterval(() => {
+      setProcessingMessageIndex((prev) => {
+        const nextIndex = prev + 1;
+        // Check if all bullets are now shown (we've reached the last index)
+        if (nextIndex >= processingStage.bullets.length - 1) {
+          clearInterval(bulletTimer);
+          // All bullets are now visible, wait 1 more second before allowing transition
+          finalDelayTimer = setTimeout(() => {
+            setCanAdvanceFromProcessing(true);
+          }, 1000); // 1 second delay after last bullet is shown
+          return processingStage.bullets.length - 1;
+        }
+        return nextIndex;
+      });
+    }, 1000); // 1 second delay between each bullet
+    
+    return () => {
+      if (bulletTimer) {
+        clearInterval(bulletTimer);
+      }
+      if (finalDelayTimer) {
+        clearTimeout(finalDelayTimer);
+      }
+    };
+  }, [screen, processingStage.bullets.length]);
 
   useEffect(() => {
     const resultsStep = snapshots.find((step) => step.name === "results");
@@ -155,6 +534,16 @@ function App() {
       cancelled = true;
     };
   }, [snapshots]);
+
+  useEffect(() => {
+    // Wait until all processing bullets are shown before transitioning to preview
+    const allBulletsShown = processingStage.bullets.length > 0 && 
+      processingMessageIndex >= processingStage.bullets.length - 1;
+    
+    if (analysis && screen === SCREEN.PROCESSING && canAdvanceFromProcessing && allBulletsShown) {
+      setScreen(SCREEN.PREVIEW);
+    }
+  }, [analysis, screen, canAdvanceFromProcessing, processingMessageIndex, processingStage.bullets.length]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -212,6 +601,135 @@ function App() {
     }, 7000);
   };
 
+  const checkSnapshotExists = async (username, timestamp, fileName) => {
+    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    const url = buildSnapshotUrl(snapshotPath);
+    try {
+      // Try HEAD first (lighter), fallback to GET if HEAD fails
+      let res = await fetch(url, { 
+        method: "HEAD",
+        cache: 'no-cache'
+      });
+      if (!res.ok && res.status === 405) {
+        // If HEAD not supported, try GET
+        res = await fetch(url, { 
+          method: "GET",
+          cache: 'no-cache'
+        });
+      }
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const findSnapshotDirectory = async (username, requestId) => {
+    // Try to find the snapshot directory by checking recent timestamps
+    // Check timestamps from now going back 1 minute (in case scraping started slightly before)
+    const now = Date.now();
+    const checkRange = 60 * 1000; // 1 minute in milliseconds
+    const step = 1000; // Check every 1 second
+    
+    // Check for any snapshot file (03, 04, 05, or 06) to find the directory
+    const snapshotFiles = ["03-analyzing.html", "04-profile-confirm.html", "05-processing.html", "06-results.html"];
+    
+    // Check files in parallel for each timestamp to speed up discovery
+    for (let timestamp = now; timestamp >= now - checkRange; timestamp -= step) {
+      if (activeRequestRef.current !== requestId) {
+        return null;
+      }
+      // Check all files in parallel for this timestamp
+      const checks = await Promise.all(
+        snapshotFiles.map(fileName => checkSnapshotExists(username, timestamp, fileName))
+      );
+      
+      // If any file exists, we found the directory
+      if (checks.some(exists => exists)) {
+        return timestamp;
+      }
+      
+      // Small delay to avoid hammering the server
+      await delay(100);
+    }
+    return null;
+  };
+
+  const registerSnapshot = (username, timestamp, fileName, stepName, requestId) => {
+    if (activeRequestRef.current !== requestId) return;
+    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    setSnapshots((prev) => {
+      const filtered = prev.filter((s) => s.name !== stepName);
+      return [...filtered, { name: stepName, htmlPath: snapshotPath }];
+    });
+  };
+
+  const waitForSnapshotFile = async (
+    username,
+    timestamp,
+    fileName,
+    requestId,
+    maxAttempts = 600,
+    interval = 500
+  ) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (activeRequestRef.current !== requestId) {
+        return false;
+      }
+      const exists = await checkSnapshotExists(username, timestamp, fileName);
+      if (exists) {
+        return true;
+      }
+      await delay(interval);
+    }
+    return false;
+  };
+
+  const monitorSnapshots = async (username, requestId) => {
+    try {
+      let timestamp = await findSnapshotDirectory(username, requestId);
+      if (!timestamp) {
+        const maxWait = 60000;
+        const start = Date.now();
+        while (!timestamp && Date.now() - start < maxWait) {
+          if (activeRequestRef.current !== requestId) {
+            return;
+          }
+          await delay(2000);
+          timestamp = await findSnapshotDirectory(username, requestId);
+        }
+      }
+      if (!timestamp || activeRequestRef.current !== requestId) {
+        return;
+      }
+
+      const steps = [
+        { file: "03-analyzing.html", name: "analyzing" },
+        { file: "04-profile-confirm.html", name: "profile-confirm" },
+        { file: "05-processing.html", name: "processing" },
+        { file: "06-results.html", name: "results" },
+      ];
+
+      for (const step of steps) {
+        if (activeRequestRef.current !== requestId) {
+          return;
+        }
+        const exists = await waitForSnapshotFile(
+          username,
+          timestamp,
+          step.file,
+          requestId,
+          step.name === "results" ? 1200 : 600,
+          step.name === "results" ? 700 : 500
+        );
+        if (exists) {
+          registerSnapshot(username, timestamp, step.file, step.name, requestId);
+        }
+      }
+    } catch (err) {
+      console.error("Snapshot monitor error:", err);
+    }
+  };
+
   const handleStart = async (value) => {
     const formatted = value.startsWith("@") ? value : `@${value}`;
     setProfile((prev) => ({
@@ -229,20 +747,48 @@ function App() {
     toastTimers.current = {};
     setAnalysis(null);
     setAnalysisLoading(false);
+    setSnapshotHtml({
+      analyzing: null,
+      "profile-confirm": null,
+      processing: null,
+    });
+    const friendlyName = formatted.replace("@", "") || profile.name || "friend";
+    setProfileStage(createProfileStageData(formatted, profile.avatar, friendlyName));
+    setProcessingStage(createProcessingStageData(formatted, profile.avatar));
+    setCanAdvanceFromProfile(false);
+    setCanAdvanceFromProcessing(false);
+    clearTimeout(profileHoldTimerRef.current);
+    clearTimeout(processingHoldTimerRef.current);
+    clearInterval(analyzingTimerRef.current);
+    analyzingStartRef.current = Date.now();
+    stepHtmlFetchRef.current = {};
+    setAnalyzingProgress(0);
+    setProcessingMessageIndex(0);
+
+    activeRequestRef.current += 1;
+    const requestId = activeRequestRef.current;
+    monitorSnapshots(formatted, requestId).catch((err) =>
+      console.error("Snapshot monitor failed", err)
+    );
 
     try {
       setScreen(SCREEN.ANALYZING);
-      const fetchPromise = fetchCards(formatted);
-      await delay(4000);
-      setScreen(SCREEN.PROFILE);
-      await delay(3000);
-      setScreen(SCREEN.PROCESSING);
-      await fetchPromise;
-      setScreen(SCREEN.PREVIEW);
+      await fetchCards(formatted);
     } catch (err) {
       setErrorMessage(err.message || "Unable to fetch stalkers right now.");
       setScreen(SCREEN.ERROR);
+      activeRequestRef.current += 1;
     }
+  };
+
+  const mergeSnapshotSteps = (existing = [], incoming = []) => {
+    const map = new Map(existing.map((step) => [step.name, step]));
+    incoming.forEach((step) => {
+      if (step?.name) {
+        map.set(step.name, step);
+      }
+    });
+    return Array.from(map.values());
   };
 
   const fetchCards = async (usernameValue) => {
@@ -252,7 +798,7 @@ function App() {
       throw new Error(data?.error || "Unexpected response from server");
     }
     setCards(data.cards);
-    setSnapshots(data.steps || []);
+    setSnapshots((prev) => mergeSnapshotSteps(prev, data.steps || []));
   };
 
   const splitSensitiveSegments = (text = "") => {
@@ -297,9 +843,25 @@ function App() {
   };
 
   const renderAnalyzingFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Mirroring the analyzer...</p>
+    <div className="stage-card analyzing-card">
+      <div className="stage-progress-track">
+        <div className="stage-progress-fill" style={{ width: `${analyzingProgress}%` }} />
+      </div>
+      <div className="stage-spinner" />
+      <h1>Analyzing...</h1>
+      <p className="stage-subtitle">
+        We are capturing your profile information, please wait a few seconds.
+      </p>
+      <div className="stage-progress-panel">
+        <div className="stage-progress-labels">
+          <span>Loading...</span>
+          <small>{analyzingProgress}%</small>
+        </div>
+        <div className="stage-bar">
+          <div className="stage-bar-fill" style={{ width: `${analyzingProgress}%` }} />
+        </div>
+      </div>
+      <p className="stage-status">Analyzing your profile 🔎</p>
     </div>
   );
 
@@ -352,35 +914,68 @@ function App() {
     </section>
   );
 
-  const renderProfileFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Loading mirrored profile confirmation...</p>
-    </div>
-  );
-
-  const renderProcessingFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Waiting for the processing mirror...</p>
-    </div>
-  );
-
   const renderAnalyzing = () => (
-    <section className="screen processing-wrapper">
-      <MirrorStage stepName="analyzing" height={780} fallback={renderAnalyzingFallback()} />
+    <section className="screen snapshot-stage">
+      {renderAnalyzingFallback()}
     </section>
   );
 
-  const renderProfile = () => (
-    <section className="screen">
-      <MirrorStage stepName="profile-confirm" height={820} fallback={renderProfileFallback()} />
-    </section>
-  );
+  const renderProfile = () => {
+    // Extract name from greeting (e.g., "Hello, Pratik Patil" -> "Pratik Patil")
+    // or use profile.name as fallback
+    const nameMatch = profileStage.greeting?.match(/Hello,?\s*(.+)/i);
+    const displayName = nameMatch?.[1]?.trim() || profile.name || profileStage.username?.replace("@", "") || "User";
+    
+    return (
+      <section className="screen snapshot-stage">
+        <div className="stage-card profile-card profile-card--dynamic">
+          <div className="stage-progress-track subtle">
+            <div
+              className="stage-progress-fill"
+              style={{ width: `${profileStage.progressPercent}%` }}
+            />
+          </div>
+          <div className="profile-avatar-ring">
+            <img src={profileStage.avatar} alt={profileStage.username} />
+          </div>
+          <div className="profile-username-badge">{profileStage.username}</div>
+          <h1 className="profile-greeting">Hello, {displayName}</h1>
+          <div className="profile-message">
+            <h2 className="profile-congrats">🎉 Congratulations, we found your account!</h2>
+            <p className="profile-description">
+              We're analyzing your profile to reveal who's checking you out, 
+              talking about you, and visiting your profile. 
+              Get ready to discover the truth!
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  };
 
   const renderProcessing = () => (
-    <section className="screen processing-wrapper">
-      <MirrorStage stepName="processing" height={900} fallback={renderProcessingFallback()} />
+    <section className="screen snapshot-stage">
+      <div className="stage-card processing-card">
+        <div className="stage-progress-track subtle">
+          <div className="stage-progress-fill" style={{ width: "82%" }} />
+        </div>
+        <div className="processing-avatar-ring">
+          <img src={processingStage.avatar || profile.avatar} alt={profile.name} />
+        </div>
+        <h1>{processingStage.title}</h1>
+        <p className="stage-subtitle">{processingStage.subtitle}</p>
+        <ul className="processing-list">
+          {processingStage.bullets.map((message, index) => (
+            <li
+              key={`${message}-${index}`}
+              className={index <= processingMessageIndex ? "visible" : ""}
+            >
+              <span>✔</span>
+              <p>{message}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 
