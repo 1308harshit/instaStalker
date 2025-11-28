@@ -36,18 +36,37 @@ This document explains the end-to-end workflow of the Instagram Profile Analyzer
 
 **Location:** `backend/scraper/scrape.js` - `captureStep()` function
 
-### 5. **Response to Frontend** (Backend)
+### 5. **Backend Parsing** (Backend)
+- Backend parses `04-profile-confirm.html` and `05-processing.html` immediately after capture
+- Extracts avatar (base64), username, bullet points
+- Stores parsed data in step metadata
+
+**Location:** `backend/scraper/parseSnapshots.js` - Server-side parsing
+
+### 6. **Response to Frontend** (Backend)
 - Backend returns JSON with:
   - `cards`: Array of visitor cards
-  - `steps`: Array of snapshot paths
+  - `steps`: Array of snapshot paths with parsed metadata
   - `profile`: Basic profile info
 
 **Location:** `backend/server.js` - Response JSON
 
-### 6. **Data Parsing** (Frontend)
+### 7. **Progressive Loading** (Frontend)
+- Frontend starts polling for snapshots immediately after API call
+- As snapshots become available, UI updates in real-time:
+  - `03-analyzing.html` → Analyzing screen with animated progress bar
+  - `04-profile-confirm.html` → Profile confirmation (uses backend-parsed data)
+  - `05-processing.html` → Processing screen with animated bullet points (uses backend-parsed data)
+  - `06-results.html` → Results/preview page
+- Frontend also polls `/api/snapshots/parsed` for backend-parsed data
+
+**Location:** `frontend/src/App.jsx` - `monitorSnapshots()`, `fetchParsedSnapshots()`
+
+### 8. **Data Parsing** (Frontend)
 - Frontend receives the response
-- Fetches `06-results.html` snapshot
-- Parses HTML using `DOMParser`
+- For intermediate stages (profile, processing): Uses backend-parsed data from `/api/snapshots/parsed`
+- For results: Fetches `06-results.html` snapshot and parses using `DOMParser`
+- For full report: Fetches `07-full-report.html` when user clicks "View Full Report"
 - Extracts structured data:
   - Hero section (profile stats)
   - Slider cards (visitors)
@@ -56,10 +75,13 @@ This document explains the end-to-end workflow of the Instagram Profile Analyzer
   - Alerts
   - Addicted section
   - CTAs
+  - Full report (avatar, features, pricing, marketing text)
 
-**Location:** `frontend/src/utils/parseSnapshot.js` - `parseResultsSnapshot()`
+**Location:** 
+- `frontend/src/utils/parseSnapshot.js` - `parseResultsSnapshot()` (results)
+- `frontend/src/utils/parseFullReport.js` - `parseFullReport()` (full report)
 
-### 7. **Data Processing** (Frontend)
+### 9. **Data Processing** (Frontend)
 - Applies filtering:
   - Removes invalid usernames
   - Filters out non-English content
@@ -71,7 +93,7 @@ This document explains the end-to-end workflow of the Instagram Profile Analyzer
 
 **Location:** `frontend/src/App.jsx` - `useEffect` hooks and helper functions
 
-### 8. **UI Rendering** (Frontend)
+### 10. **UI Rendering** (Frontend)
 - Displays sections in order:
   1. Hero section (profile stats)
   2. Preview header (summary cards)
@@ -86,7 +108,16 @@ This document explains the end-to-end workflow of the Instagram Profile Analyzer
 
 **Location:** `frontend/src/App.jsx` - `renderPreview()` function
 
-### 9. **Real-time Updates** (Frontend)
+### 11. **Full Report Navigation** (Frontend)
+- User clicks "View Full Report" button from results page
+- Frontend navigates to full report screen
+- Fetches `07-full-report.html` snapshot
+- Parses using `parseFullReport()` to extract avatar, features, pricing
+- Renders structured full report page with hardcoded marketing text
+
+**Location:** `frontend/src/App.jsx` - `handleViewFullReport()`, `renderFullReport()`
+
+### 12. **Real-time Updates** (Frontend)
 - Toast notifications for profile visits
 - Animated transitions between screens
 - Loading states during analysis
@@ -110,6 +141,13 @@ Backend (server.js)
 Scraper (scrape.js)
     │
     │ Playwright automation
+    │
+    │ Captures snapshots:
+    │ - 03-analyzing.html
+    │ - 04-profile-confirm.html → parseSnapshots.js (backend parsing)
+    │ - 05-processing.html → parseSnapshots.js (backend parsing)
+    │ - 06-results.html
+    │ - 07-full-report.html
     ▼
 Instagram Website
     │
@@ -117,15 +155,26 @@ Instagram Website
     ▼
 Snapshots Storage
     │
-    │ JSON response with paths
+    │ JSON response with paths + parsed data
     ▼
 Frontend (App.jsx)
     │
-    │ Fetch 06-results.html
-    ▼
-parseSnapshot.js
+    │ Progressive Loading:
+    │ - Polls for snapshots
+    │ - Polls /api/snapshots/parsed
+    │ - Updates UI as snapshots arrive
     │
-    │ Parsed data object
+    │ For Results:
+    │ │ Fetch 06-results.html
+    │ ▼
+    │ parseSnapshot.js
+    │
+    │ For Full Report:
+    │ │ Fetch 07-full-report.html
+    │ ▼
+    │ parseFullReport.js
+    │
+    │ Parsed data objects
     ▼
 App.jsx (State)
     │
@@ -140,8 +189,37 @@ UI Display
 ```javascript
 {
   cards: [...],           // Visitor cards
-  steps: [...],          // Snapshot paths
+  steps: [
+    {
+      name: "profile-confirm",
+      htmlPath: "...",
+      meta: {
+        parsedProfileData: {
+          avatar: "data:image/...",  // Base64 avatar
+          username: "@username",
+          greeting: "..."
+        }
+      }
+    },
+    // ... more steps
+  ],
   profile: {...}         // Basic profile info
+}
+```
+
+### Backend Parsed Data Endpoint
+**GET `/api/snapshots/parsed`**
+Returns parsed data for profile and processing stages:
+```javascript
+{
+  profile: {
+    avatar: "data:image/...",
+    username: "@username",
+    greeting: "..."
+  },
+  processing: {
+    bullets: ["bullet 1", "bullet 2", ...]
+  }
 }
 ```
 
@@ -191,11 +269,20 @@ UI Display
 ## 🔄 State Transitions
 
 ```
-LANDING → ANALYZING → PROFILE → PROCESSING → PREVIEW
-   │                                          │
-   └──────────────────────────────────────────┘
-                    (on error)
+LANDING → ANALYZING → PROFILE → PROCESSING → PREVIEW → FULL_REPORT
+   │                                          │            │
+   └──────────────────────────────────────────┘            │
+                    (on error)                               │
+                                                             │
+                                                             └── (back to PREVIEW)
 ```
 
 Each state is managed by the `screen` state variable in `App.jsx`.
+
+**Transition Timing:**
+- **ANALYZING**: ~7 seconds (progress bar animation to 100%)
+- **PROFILE**: 5 seconds minimum (controlled by `PROFILE_STAGE_HOLD_MS`)
+- **PROCESSING**: Until all bullet points shown + 1 second (controlled by `PROCESSING_STAGE_HOLD_MS`)
+- **PREVIEW**: Until user clicks "View Full Report"
+- **FULL_REPORT**: User navigated from preview screen
 

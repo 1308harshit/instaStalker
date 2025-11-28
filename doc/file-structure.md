@@ -58,6 +58,7 @@ project-root/
 - Coordinates entire scraping flow
 - Navigates through Instagram website
 - Captures HTML snapshots at each step
+- Parses snapshots immediately after capture (profile, processing)
 - Returns structured result object
 
 **Exports:**
@@ -66,10 +67,12 @@ project-root/
 **Key Functions:**
 - `scrape(username)` - Main orchestration function
 - `captureStep(name, meta)` - Saves HTML snapshot
+- Calls `parseProfileSnapshot()` and `parseProcessingSnapshot()` after capturing snapshots
 
 **Dependencies:**
 - `browser.js` - For browser instance
 - `selectors.js` - For CSS selectors
+- `parseSnapshots.js` - For server-side parsing
 
 ---
 
@@ -92,6 +95,48 @@ export const elements = {
   // ... more selectors
 };
 ```
+
+---
+
+### `backend/scraper/parseSnapshots.js` ⭐ **SERVER-SIDE PARSING**
+**Type:** JavaScript (ES Modules)  
+**Purpose:** Server-side HTML parsing for profile and processing stages  
+**Key Responsibilities:**
+- Parses `04-profile-confirm.html` using JSDOM
+- Parses `05-processing.html` using JSDOM
+- Extracts avatar (base64), username, bullet points
+- Returns structured data for faster frontend rendering
+
+**Exports:**
+- `parseProfileSnapshot(html)` - Parses profile confirmation snapshot
+- `parseProcessingSnapshot(html)` - Parses processing snapshot
+
+**Key Functions:**
+- `parseProfileSnapshot(html)` - Extracts avatar, username, greeting
+- `parseProcessingSnapshot(html)` - Extracts bullet points from processing page
+
+**Returns:**
+```javascript
+// parseProfileSnapshot
+{
+  avatar: "data:image/png;base64,...",
+  username: "@username",
+  greeting: "..."
+}
+
+// parseProcessingSnapshot
+{
+  bullets: ["bullet 1", "bullet 2", ...]
+}
+```
+
+**When to modify:**
+- HTML structure changes on profile/processing pages
+- Need to extract new data fields
+- Avatar extraction needs refinement
+- Username extraction needs improvement
+
+**Note:** Uses JSDOM for server-side parsing. Works in Node.js.
 
 ---
 
@@ -194,9 +239,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 ---
 
-### `frontend/src/utils/parseSnapshot.js` ⭐ **PARSING LOGIC**
+### `frontend/src/utils/parseSnapshot.js` ⭐ **PARSING LOGIC (RESULTS)**
 **Type:** JavaScript  
-**Purpose:** Parses HTML snapshots and extracts structured data  
+**Purpose:** Parses `06-results.html` snapshot and extracts structured data  
 **Key Responsibilities:**
 - Parses HTML using DOMParser
 - Extracts data from DOM elements
@@ -231,6 +276,46 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 - Need to extract new data fields
 - Selectors need updating
 - Image extraction needs refinement
+
+**Note:** Uses browser-only APIs (DOMParser). Won't work in Node.js.
+
+---
+
+### `frontend/src/utils/parseFullReport.js` ⭐ **PARSING LOGIC (FULL REPORT)**
+**Type:** JavaScript  
+**Purpose:** Parses `07-full-report.html` snapshot and extracts structured data  
+**Key Responsibilities:**
+- Parses HTML using DOMParser
+- Extracts avatar from base64 background-image styles
+- Extracts features, pricing, marketing text
+- Returns structured full report object
+
+**Key Functions:**
+- `parseFullReport(html)` - Main parsing function
+
+**Avatar Extraction:**
+- Looks for `div[class*='rounded-full']` with `background-image` style
+- Extracts base64 from `url(&quot;data:image/...&quot;)` pattern
+- Cleans HTML entities and validates base64 string
+
+**Returns:**
+```javascript
+{
+  avatar: "data:image/png;base64,...",
+  heading: "Unlock Complete Report",
+  features: [...],
+  pricing: { current, original, discount },
+  cta: "...",
+  bonus: "...",
+  guarantee: "..."
+}
+```
+
+**When to modify:**
+- When HTML structure changes on full report page
+- Need to extract new data fields
+- Avatar extraction needs refinement
+- Selectors need updating
 
 **Note:** Uses browser-only APIs (DOMParser). Won't work in Node.js.
 
@@ -305,24 +390,51 @@ server.js (backend)
 scrape.js
     │
     │ Uses browser.js and selectors.js
+    │
+    │ Captures snapshots:
+    │ - 03-analyzing.html
+    │ - 04-profile-confirm.html
+    │   │
+    │   │ parseProfileSnapshot()
+    │   ▼
+    │   parseSnapshots.js (backend)
+    │
+    │ - 05-processing.html
+    │   │
+    │   │ parseProcessingSnapshot()
+    │   ▼
+    │   parseSnapshots.js (backend)
+    │
+    │ - 06-results.html
+    │ - 07-full-report.html
     ▼
 Instagram Website
     │
-    │ Saves HTML
+    │ Saves HTML + parsed data
     ▼
-snapshots/06-results.html
+snapshots/ directory
     │
-    │ Returns path in JSON
+    │ Returns paths + parsed data in JSON
     ▼
-App.jsx (fetchAnalysis)
+App.jsx (handleStart)
     │
-    │ Fetches HTML
-    ▼
-parseSnapshot.js
+    │ Progressive Loading:
+    │ - monitorSnapshots() (polls for files)
+    │ - fetchParsedSnapshots() (polls /api/snapshots/parsed)
     │
-    │ Parses and returns analysis object
+    │ For Results:
+    │ │ Fetches 06-results.html
+    │ ▼
+    │ parseSnapshot.js (client-side)
+    │
+    │ For Full Report:
+    │ │ Fetches 07-full-report.html
+    │ ▼
+    │ parseFullReport.js (client-side)
+    │
+    │ Parsed data objects
     ▼
-App.jsx (setAnalysis)
+App.jsx (setAnalysis, setFullReportData)
     │
     │ Renders with styles
     ▼
@@ -343,7 +455,8 @@ UI Display
 2. `frontend/src/App.css` - Styling
 
 **Medium Priority (Occasional):**
-3. `frontend/src/utils/parseSnapshot.js` - When HTML structure changes
+3. `frontend/src/utils/parseSnapshot.js` - When HTML structure changes (results)
+4. `frontend/src/utils/parseFullReport.js` - When HTML structure changes (full report)
 
 **Low Priority (Rarely):**
 4. `frontend/src/main.jsx` - Entry point
@@ -357,8 +470,9 @@ UI Display
 2. `backend/scraper/selectors.js` - Element selectors
 
 **Medium Priority:**
-3. `backend/server.js` - API server
-4. `backend/scraper/browser.js` - Browser config
+3. `backend/scraper/parseSnapshots.js` - Server-side parsing
+4. `backend/server.js` - API server
+5. `backend/scraper/browser.js` - Browser config
 
 ---
 
@@ -382,8 +496,17 @@ UI Display
 ### "Where is story data parsed?"
 → `frontend/src/utils/parseSnapshot.js` - `parseResultsSnapshot()`, `stories` section
 
+### "Where is full report data parsed?"
+→ `frontend/src/utils/parseFullReport.js` - `parseFullReport()`
+
+### "Where is profile/processing data parsed?"
+→ `backend/scraper/parseSnapshots.js` - Server-side parsing with JSDOM
+
 ### "Where is the API called?"
-→ `frontend/src/App.jsx` - `fetchAnalysis()` function
+→ `frontend/src/App.jsx` - `handleStart()` function (calls API and starts polling)
+
+### "Where is progressive loading handled?"
+→ `frontend/src/App.jsx` - `monitorSnapshots()`, `fetchParsedSnapshots()` functions
 
 ### "Where are snapshots saved?"
 → `backend/scraper/scrape.js` - `captureStep()` function

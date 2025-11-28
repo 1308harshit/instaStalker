@@ -60,7 +60,8 @@ project-root/
 │   │   ├── App.css      # Main stylesheet
 │   │   ├── main.jsx     # React entry point
 │   │   └── utils/
-│   │       └── parseSnapshot.js  # HTML parsing utility
+│   │       ├── parseSnapshot.js  # HTML parsing utility (results)
+│   │       └── parseFullReport.js # HTML parsing utility (full report)
 │   └── package.json
 │
 └── doc/                 # Documentation (this folder)
@@ -75,12 +76,15 @@ project-root/
 
 ## 🎯 Key Features
 
+- **Progressive Loading**: Real-time UI updates as snapshots become available
 - **Profile Analysis**: Extracts profile stats (posts, followers, following)
 - **Visitor Tracking**: Identifies profile visitors with visit counts
 - **Stories Activity**: Parses and displays story interactions
 - **Screenshots Recovery**: Shows recovered screenshots
+- **Full Report Page**: Complete report with pricing and features
 - **Smart Blurring**: Automatically blurs sensitive information
 - **Real-time Notifications**: Toast notifications for profile visits
+- **Avatar Extraction**: Dynamically extracts and converts base64 avatars from snapshots
 
 ## 🔧 Technology Stack
 
@@ -98,9 +102,13 @@ project-root/
 ## 📝 Important Notes
 
 - The backend scrapes Instagram and saves HTML snapshots
-- The frontend parses these snapshots to extract and display data
+- The frontend uses **progressive loading** - polls for snapshots and updates UI in real-time
+- The backend parses profile and processing snapshots server-side for faster data extraction
+- The frontend parses results and full report snapshots client-side
 - All data is dynamically extracted from the HTML snapshots
+- Avatar images are extracted from base64 data in snapshots and converted for display
 - The application handles sensitive data with automatic blurring
+- Screen transitions are controlled with minimum hold times for better UX
 
 ## 🤝 For Frontend Developers
 

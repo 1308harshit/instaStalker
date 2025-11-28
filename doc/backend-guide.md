@@ -29,7 +29,7 @@ backend/
 
 ### GET `/api/stalkers?username=<instagram_username>`
 
-**Purpose:** Initiates scraping and returns snapshot paths
+**Purpose:** Initiates scraping and returns snapshot paths with parsed data
 
 **Request:**
 ```
@@ -76,6 +76,28 @@ GET http://localhost:3000/api/stalkers?username=harshit_1308
 **Static File Serving:**
 - Snapshots are served at `/snapshots/<path>`
 - Example: `http://localhost:3000/snapshots/@harshit_1308/1764258084316/06-results.html`
+
+### GET `/api/snapshots/parsed`
+
+**Purpose:** Returns parsed data for profile and processing stages
+
+**Response:**
+```json
+{
+  "profile": {
+    "avatar": "data:image/png;base64,...",
+    "username": "@username",
+    "greeting": "..."
+  },
+  "processing": {
+    "bullets": ["bullet 1", "bullet 2", ...]
+  }
+}
+```
+
+**When available:** After `04-profile-confirm.html` and `05-processing.html` are captured and parsed
+
+**Location:** `backend/server.js` - `/api/snapshots/parsed` endpoint
 
 ---
 
@@ -210,6 +232,48 @@ export const elements = {
 
 ---
 
+### 5. `backend/scraper/parseSnapshots.js` ⭐ **SERVER-SIDE PARSING**
+
+**Purpose:** Server-side HTML parsing for profile and processing stages
+
+**Key Functions:**
+
+#### **`parseProfileSnapshot(html)`**
+Parses `04-profile-confirm.html` and extracts:
+- Avatar (base64 from background-image style)
+- Username (using regex to extract @username)
+- Greeting text
+
+**Returns:**
+```javascript
+{
+  avatar: "data:image/png;base64,...",
+  username: "@username",
+  greeting: "..."
+}
+```
+
+#### **`parseProcessingSnapshot(html)`**
+Parses `05-processing.html` and extracts:
+- Bullet points (from various elements, filtered by length and keywords)
+
+**Returns:**
+```javascript
+{
+  bullets: ["bullet 1", "bullet 2", ...]
+}
+```
+
+**When to modify:**
+- HTML structure changes on profile/processing pages
+- Need to extract new data fields
+- Avatar extraction needs refinement
+- Username extraction needs improvement
+
+**Note:** Uses JSDOM for server-side parsing. Works in Node.js.
+
+---
+
 ## 🔄 Scraping Process
 
 ### Step 1: Landing Page
@@ -241,8 +305,10 @@ export const elements = {
 - **This is the most important snapshot** - contains all analysis data
 
 ### Step 7: Full Report (Optional)
-- Navigate to full report (if available)
+- Click "View Full Report" button from results page
+- Navigate to full report page
 - Capture: `07-full-report.html`
+- **Note:** Frontend parses this client-side using `parseFullReport.js`
 
 ---
 
@@ -271,16 +337,33 @@ Instagram Website
 captureStep()
     │
     │ Save to disk
+    │
+    │ For profile/processing:
+    │ │ parseProfileSnapshot() / parseProcessingSnapshot()
+    │ ▼
+    │ parseSnapshots.js (backend)
+    │
+    │ Store parsed data in step metadata
     ▼
 snapshots/<username>/<timestamp>/
     │
-    │ Return paths in JSON
+    │ Return paths + parsed data in JSON
     ▼
 Frontend
     │
-    │ Fetch 06-results.html
-    ▼
-parseSnapshot.js (frontend)
+    │ Progressive Loading:
+    │ - Polls for snapshots
+    │ - Polls /api/snapshots/parsed
+    │
+    │ For Results:
+    │ │ Fetch 06-results.html
+    │ ▼
+    │ parseSnapshot.js (frontend)
+    │
+    │ For Full Report:
+    │ │ Fetch 07-full-report.html
+    │ ▼
+    │ parseFullReport.js (frontend)
 ```
 
 ---
@@ -331,10 +414,13 @@ console.log(result);
 ## ⚠️ Important Notes
 
 1. **Playwright Required**: Backend uses Playwright for browser automation
-2. **Snapshots are Temporary**: Old snapshots may be cleaned up
-3. **Rate Limiting**: Instagram may rate limit requests
-4. **HTML Structure Changes**: Instagram may change HTML, requiring selector updates
-5. **Headless Mode**: Browser runs headless by default for performance
+2. **Server-Side Parsing**: Profile and processing snapshots are parsed immediately after capture using JSDOM
+3. **Parsed Data Endpoint**: `/api/snapshots/parsed` provides parsed data for faster frontend rendering
+4. **Snapshots are Temporary**: Old snapshots may be cleaned up
+5. **Rate Limiting**: Instagram may rate limit requests
+6. **HTML Structure Changes**: Instagram may change HTML, requiring selector updates
+7. **Headless Mode**: Browser runs headless by default for performance
+8. **Avatar Extraction**: Avatars are extracted from base64 data in background-image styles
 
 ---
 
@@ -419,8 +505,13 @@ The backend:
 1. Receives username from frontend
 2. Scrapes Instagram
 3. Saves HTML snapshots
-4. Returns snapshot paths
-5. Frontend fetches and parses snapshots
+4. **Parses profile and processing snapshots immediately** (server-side)
+5. Returns snapshot paths with parsed data in metadata
+6. Provides `/api/snapshots/parsed` endpoint for frontend polling
+7. Frontend fetches and parses results/full report snapshots (client-side)
 
-**No direct data transfer** - Only snapshot paths are returned. Frontend parses HTML itself.
+**Hybrid Approach:**
+- **Backend parsing**: Profile and processing stages (faster, uses JSDOM)
+- **Frontend parsing**: Results and full report (more flexible, uses DOMParser)
+- **Progressive loading**: Frontend polls for snapshots and updates UI in real-time
 
