@@ -11,7 +11,8 @@ This guide is specifically for frontend developers working on this project. It e
 The main files you'll be working with:
 - `App.jsx` - Main React component (most of your work here)
 - `App.css` - All styling (CSS)
-- `utils/parseSnapshot.js` - HTML parsing logic (if parsing needs changes)
+- `utils/parseSnapshot.js` - HTML parsing logic for results page
+- `utils/parseFullReport.js` - HTML parsing logic for full report page
 
 ## 📁 File-by-File Breakdown
 
@@ -36,13 +37,17 @@ The main files you'll be working with:
 #### **Constants & Configuration** (Lines 1-50)
 ```javascript
 const API_URL = "http://localhost:3000/api/stalkers";
-const SCREEN = { LANDING, ANALYZING, PROFILE, PROCESSING, PREVIEW, ERROR };
+const SCREEN = { LANDING, ANALYZING, PROFILE, PROCESSING, PREVIEW, FULL_REPORT, ERROR };
 const BLUR_KEYWORD_REGEX = /bluredus/i;
 const INVALID_USERNAME_REGEX = /unknown/i;
+const ANALYZING_STAGE_HOLD_MS = 1500;
+const PROFILE_STAGE_HOLD_MS = 5000;
+const PROCESSING_STAGE_HOLD_MS = 2000;
 ```
 - API endpoint configuration
-- Screen state constants
+- Screen state constants (including FULL_REPORT)
 - Regex patterns for filtering/blurring
+- Stage hold times for controlled transitions
 
 **When to modify:**
 - Change API URL
@@ -76,29 +81,43 @@ const [notifications, setNotifications] = useState([]);
 - Adjust validation rules
 - Modify notification behavior
 
-#### **API Integration** (Lines 200-300)
+#### **API Integration & Progressive Loading** (Lines 200-400)
 ```javascript
-const fetchAnalysis = async (username) => {
-  // Fetches snapshot HTML
-  // Parses it using parseResultsSnapshot()
-  // Updates state
+const handleStart = async (username) => {
+  // Initiates API call
+  // Starts snapshot polling
+  // Monitors for snapshot files
+};
+
+const monitorSnapshots = () => {
+  // Polls for snapshot files
+  // Updates UI as snapshots become available
+  // Fetches parsed data from backend
+};
+
+const fetchParsedSnapshots = async () => {
+  // Polls /api/snapshots/parsed endpoint
+  // Gets server-side parsed data (profile, processing)
 };
 ```
 - Handles API calls
-- Fetches HTML snapshots
-- Triggers parsing
+- **Progressive loading**: Polls for snapshots and updates UI in real-time
+- Fetches HTML snapshots as they become available
+- Fetches backend-parsed data for profile and processing stages
+- Triggers client-side parsing for results and full report
 
 **When to modify:**
 - Change API request format
 - Add error handling
 - Modify data fetching logic
 
-#### **Rendering Functions** (Lines 300-700)
+#### **Rendering Functions** (Lines 300-800)
 - `renderLanding()` - Landing page UI
-- `renderAnalyzing()` - Loading screen
-- `renderProfile()` - Profile confirmation
-- `renderProcessing()` - Processing screen
+- `renderAnalyzing()` - Loading screen with progress bar animation
+- `renderProfile()` - Profile confirmation (redesigned with greeting)
+- `renderProcessing()` - Processing screen with animated bullet points
 - `renderPreview()` - **Main results display** ⭐
+- `renderFullReport()` - **Full report page** ⭐ (new)
 
 **When to modify:**
 - Change UI layout
@@ -163,8 +182,8 @@ return (
 
 ---
 
-### 4. `frontend/src/utils/parseSnapshot.js` ⭐ **PARSING LOGIC**
-**Purpose:** Parses HTML snapshots and extracts structured data
+### 4. `frontend/src/utils/parseSnapshot.js` ⭐ **PARSING LOGIC (RESULTS)**
+**Purpose:** Parses `06-results.html` snapshot and extracts structured data
 
 **Key Functions:**
 
@@ -207,7 +226,48 @@ Main parsing function that:
 
 ---
 
-### 5. `frontend/src/index.css`
+### 5. `frontend/src/utils/parseFullReport.js` ⭐ **PARSING LOGIC (FULL REPORT)**
+**Purpose:** Parses `07-full-report.html` snapshot and extracts structured data
+
+**Key Functions:**
+
+#### **`parseFullReport(html)`**
+Main parsing function that:
+1. Creates DOM parser
+2. Extracts avatar from base64 background-image styles
+3. Extracts features, pricing, marketing text
+4. Returns structured full report object
+
+**Returns:**
+```javascript
+{
+  avatar: "data:image/png;base64,...",  // Extracted from background-image
+  heading: "Unlock Complete Report",
+  features: [...],
+  pricing: { current, original, discount },
+  cta: "...",
+  bonus: "...",
+  guarantee: "..."
+}
+```
+
+**Avatar Extraction:**
+- Looks for `div[class*='rounded-full']` with `background-image` style
+- Extracts base64 data from `url(&quot;data:image/...&quot;)` pattern
+- Cleans HTML entities (`&quot;`, `&amp;`)
+- Validates it's a complete base64 image string
+
+**When to modify:**
+- HTML structure changes on full report page
+- Need to extract new data fields
+- Avatar extraction needs refinement
+- Selectors need updating
+
+**Important:** This file uses `DOMParser` which only works in the browser.
+
+---
+
+### 6. `frontend/src/index.css`
 **Purpose:** Global CSS reset and base styles
 
 **When to modify:**
@@ -218,6 +278,31 @@ Main parsing function that:
 ---
 
 ## 🎨 Common Frontend Tasks
+
+### Task 0: Understanding Progressive Loading
+**How it works:**
+1. User clicks "Start Analysis"
+2. Frontend calls API and starts polling for snapshots
+3. As snapshots become available, UI updates:
+   - `03-analyzing.html` → Shows analyzing screen with progress bar
+   - `04-profile-confirm.html` → Shows profile confirmation (parsed from backend)
+   - `05-processing.html` → Shows processing with bullet points (parsed from backend)
+   - `06-results.html` → Shows preview/results page
+   - `07-full-report.html` → Available when user clicks "View Full Report"
+
+**Key Functions:**
+- `monitorSnapshots()` - Polls for snapshot files
+- `fetchParsedSnapshots()` - Polls `/api/snapshots/parsed` for backend-parsed data
+- `registerSnapshot()` - Updates snapshot state
+- `fetchSnapshotHtml()` - Fetches HTML and strips scripts
+
+**Screen Transitions:**
+- Controlled by `canAdvance` flags and hold timers
+- Analyzing: ~7 seconds (progress bar animation)
+- Profile: 5 seconds minimum
+- Processing: Until all bullets shown + 1 second
+
+---
 
 ### Task 1: Change Section Order
 **File:** `frontend/src/App.jsx`
@@ -300,7 +385,27 @@ const BLUR_KEYWORD_REGEX = /bluredus/i;  // Change this
 
 ---
 
-### Task 5: Change Colors/Themes
+### Task 5: Modify Full Report Page
+**Files:** `frontend/src/App.jsx`, `frontend/src/App.css`, `frontend/src/utils/parseFullReport.js`
+
+**In App.jsx:**
+- Find `renderFullReport()` function
+- Modify layout structure
+- Update hardcoded marketing text
+
+**In App.css:**
+- Modify `.full-report-*` classes
+- Adjust font sizes, spacing, colors
+- Update responsive breakpoints
+
+**In parseFullReport.js:**
+- Modify avatar extraction logic
+- Update feature/pricing extraction
+- Change selectors if HTML structure changes
+
+---
+
+### Task 6: Change Colors/Themes
 **File:** `frontend/src/App.css`
 
 **Common color variables to change:**
@@ -308,10 +413,11 @@ const BLUR_KEYWORD_REGEX = /bluredus/i;  // Change this
 - Card backgrounds: `.slider-card { background: ... }`
 - Text colors: Various `.text-*` classes
 - Overlay backgrounds: `.story-bottom-overlay { background: ... }`
+- Full report: `.full-report-*` classes
 
 ---
 
-### Task 6: Adjust Responsive Design
+### Task 7: Adjust Responsive Design
 **File:** `frontend/src/App.css`
 
 **Add media queries:**
@@ -334,9 +440,12 @@ console.log('Analysis:', analysis);
 console.log('Stories:', analysis?.stories);
 ```
 
-### 2. Inspect HTML Snapshot
-- Open `backend/snapshots/<username>/<timestamp>/06-results.html`
-- Check if selectors in `parseSnapshot.js` match the HTML structure
+### 2. Inspect HTML Snapshots
+- Open `backend/snapshots/<username>/<timestamp>/`
+- Check `03-analyzing.html`, `04-profile-confirm.html`, `05-processing.html`
+- Check `06-results.html` for results page
+- Check `07-full-report.html` for full report page
+- Verify selectors in `parseSnapshot.js` and `parseFullReport.js` match HTML structure
 
 ### 3. Test Parsing
 ```javascript
@@ -394,11 +503,16 @@ console.log(analysis);
 
 ## ⚠️ Important Notes
 
-1. **Data comes from HTML parsing** - All displayed data is extracted from `06-results.html` snapshot
-2. **No direct API calls for data** - Only the snapshot path comes from API
-3. **Blurring is client-side** - Happens during rendering, not in backend
-4. **State is local** - No global state management (Redux, Context, etc.)
-5. **CSS-only styling** - No CSS-in-JS or styled-components
+1. **Progressive Loading** - UI updates as snapshots become available, no hardcoded delays
+2. **Data comes from HTML parsing** - All displayed data is extracted from HTML snapshots
+3. **Backend Parsing** - Profile and processing stages are parsed server-side for faster extraction
+4. **Client-side Parsing** - Results and full report are parsed client-side using DOMParser
+5. **Avatar Extraction** - Avatars are extracted from base64 data in snapshots and converted for display
+6. **No direct API calls for data** - Only snapshot paths come from API
+7. **Blurring is client-side** - Happens during rendering, not in backend
+8. **State is local** - No global state management (Redux, Context, etc.)
+9. **CSS-only styling** - No CSS-in-JS or styled-components
+10. **Screen Transitions** - Controlled with minimum hold times for better UX
 
 ---
 
@@ -406,12 +520,15 @@ console.log(analysis);
 
 | Task | File | Function/Class |
 |------|------|----------------|
-| Change layout | `App.jsx` | `renderPreview()` |
-| Modify styles | `App.css` | Component classes |
-| Extract new data | `parseSnapshot.js` | `parseResultsSnapshot()` |
+| Change layout | `App.jsx` | `renderPreview()`, `renderFullReport()` |
+| Modify styles | `App.css` | Component classes, `.full-report-*` |
+| Extract new data (results) | `parseSnapshot.js` | `parseResultsSnapshot()` |
+| Extract new data (full report) | `parseFullReport.js` | `parseFullReport()` |
 | Change blur keyword | `App.jsx` | `BLUR_KEYWORD_REGEX` |
 | Add new screen | `App.jsx` | `SCREEN` constant + render function |
 | Filter data | `App.jsx` | `filteredSummaryCards`, `isValidUsername` |
+| Modify avatar extraction | `parseFullReport.js` | Avatar extraction logic |
+| Adjust screen transitions | `App.jsx` | `*_STAGE_HOLD_MS` constants |
 
 ---
 
