@@ -43,7 +43,7 @@ const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
-const PROFILE_STAGE_HOLD_MS = 2000;
+const PROFILE_STAGE_HOLD_MS = 3000;
 const PROCESSING_STAGE_HOLD_MS = 2000;
 
 const randBetween = (min, max) =>
@@ -149,9 +149,18 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
     const avatar = extractInlineAvatar(doc) || fallbackAvatar;
     const titleNode = doc.querySelector("h1, h2");
     const subtitleNode = doc.querySelector("p");
-    const bullets = Array.from(doc.querySelectorAll("p, li"))
+    // Extract all bullet points - be more inclusive to catch all processing messages
+    const allTextNodes = Array.from(doc.querySelectorAll("p, li, span, div"));
+    const bullets = allTextNodes
       .map((node) => node.textContent.trim())
-      .filter((text) => /mentions|detected|visited|people/i.test(text));
+      .filter((text) => {
+        // More inclusive filter - look for processing-related content
+        return text.length > 15 && (
+          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers/i.test(text) ||
+          /found.*\d+|detected.*\d+|visited.*\d+|people.*\d+/i.test(text)
+        );
+      })
+      .filter((text, index, arr) => arr.indexOf(text) === index); // Remove duplicates
 
     return {
       avatar,
@@ -402,17 +411,46 @@ function App() {
     if (screen !== SCREEN.PROCESSING) {
       return;
     }
+    // Show first bullet immediately (no delay)
     setProcessingMessageIndex(0);
-    const timer = setInterval(() => {
+    setCanAdvanceFromProcessing(false); // Reset when processing starts
+    
+    // If there's only one bullet, wait 1 second then allow transition
+    if (processingStage.bullets.length <= 1) {
+      const singleBulletTimer = setTimeout(() => {
+        setCanAdvanceFromProcessing(true);
+      }, 1000);
+      return () => clearTimeout(singleBulletTimer);
+    }
+    
+    let bulletTimer = null;
+    let finalDelayTimer = null;
+    
+    // Show remaining bullets one by one with 1 second delay (starting from second bullet)
+    bulletTimer = setInterval(() => {
       setProcessingMessageIndex((prev) => {
-        if (prev >= processingStage.bullets.length - 1) {
-          clearInterval(timer);
-          return prev;
+        const nextIndex = prev + 1;
+        // Check if all bullets are now shown (we've reached the last index)
+        if (nextIndex >= processingStage.bullets.length - 1) {
+          clearInterval(bulletTimer);
+          // All bullets are now visible, wait 1 more second before allowing transition
+          finalDelayTimer = setTimeout(() => {
+            setCanAdvanceFromProcessing(true);
+          }, 1000); // 1 second delay after last bullet is shown
+          return processingStage.bullets.length - 1;
         }
-        return prev + 1;
+        return nextIndex;
       });
-    }, 1000);
-    return () => clearInterval(timer);
+    }, 1000); // 1 second delay between each bullet
+    
+    return () => {
+      if (bulletTimer) {
+        clearInterval(bulletTimer);
+      }
+      if (finalDelayTimer) {
+        clearTimeout(finalDelayTimer);
+      }
+    };
   }, [screen, processingStage.bullets.length]);
 
   useEffect(() => {
@@ -447,10 +485,14 @@ function App() {
   }, [snapshots]);
 
   useEffect(() => {
-    if (analysis && screen === SCREEN.PROCESSING && canAdvanceFromProcessing) {
+    // Wait until all processing bullets are shown before transitioning to preview
+    const allBulletsShown = processingStage.bullets.length > 0 && 
+      processingMessageIndex >= processingStage.bullets.length - 1;
+    
+    if (analysis && screen === SCREEN.PROCESSING && canAdvanceFromProcessing && allBulletsShown) {
       setScreen(SCREEN.PREVIEW);
     }
-  }, [analysis, screen, canAdvanceFromProcessing]);
+  }, [analysis, screen, canAdvanceFromProcessing, processingMessageIndex, processingStage.bullets.length]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
