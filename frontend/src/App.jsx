@@ -64,6 +64,24 @@ function App() {
   const tickerRef = useRef(null);
   const notificationTimerRef = useRef(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [snapshotHtml, setSnapshotHtml] = useState({
+    analyzing: null,
+    "profile-confirm": null,
+    processing: null,
+  });
+  const [analyzingProgress, setAnalyzingProgress] = useState(0);
+  const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
+  const activeRequestRef = useRef(0);
+  const stepHtmlFetchRef = useRef({});
+  const processingMessages = useMemo(
+    () => [
+      `Found 10 mentions of ${profile.username} in messages from your followers`,
+      "Our AI detected a possible screenshot of someone talking about you",
+      "It was detected that someone you know visited your profile 9 times yesterday",
+      "2 people from your region shared one of your stories",
+    ],
+    [profile.username]
+  );
 
   const snapshotLookup = useMemo(() => {
     return snapshots.reduce((acc, step) => {
@@ -72,26 +90,65 @@ function App() {
     }, {});
   }, [snapshots]);
 
-  const getSnapshotUrl = (stepName) => {
-    const step = snapshotLookup[stepName];
-    if (!step) return null;
-    return buildSnapshotUrl(step.htmlPath);
+  // Fetch HTML content for a snapshot
+  const fetchSnapshotHtml = async (stepName, htmlPath) => {
+    const url = buildSnapshotUrl(htmlPath);
+    if (!url) return null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const html = await res.text();
+      if (typeof DOMParser !== "undefined") {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        doc.querySelectorAll("script").forEach((node) => node.remove());
+        const body = doc.querySelector("body");
+        const styles = doc.querySelectorAll("style, link[rel='stylesheet']");
+        const headMarkup = Array.from(styles)
+          .map((node) => node.outerHTML)
+          .join("");
+        if (body) {
+          return `${headMarkup}${body.innerHTML}`;
+        }
+      }
+      return html;
+    } catch (err) {
+      console.error(`Failed to fetch snapshot HTML for ${stepName}:`, err);
+      return null;
+    }
   };
 
-  const MirrorStage = ({ stepName, height = 640, fallback = null }) => {
-    const url = getSnapshotUrl(stepName);
-    if (!url) return fallback;
-  return (
-      <div className="mirror-stage">
-        <iframe
-          src={url}
-          loading="lazy"
-          title={`snapshot-${stepName}`}
-          style={{ height: `${height}px` }}
-        />
-      </div>
-    );
-  };
+  // Effect to fetch HTML when snapshots become available
+  useEffect(() => {
+    const loadSnapshotHtml = async (stepName) => {
+      const step = snapshotLookup[stepName];
+      if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName]) return;
+      stepHtmlFetchRef.current[stepName] = true;
+      const html = await fetchSnapshotHtml(stepName, step.htmlPath);
+      if (html) {
+        setSnapshotHtml((prev) => {
+          // Only update if not already loaded
+          if (prev[stepName]) return prev;
+          return {
+            ...prev,
+            [stepName]: html,
+          };
+        });
+      }
+      stepHtmlFetchRef.current[stepName] = false;
+    };
+
+    // Load HTML for each available snapshot (only if not already loaded)
+    if (snapshotLookup["analyzing"]) {
+      loadSnapshotHtml("analyzing");
+    }
+    if (snapshotLookup["profile-confirm"]) {
+      loadSnapshotHtml("profile-confirm");
+    }
+    if (snapshotLookup["processing"]) {
+      loadSnapshotHtml("processing");
+    }
+  }, [snapshotLookup, snapshotHtml]);
 
   useEffect(
     () => () => {
@@ -126,6 +183,46 @@ function App() {
   }, [cards]);
 
   useEffect(() => {
+    if (screen !== SCREEN.ANALYZING || snapshotHtml.analyzing) {
+      return;
+    }
+    setAnalyzingProgress(0);
+    const timer = setInterval(() => {
+      setAnalyzingProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(timer);
+            return 95;
+          }
+          return Math.min(95, prev + randBetween(3, 7));
+      });
+    }, 700);
+    return () => clearInterval(timer);
+  }, [screen, snapshotHtml.analyzing]);
+
+  useEffect(() => {
+    if (snapshotHtml.analyzing) {
+      setAnalyzingProgress(100);
+    }
+  }, [snapshotHtml.analyzing]);
+
+  useEffect(() => {
+    if (screen !== SCREEN.PROCESSING || snapshotHtml.processing) {
+      return;
+    }
+    setProcessingMessageIndex(0);
+    const timer = setInterval(() => {
+      setProcessingMessageIndex((prev) => {
+        if (prev >= processingMessages.length - 1) {
+          clearInterval(timer);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [screen, snapshotHtml.processing, processingMessages.length]);
+
+  useEffect(() => {
     const resultsStep = snapshots.find((step) => step.name === "results");
     if (!resultsStep) return;
     const url = buildSnapshotUrl(resultsStep.htmlPath);
@@ -155,6 +252,12 @@ function App() {
       cancelled = true;
     };
   }, [snapshots]);
+
+  useEffect(() => {
+    if (analysis && screen === SCREEN.PROCESSING) {
+      setScreen(SCREEN.PREVIEW);
+    }
+  }, [analysis, screen]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -212,6 +315,135 @@ function App() {
     }, 7000);
   };
 
+  const checkSnapshotExists = async (username, timestamp, fileName) => {
+    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    const url = buildSnapshotUrl(snapshotPath);
+    try {
+      // Try HEAD first (lighter), fallback to GET if HEAD fails
+      let res = await fetch(url, { 
+        method: "HEAD",
+        cache: 'no-cache'
+      });
+      if (!res.ok && res.status === 405) {
+        // If HEAD not supported, try GET
+        res = await fetch(url, { 
+          method: "GET",
+          cache: 'no-cache'
+        });
+      }
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const findSnapshotDirectory = async (username, requestId) => {
+    // Try to find the snapshot directory by checking recent timestamps
+    // Check timestamps from now going back 1 minute (in case scraping started slightly before)
+    const now = Date.now();
+    const checkRange = 60 * 1000; // 1 minute in milliseconds
+    const step = 1000; // Check every 1 second
+    
+    // Check for any snapshot file (03, 04, 05, or 06) to find the directory
+    const snapshotFiles = ["03-analyzing.html", "04-profile-confirm.html", "05-processing.html", "06-results.html"];
+    
+    // Check files in parallel for each timestamp to speed up discovery
+    for (let timestamp = now; timestamp >= now - checkRange; timestamp -= step) {
+      if (activeRequestRef.current !== requestId) {
+        return null;
+      }
+      // Check all files in parallel for this timestamp
+      const checks = await Promise.all(
+        snapshotFiles.map(fileName => checkSnapshotExists(username, timestamp, fileName))
+      );
+      
+      // If any file exists, we found the directory
+      if (checks.some(exists => exists)) {
+        return timestamp;
+      }
+      
+      // Small delay to avoid hammering the server
+      await delay(100);
+    }
+    return null;
+  };
+
+  const registerSnapshot = (username, timestamp, fileName, stepName, requestId) => {
+    if (activeRequestRef.current !== requestId) return;
+    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    setSnapshots((prev) => {
+      const filtered = prev.filter((s) => s.name !== stepName);
+      return [...filtered, { name: stepName, htmlPath: snapshotPath }];
+    });
+  };
+
+  const waitForSnapshotFile = async (
+    username,
+    timestamp,
+    fileName,
+    requestId,
+    maxAttempts = 600,
+    interval = 500
+  ) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (activeRequestRef.current !== requestId) {
+        return false;
+      }
+      const exists = await checkSnapshotExists(username, timestamp, fileName);
+      if (exists) {
+        return true;
+      }
+      await delay(interval);
+    }
+    return false;
+  };
+
+  const monitorSnapshots = async (username, requestId) => {
+    try {
+      let timestamp = await findSnapshotDirectory(username, requestId);
+      if (!timestamp) {
+        const maxWait = 60000;
+        const start = Date.now();
+        while (!timestamp && Date.now() - start < maxWait) {
+          if (activeRequestRef.current !== requestId) {
+            return;
+          }
+          await delay(2000);
+          timestamp = await findSnapshotDirectory(username, requestId);
+        }
+      }
+      if (!timestamp || activeRequestRef.current !== requestId) {
+        return;
+      }
+
+      const steps = [
+        { file: "03-analyzing.html", name: "analyzing" },
+        { file: "04-profile-confirm.html", name: "profile-confirm" },
+        { file: "05-processing.html", name: "processing" },
+        { file: "06-results.html", name: "results" },
+      ];
+
+      for (const step of steps) {
+        if (activeRequestRef.current !== requestId) {
+          return;
+        }
+        const exists = await waitForSnapshotFile(
+          username,
+          timestamp,
+          step.file,
+          requestId,
+          step.name === "results" ? 1200 : 600,
+          step.name === "results" ? 700 : 500
+        );
+        if (exists) {
+          registerSnapshot(username, timestamp, step.file, step.name, requestId);
+        }
+      }
+    } catch (err) {
+      console.error("Snapshot monitor error:", err);
+    }
+  };
+
   const handleStart = async (value) => {
     const formatted = value.startsWith("@") ? value : `@${value}`;
     setProfile((prev) => ({
@@ -229,20 +461,49 @@ function App() {
     toastTimers.current = {};
     setAnalysis(null);
     setAnalysisLoading(false);
+    setSnapshotHtml({
+      analyzing: null,
+      "profile-confirm": null,
+      processing: null,
+    });
+    stepHtmlFetchRef.current = {};
+    setAnalyzingProgress(0);
+    setProcessingMessageIndex(0);
+
+    activeRequestRef.current += 1;
+    const requestId = activeRequestRef.current;
+    monitorSnapshots(formatted, requestId).catch((err) =>
+      console.error("Snapshot monitor failed", err)
+    );
 
     try {
       setScreen(SCREEN.ANALYZING);
       const fetchPromise = fetchCards(formatted);
+
       await delay(4000);
-      setScreen(SCREEN.PROFILE);
+      if (activeRequestRef.current !== requestId) return;
+      setScreen((prev) => (prev === SCREEN.ANALYZING ? SCREEN.PROFILE : prev));
+
       await delay(3000);
-      setScreen(SCREEN.PROCESSING);
+      if (activeRequestRef.current !== requestId) return;
+      setScreen((prev) => (prev === SCREEN.PROFILE ? SCREEN.PROCESSING : prev));
+
       await fetchPromise;
-      setScreen(SCREEN.PREVIEW);
     } catch (err) {
       setErrorMessage(err.message || "Unable to fetch stalkers right now.");
       setScreen(SCREEN.ERROR);
+      activeRequestRef.current += 1;
     }
+  };
+
+  const mergeSnapshotSteps = (existing = [], incoming = []) => {
+    const map = new Map(existing.map((step) => [step.name, step]));
+    incoming.forEach((step) => {
+      if (step?.name) {
+        map.set(step.name, step);
+      }
+    });
+    return Array.from(map.values());
   };
 
   const fetchCards = async (usernameValue) => {
@@ -252,7 +513,7 @@ function App() {
       throw new Error(data?.error || "Unexpected response from server");
     }
     setCards(data.cards);
-    setSnapshots(data.steps || []);
+    setSnapshots((prev) => mergeSnapshotSteps(prev, data.steps || []));
   };
 
   const splitSensitiveSegments = (text = "") => {
@@ -297,9 +558,25 @@ function App() {
   };
 
   const renderAnalyzingFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Mirroring the analyzer...</p>
+    <div className="stage-card analyzing-card">
+      <div className="stage-progress-track">
+        <div className="stage-progress-fill" style={{ width: `${analyzingProgress}%` }} />
+      </div>
+      <div className="stage-spinner" />
+      <h1>Analyzing...</h1>
+      <p className="stage-subtitle">
+        We are capturing your profile information, please wait a few seconds.
+      </p>
+      <div className="stage-progress-panel">
+        <div className="stage-progress-labels">
+          <span>Loading...</span>
+          <small>{analyzingProgress}%</small>
+        </div>
+        <div className="stage-bar">
+          <div className="stage-bar-fill" style={{ width: `${analyzingProgress}%` }} />
+        </div>
+      </div>
+      <p className="stage-status">Analyzing your profile 🔎</p>
     </div>
   );
 
@@ -353,36 +630,88 @@ function App() {
   );
 
   const renderProfileFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Loading mirrored profile confirmation...</p>
+    <div className="stage-card profile-card">
+      <div className="stage-progress-track subtle">
+        <div className="stage-progress-fill" style={{ width: "55%" }} />
+      </div>
+      <div className="profile-avatar-ring">
+        <img src={profile.avatar} alt={profile.name} />
+      </div>
+      <div className="profile-username">{profile.username}</div>
+      <h1>Hello, {profile.name}</h1>
+      <p className="stage-subtitle">Is this your profile?</p>
+      <button className="profile-primary-btn">Continue, the profile is correct</button>
+      <button className="profile-secondary-btn">No, I want to correct it</button>
     </div>
   );
 
   const renderProcessingFallback = () => (
-    <div className="mirror-loader">
-      <div className="spinner" />
-      <p>Waiting for the processing mirror...</p>
+    <div className="stage-card processing-card">
+      <div className="stage-progress-track subtle">
+        <div className="stage-progress-fill" style={{ width: "78%" }} />
+      </div>
+      <div className="processing-avatar-ring">
+        <img src={profile.avatar} alt={profile.name} />
+      </div>
+      <h1>Processing data</h1>
+      <p className="stage-subtitle">
+        Our robots are analyzing the <strong>behavior of your followers</strong>
+      </p>
+      <ul className="processing-list">
+        {processingMessages.map((message, index) => (
+          <li key={message} className={index <= processingMessageIndex ? "visible" : ""}>
+            <span>✔</span>
+            <p>{message}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 
-  const renderAnalyzing = () => (
-    <section className="screen processing-wrapper">
-      <MirrorStage stepName="analyzing" height={780} fallback={renderAnalyzingFallback()} />
-    </section>
-  );
+  const renderAnalyzing = () => {
+    return (
+      <section className="screen snapshot-stage">
+        {snapshotHtml.analyzing ? (
+          <div
+            className="snapshot-content"
+            dangerouslySetInnerHTML={{ __html: snapshotHtml.analyzing }}
+          />
+        ) : (
+          renderAnalyzingFallback()
+        )}
+      </section>
+    );
+  };
 
-  const renderProfile = () => (
-    <section className="screen">
-      <MirrorStage stepName="profile-confirm" height={820} fallback={renderProfileFallback()} />
-    </section>
-  );
+  const renderProfile = () => {
+    return (
+      <section className="screen snapshot-stage">
+        {snapshotHtml["profile-confirm"] ? (
+          <div
+            className="snapshot-content"
+            dangerouslySetInnerHTML={{ __html: snapshotHtml["profile-confirm"] }}
+          />
+        ) : (
+          renderProfileFallback()
+        )}
+      </section>
+    );
+  };
 
-  const renderProcessing = () => (
-    <section className="screen processing-wrapper">
-      <MirrorStage stepName="processing" height={900} fallback={renderProcessingFallback()} />
-    </section>
-  );
+  const renderProcessing = () => {
+    return (
+      <section className="screen snapshot-stage">
+        {snapshotHtml.processing ? (
+          <div
+            className="snapshot-content"
+            dangerouslySetInnerHTML={{ __html: snapshotHtml.processing }}
+          />
+        ) : (
+          renderProcessingFallback()
+        )}
+      </section>
+    );
+  };
 
   const renderPreview = () => {
     if (analysisLoading && !analysis) {
