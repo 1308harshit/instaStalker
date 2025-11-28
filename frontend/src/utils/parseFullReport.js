@@ -130,8 +130,8 @@ export function parseFullReport(html) {
     const originalPriceMatch = priceText.match(/from\s*(\d+)\s*USD/i);
     const discountMatch = priceText.match(/(\d+)%\s*off/i);
     
-    const price = priceMatch ? parseInt(priceMatch[1]) : 17;
-    const originalPrice = originalPriceMatch ? parseInt(originalPriceMatch[1]) : 90;
+    const price = priceMatch ? parseInt(priceMatch[1]) : 199;
+    const originalPrice = originalPriceMatch ? parseInt(originalPriceMatch[1]) : 1299;
     const discount = discountMatch ? parseInt(discountMatch[1]) : 80;
 
     // Extract countdown timer

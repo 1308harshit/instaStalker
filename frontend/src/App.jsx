@@ -1448,8 +1448,8 @@ function App() {
                 </div>
               </div>
               <div className="full-report-pricing-details">
-                <p className="full-report-original-price">from <span className="strikethrough">90 USD</span> for:</p>
-                <p className="full-report-current-price"><span className="price-number">17</span> <span className="price-currency">USD</span></p>
+                <p className="full-report-original-price">from <span className="strikethrough">1299₹</span> for:</p>
+                <p className="full-report-current-price"><span className="price-number">199</span> <span className="price-currency">₹</span></p>
                 <p className="full-report-payment-type">one-time payment</p>
               </div>
             </div>
