@@ -8,51 +8,92 @@ export function parseFullReport(html) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
 
-    // Extract profile picture - try multiple methods
+    // Extract profile picture - prioritize background-image in rounded-full divs
     let avatar = null;
     
-    // Method 1: Look for img tags with src (including base64)
-    const imgTags = doc.querySelectorAll("img");
-    for (const img of imgTags) {
-      const src = img.getAttribute("src");
-      if (src && (src.startsWith("data:image") || src.includes("base64") || src.includes("profile") || src.includes("avatar"))) {
-        avatar = src;
-        break;
+    // Method 1: Look for div with rounded-full class and background-image (most reliable for avatar)
+    const roundedFullDivs = doc.querySelectorAll("div[class*='rounded-full']");
+    for (const div of roundedFullDivs) {
+      const style = div.getAttribute("style") || "";
+      if (style.includes("background-image") && style.includes("data:image")) {
+        // Extract base64 from style attribute
+        // Pattern: style="background-image: url(&quot;data:image/png;base64,...&quot;)"
+        // Match the entire url() content including base64
+        const bgMatch = style.match(/background-image:\s*url\([^)]+\)/);
+        if (bgMatch) {
+          // Extract the content inside url()
+          let urlContent = bgMatch[0]
+            .replace(/background-image:\s*url\(/, '')
+            .replace(/\)$/, '')
+            .replace(/^["']/, '')
+            .replace(/["']$/, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .trim();
+          
+          // Ensure it's a complete base64 string
+          if (urlContent.startsWith("data:image") && urlContent.includes("base64,") && urlContent.length > 200) {
+            avatar = urlContent;
+            console.log("✅ Avatar extracted from rounded-full div, length:", avatar.length);
+            break;
+          }
+        }
       }
     }
     
-    // Method 2: Look for background-image in style attributes (base64)
+    // Method 2: Look for any element with background-image containing base64
     if (!avatar) {
-      const elementsWithBg = doc.querySelectorAll("[style*='background-image'], [style*='backgroundImage']");
+      const elementsWithBg = doc.querySelectorAll("[style*='background-image']");
       for (const el of elementsWithBg) {
         const style = el.getAttribute("style") || "";
-        const bgMatch = style.match(/url\(["']?(data:image[^"']+)["']?\)/);
-        if (bgMatch && bgMatch[1]) {
-          avatar = bgMatch[1].replace(/&quot;/g, '"');
-          break;
+        if (style.includes("data:image")) {
+          // Try multiple patterns to extract base64
+          const patterns = [
+            /url\(["']?(&quot;)?(data:image\/[^"')]+)["')]?/,
+            /background-image:\s*url\(["']?(data:image[^"')]+)["')]?/,
+            /url\(&quot;(data:image[^&]+)&quot;\)/
+          ];
+          
+          for (const pattern of patterns) {
+            const match = style.match(pattern);
+            if (match) {
+              let base64Url = (match[2] || match[1] || match[0])
+                .replace(/&quot;/g, '')
+                .replace(/&amp;/g, '&')
+                .replace(/^url\(/, '')
+                .replace(/\)$/, '')
+                .replace(/^["']/, '')
+                .replace(/["']$/, '');
+              
+              if (base64Url.startsWith("data:image") && base64Url.includes("base64,") && base64Url.length > 200) {
+                avatar = base64Url;
+                console.log("✅ Avatar extracted from background-image:", avatar.substring(0, 50) + "...");
+                break;
+              }
+            }
+          }
+          if (avatar) break;
         }
       }
     }
     
-    // Method 3: Look for any div with circular styling that might contain avatar
-    if (!avatar) {
-      const circularDivs = doc.querySelectorAll("div[class*='rounded-full'], div[class*='circle']");
-      for (const div of circularDivs) {
-        const style = div.getAttribute("style") || "";
-        const bgMatch = style.match(/url\(["']?(data:image[^"']+)["']?\)/);
-        if (bgMatch && bgMatch[1]) {
-          avatar = bgMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-          break;
-        }
-      }
-    }
-    
-    // Method 4: Search HTML string directly for base64 images
+    // Method 3: Search HTML string directly for large base64 images (profile pictures are usually large)
     if (!avatar && html.includes("data:image")) {
-      const base64Match = html.match(/data:image\/[^;]+;base64,[^"'\s)]+/);
-      if (base64Match && base64Match[0].length > 100) { // Ensure it's a real image, not a small icon
-        avatar = base64Match[0];
+      // Look for base64 images that are likely profile pictures (longer strings)
+      const base64Matches = html.matchAll(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{200,}/g);
+      for (const match of base64Matches) {
+        if (match[0].length > 500) { // Profile pictures are usually larger than icons
+          avatar = match[0];
+          console.log("✅ Avatar extracted from HTML string:", avatar.substring(0, 50) + "...");
+          break;
+        }
       }
+    }
+    
+    if (avatar) {
+      console.log("✅ Avatar found, length:", avatar.length);
+    } else {
+      console.warn("⚠️ Avatar not found in HTML");
     }
 
     // Extract heading

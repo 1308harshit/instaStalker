@@ -1348,6 +1348,15 @@ function App() {
 
     // Extract avatar from parsed data or use profile avatar
     const profileAvatar = fullReportData?.avatar || profile.avatar;
+    
+    // Debug: Log avatar source
+    if (fullReportData?.avatar) {
+      console.log("✅ Using avatar from fullReportData");
+    } else if (profile.avatar) {
+      console.log("⚠️ Using fallback avatar from profile");
+    } else {
+      console.warn("⚠️ No avatar available");
+    }
 
     return (
       <section className="screen full-report-screen">
