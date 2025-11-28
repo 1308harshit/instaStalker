@@ -42,12 +42,138 @@ const NON_EN_SUMMARY_REGEX = /(seus seguidores|amoroso|vista\(o\)|você é|dos s
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const ANALYZING_STAGE_HOLD_MS = 1500;
+const PROFILE_STAGE_HOLD_MS = 2000;
+const PROCESSING_STAGE_HOLD_MS = 2000;
 
 const randBetween = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
 const isValidUsername = (value = "") =>
   Boolean(value) && !INVALID_USERNAME_REGEX.test(value);
+
+const createProfileStageData = (
+  username = INITIAL_PROFILE.username,
+  avatar = INITIAL_PROFILE.avatar,
+  name = INITIAL_PROFILE.name
+) => ({
+  avatar,
+  progressPercent: 55,
+  username,
+  greeting: `Hello, ${name || username.replace("@", "")}`,
+  question: "Is this your profile?",
+  primaryCta: "Continue, the profile is correct",
+  secondaryCta: "No, I want to correct it",
+});
+
+const createProcessingStageData = (
+  username = INITIAL_PROFILE.username,
+  avatar = INITIAL_PROFILE.avatar
+) => ({
+  avatar,
+  title: "Processing data",
+  subtitle:
+    "Our robots are analyzing the behavior of your followers",
+  bullets: [
+    `Found 10 mentions of ${username} in messages from your followers`,
+    "Our AI detected a possible screenshot of someone talking about you",
+    "It was detected that someone you know visited your profile 9 times yesterday",
+    "2 people from your region shared one of your stories",
+  ],
+});
+
+const extractInlineAvatar = (doc) => {
+  const candidate = Array.from(doc.querySelectorAll("[style]")).find((node) =>
+    /background-image/i.test(node.getAttribute("style") || "")
+  );
+  if (candidate) {
+    const match = candidate
+      .getAttribute("style")
+      .match(/url\((['"]?)(.+?)\1\)/i);
+    if (match?.[2]) {
+      return match[2];
+    }
+  }
+  const imgNode = doc.querySelector("img[src]");
+  return imgNode?.getAttribute("src") || INITIAL_PROFILE.avatar;
+};
+
+const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username) => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const avatar = extractInlineAvatar(doc);
+    const usernameNode = Array.from(doc.querySelectorAll("span, div, p")).find(
+      (node) => /^@/.test((node.textContent || "").trim())
+    );
+    const greetingNode = doc.querySelector("h1, h2");
+    const questionNode = Array.from(doc.querySelectorAll("p, span")).find((node) =>
+      /profile/i.test((node.textContent || "").trim())
+    );
+    const buttons = Array.from(doc.querySelectorAll("button"));
+    const progressNode = Array.from(doc.querySelectorAll("[style]")).find((node) =>
+      /width:\s*\d+%/i.test(node.getAttribute("style") || "")
+    );
+
+    let progressPercent = 55;
+    if (progressNode) {
+      const match = progressNode
+        .getAttribute("style")
+        .match(/width:\s*([\d.]+)%/i);
+      if (match?.[1]) {
+        progressPercent = Number(match[1]);
+      }
+    }
+
+    return {
+      avatar,
+      progressPercent,
+      username: (usernameNode?.textContent?.trim() || fallbackUsername).trim(),
+      greeting: (greetingNode?.textContent || "Hello").trim(),
+      question: (questionNode?.textContent || "Is this your profile?").trim(),
+      primaryCta:
+        (buttons[0]?.textContent || "Continue, the profile is correct").trim(),
+      secondaryCta:
+        (buttons[1]?.textContent || "No, I want to correct it").trim(),
+    };
+  } catch (err) {
+    console.error("Failed to parse profile snapshot", err);
+    return null;
+  }
+};
+
+const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const avatar = extractInlineAvatar(doc) || fallbackAvatar;
+    const titleNode = doc.querySelector("h1, h2");
+    const subtitleNode = doc.querySelector("p");
+    const bullets = Array.from(doc.querySelectorAll("p, li"))
+      .map((node) => node.textContent.trim())
+      .filter((text) => /mentions|detected|visited|people/i.test(text));
+
+    return {
+      avatar,
+      title: titleNode?.textContent?.trim() || "Processing data",
+      subtitle:
+        subtitleNode?.textContent?.trim() ||
+        "Our robots are analyzing the behavior of your followers",
+      bullets:
+        bullets.length > 0
+          ? bullets
+          : [
+              `Found 10 mentions of ${fallbackUsername} in messages from your followers`,
+              "Our AI detected a possible screenshot of someone talking about you",
+              "It was detected that someone you know visited your profile 9 times yesterday",
+              "2 people from your region shared one of your stories",
+            ],
+    };
+  } catch (err) {
+    console.error("Failed to parse processing snapshot", err);
+    return null;
+  }
+};
 
 function App() {
   const [screen, setScreen] = useState(SCREEN.LANDING);
@@ -58,10 +184,20 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
+  const [profileStage, setProfileStage] = useState(createProfileStageData());
+  const [processingStage, setProcessingStage] = useState(
+    createProcessingStageData(INITIAL_PROFILE.username, INITIAL_PROFILE.avatar)
+  );
+  const [canAdvanceFromProfile, setCanAdvanceFromProfile] = useState(false);
+  const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
+  const profileHoldTimerRef = useRef(null);
+  const processingHoldTimerRef = useRef(null);
+  const analyzingTimerRef = useRef(null);
+  const analyzingStartRef = useRef(null);
   const notificationTimerRef = useRef(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -73,16 +209,6 @@ function App() {
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
-  const processingMessages = useMemo(
-    () => [
-      `Found 10 mentions of ${profile.username} in messages from your followers`,
-      "Our AI detected a possible screenshot of someone talking about you",
-      "It was detected that someone you know visited your profile 9 times yesterday",
-      "2 people from your region shared one of your stories",
-    ],
-    [profile.username]
-  );
-
   const snapshotLookup = useMemo(() => {
     return snapshots.reduce((acc, step) => {
       acc[step.name] = step;
@@ -127,13 +253,24 @@ function App() {
       const html = await fetchSnapshotHtml(stepName, step.htmlPath);
       if (html) {
         setSnapshotHtml((prev) => {
-          // Only update if not already loaded
           if (prev[stepName]) return prev;
           return {
             ...prev,
             [stepName]: html,
           };
         });
+        if (stepName === "profile-confirm") {
+          const parsed = parseProfileSnapshot(html, profile.username);
+          if (parsed) {
+            setProfileStage(parsed);
+          }
+        }
+        if (stepName === "processing") {
+          const parsed = parseProcessingSnapshot(html, profile.avatar, profile.username);
+          if (parsed) {
+            setProcessingStage(parsed);
+          }
+        }
       }
       stepHtmlFetchRef.current[stepName] = false;
     };
@@ -148,12 +285,15 @@ function App() {
     if (snapshotLookup["processing"]) {
       loadSnapshotHtml("processing");
     }
-  }, [snapshotLookup, snapshotHtml]);
+  }, [snapshotLookup, snapshotHtml, profile.avatar, profile.username]);
 
   useEffect(
     () => () => {
       Object.values(toastTimers.current).forEach(clearTimeout);
       clearInterval(tickerRef.current);
+      clearTimeout(profileHoldTimerRef.current);
+      clearTimeout(processingHoldTimerRef.current);
+      clearInterval(analyzingTimerRef.current);
       clearTimeout(notificationTimerRef.current);
     },
     []
@@ -176,6 +316,48 @@ function App() {
   }, [screen]);
 
   useEffect(() => {
+    if (screen === SCREEN.PREVIEW || screen === SCREEN.ERROR) {
+      return;
+    }
+
+    if (
+      screen === SCREEN.ANALYZING &&
+      snapshotHtml["profile-confirm"] &&
+      analyzingProgress >= 100 &&
+      (!analyzingStartRef.current ||
+        Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
+    ) {
+      setScreen(SCREEN.PROFILE);
+      setCanAdvanceFromProfile(false);
+      clearTimeout(profileHoldTimerRef.current);
+      profileHoldTimerRef.current = setTimeout(() => {
+        setCanAdvanceFromProfile(true);
+      }, PROFILE_STAGE_HOLD_MS);
+      return;
+    }
+
+    if (
+      screen === SCREEN.PROFILE &&
+      snapshotHtml.processing &&
+      canAdvanceFromProfile
+    ) {
+      setScreen(SCREEN.PROCESSING);
+      setCanAdvanceFromProcessing(false);
+      clearTimeout(processingHoldTimerRef.current);
+      processingHoldTimerRef.current = setTimeout(() => {
+        setCanAdvanceFromProcessing(true);
+      }, PROCESSING_STAGE_HOLD_MS);
+      return;
+    }
+  }, [
+    screen,
+    snapshotHtml["profile-confirm"],
+    snapshotHtml.processing,
+    canAdvanceFromProfile,
+    analyzingProgress,
+  ]);
+
+  useEffect(() => {
     const filtered = cards.filter(
       (item) => item && isValidUsername(item.username)
     );
@@ -186,33 +368,44 @@ function App() {
     if (screen !== SCREEN.ANALYZING || snapshotHtml.analyzing) {
       return;
     }
+    analyzingStartRef.current = Date.now();
     setAnalyzingProgress(0);
-    const timer = setInterval(() => {
+    clearInterval(analyzingTimerRef.current);
+    analyzingTimerRef.current = setInterval(() => {
       setAnalyzingProgress((prev) => {
-          if (prev >= 95) {
-            clearInterval(timer);
-            return 95;
-          }
-          return Math.min(95, prev + randBetween(3, 7));
+        if (prev >= 98) {
+          clearInterval(analyzingTimerRef.current);
+          return 98;
+        }
+        return Math.min(98, prev + randBetween(2, 5));
       });
-    }, 700);
-    return () => clearInterval(timer);
+    }, 800);
+    return () => clearInterval(analyzingTimerRef.current);
   }, [screen, snapshotHtml.analyzing]);
 
   useEffect(() => {
-    if (snapshotHtml.analyzing) {
-      setAnalyzingProgress(100);
-    }
+    if (!snapshotHtml.analyzing) return;
+    clearInterval(analyzingTimerRef.current);
+    const timer = setInterval(() => {
+      setAnalyzingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        return prev + 1;
+      });
+    }, 40);
+    return () => clearInterval(timer);
   }, [snapshotHtml.analyzing]);
 
   useEffect(() => {
-    if (screen !== SCREEN.PROCESSING || snapshotHtml.processing) {
+    if (screen !== SCREEN.PROCESSING) {
       return;
     }
     setProcessingMessageIndex(0);
     const timer = setInterval(() => {
       setProcessingMessageIndex((prev) => {
-        if (prev >= processingMessages.length - 1) {
+        if (prev >= processingStage.bullets.length - 1) {
           clearInterval(timer);
           return prev;
         }
@@ -220,7 +413,7 @@ function App() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [screen, snapshotHtml.processing, processingMessages.length]);
+  }, [screen, processingStage.bullets.length]);
 
   useEffect(() => {
     const resultsStep = snapshots.find((step) => step.name === "results");
@@ -254,10 +447,10 @@ function App() {
   }, [snapshots]);
 
   useEffect(() => {
-    if (analysis && screen === SCREEN.PROCESSING) {
+    if (analysis && screen === SCREEN.PROCESSING && canAdvanceFromProcessing) {
       setScreen(SCREEN.PREVIEW);
     }
-  }, [analysis, screen]);
+  }, [analysis, screen, canAdvanceFromProcessing]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -466,6 +659,15 @@ function App() {
       "profile-confirm": null,
       processing: null,
     });
+    const friendlyName = formatted.replace("@", "") || profile.name || "friend";
+    setProfileStage(createProfileStageData(formatted, profile.avatar, friendlyName));
+    setProcessingStage(createProcessingStageData(formatted, profile.avatar));
+    setCanAdvanceFromProfile(false);
+    setCanAdvanceFromProcessing(false);
+    clearTimeout(profileHoldTimerRef.current);
+    clearTimeout(processingHoldTimerRef.current);
+    clearInterval(analyzingTimerRef.current);
+    analyzingStartRef.current = Date.now();
     stepHtmlFetchRef.current = {};
     setAnalyzingProgress(0);
     setProcessingMessageIndex(0);
@@ -478,17 +680,7 @@ function App() {
 
     try {
       setScreen(SCREEN.ANALYZING);
-      const fetchPromise = fetchCards(formatted);
-
-      await delay(4000);
-      if (activeRequestRef.current !== requestId) return;
-      setScreen((prev) => (prev === SCREEN.ANALYZING ? SCREEN.PROFILE : prev));
-
-      await delay(3000);
-      if (activeRequestRef.current !== requestId) return;
-      setScreen((prev) => (prev === SCREEN.PROFILE ? SCREEN.PROCESSING : prev));
-
-      await fetchPromise;
+      await fetchCards(formatted);
     } catch (err) {
       setErrorMessage(err.message || "Unable to fetch stalkers right now.");
       setScreen(SCREEN.ERROR);
@@ -629,89 +821,58 @@ function App() {
     </section>
   );
 
-  const renderProfileFallback = () => (
-    <div className="stage-card profile-card">
-      <div className="stage-progress-track subtle">
-        <div className="stage-progress-fill" style={{ width: "55%" }} />
-      </div>
-      <div className="profile-avatar-ring">
-        <img src={profile.avatar} alt={profile.name} />
-      </div>
-      <div className="profile-username">{profile.username}</div>
-      <h1>Hello, {profile.name}</h1>
-      <p className="stage-subtitle">Is this your profile?</p>
-      <button className="profile-primary-btn">Continue, the profile is correct</button>
-      <button className="profile-secondary-btn">No, I want to correct it</button>
-    </div>
+  const renderAnalyzing = () => (
+    <section className="screen snapshot-stage">
+      {renderAnalyzingFallback()}
+    </section>
   );
 
-  const renderProcessingFallback = () => (
-    <div className="stage-card processing-card">
-      <div className="stage-progress-track subtle">
-        <div className="stage-progress-fill" style={{ width: "78%" }} />
+  const renderProfile = () => (
+    <section className="screen snapshot-stage">
+      <div className="stage-card profile-card profile-card--dynamic">
+        <div className="stage-progress-track subtle">
+          <div
+            className="stage-progress-fill"
+            style={{ width: `${profileStage.progressPercent}%` }}
+          />
+        </div>
+        <div className="profile-avatar-ring">
+          <img src={profileStage.avatar} alt={profileStage.username} />
+        </div>
+        <div className="profile-username">{profileStage.username}</div>
+        <h1>{profileStage.greeting}</h1>
+        <p className="stage-subtitle">{profileStage.question}</p>
+        <button className="profile-primary-btn">{profileStage.primaryCta}</button>
+        <button className="profile-secondary-btn">{profileStage.secondaryCta}</button>
       </div>
-      <div className="processing-avatar-ring">
-        <img src={profile.avatar} alt={profile.name} />
-      </div>
-      <h1>Processing data</h1>
-      <p className="stage-subtitle">
-        Our robots are analyzing the <strong>behavior of your followers</strong>
-      </p>
-      <ul className="processing-list">
-        {processingMessages.map((message, index) => (
-          <li key={message} className={index <= processingMessageIndex ? "visible" : ""}>
-            <span>✔</span>
-            <p>{message}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </section>
   );
 
-  const renderAnalyzing = () => {
-    return (
-      <section className="screen snapshot-stage">
-        {snapshotHtml.analyzing ? (
-          <div
-            className="snapshot-content"
-            dangerouslySetInnerHTML={{ __html: snapshotHtml.analyzing }}
-          />
-        ) : (
-          renderAnalyzingFallback()
-        )}
-      </section>
-    );
-  };
-
-  const renderProfile = () => {
-    return (
-      <section className="screen snapshot-stage">
-        {snapshotHtml["profile-confirm"] ? (
-          <div
-            className="snapshot-content"
-            dangerouslySetInnerHTML={{ __html: snapshotHtml["profile-confirm"] }}
-          />
-        ) : (
-          renderProfileFallback()
-        )}
-      </section>
-    );
-  };
-
-  const renderProcessing = () => {
-    return (
-      <section className="screen snapshot-stage">
-        {snapshotHtml.processing ? (
-          <div
-            className="snapshot-content"
-            dangerouslySetInnerHTML={{ __html: snapshotHtml.processing }}
-          />
-        ) : (
-          renderProcessingFallback()
-        )}
-      </section>
-    );
-  };
+  const renderProcessing = () => (
+    <section className="screen snapshot-stage">
+      <div className="stage-card processing-card">
+        <div className="stage-progress-track subtle">
+          <div className="stage-progress-fill" style={{ width: "82%" }} />
+        </div>
+        <div className="processing-avatar-ring">
+          <img src={processingStage.avatar || profile.avatar} alt={profile.name} />
+        </div>
+        <h1>{processingStage.title}</h1>
+        <p className="stage-subtitle">{processingStage.subtitle}</p>
+        <ul className="processing-list">
+          {processingStage.bullets.map((message, index) => (
+            <li
+              key={`${message}-${index}`}
+              className={index <= processingMessageIndex ? "visible" : ""}
+            >
+              <span>✔</span>
+              <p>{message}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 
   const renderPreview = () => {
     if (analysisLoading && !analysis) {
