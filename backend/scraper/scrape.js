@@ -148,23 +148,10 @@ export async function scrape(username) {
     // Step 5: Click "Continue, the profile is correct" button
     log('🔍 Looking for profile confirmation button...');
     try {
-      // Try specific text first, then fallback to generic Continue button
-      let confirmButton = null;
-      try {
-        confirmButton = await page.waitForSelector(elements.profileConfirmBtn, { 
-          timeout: 3000,
-          state: 'visible' 
-        });
-        log('✅ Profile confirmation button found (specific text)');
-      } catch (e) {
-        // Fallback to generic Continue button
-        confirmButton = await page.waitForSelector(elements.continueBtn, { 
-          timeout: 5000,
-          state: 'visible' 
-        });
-        log('✅ Profile confirmation button found (generic Continue)');
-      }
+      // Wait for page to update after clicking Continue
+      await page.waitForTimeout(2000);
       
+      // First, capture the profile-confirm snapshot (we're already on that page)
       try {
         const displayedHandle = await page
           .locator("text=/^@/i")
@@ -177,15 +164,86 @@ export async function scrape(username) {
         await captureStep("profile-confirm");
         log("⚠️  Unable to capture profile confirm metadata:", handleErr.message);
       }
-
-      // Click immediately - no wait
-      await confirmButton.click();
-      log('✅ Clicked "Continue, the profile is correct" button');
       
-      // Minimal wait for analysis to start (just 200ms)
-      await page.waitForTimeout(200);
+      // Try to find button using locator API (more flexible)
+      let confirmButton = null;
+      const buttonTexts = [
+        "Continue, the profile is correct",
+        "profile is correct",
+        "Continue",
+      ];
+      
+      for (const buttonText of buttonTexts) {
+        try {
+          log(`🔍 Trying to find button with text: "${buttonText}"`);
+          const locator = page.locator(`button:has-text("${buttonText}")`).first();
+          
+          // Wait for button to be visible
+          await locator.waitFor({ state: 'visible', timeout: 3000 });
+          
+          // Check if it's actually visible
+          const isVisible = await locator.isVisible();
+          if (isVisible) {
+            confirmButton = locator;
+            log(`✅ Profile confirmation button found with text: "${buttonText}"`);
+            break;
+          }
+        } catch (e) {
+          log(`⚠️  Button with text "${buttonText}" not found, trying next...`);
+          continue;
+        }
+      }
+      
+      // If still not found, try to find any visible button
+      if (!confirmButton) {
+        log('🔍 Trying to find any visible button...');
+        try {
+          const allButtons = await page.locator('button').all();
+          for (const btn of allButtons) {
+            const isVisible = await btn.isVisible();
+            if (isVisible) {
+              const text = await btn.textContent();
+              log(`📋 Found visible button with text: "${text?.trim()}"`);
+              confirmButton = btn;
+              break;
+            }
+          }
+        } catch (e) {
+          log('⚠️  Could not find any visible buttons');
+        }
+      }
+      
+      if (!confirmButton) {
+        // Log all buttons for debugging
+        const allButtons = await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          return buttons.map(b => ({
+            text: b.textContent?.trim(),
+            visible: b.offsetParent !== null,
+            className: b.className,
+            id: b.id,
+            type: b.type
+          }));
+        });
+        log('📋 All buttons on page:', JSON.stringify(allButtons, null, 2));
+        throw new Error('No profile confirmation button found');
+      }
+
+      // Click the button
+      await confirmButton.click();
+      log('✅ Clicked profile confirmation button');
+      
+      // Wait for page to update
+      await page.waitForTimeout(500);
     } catch (err) {
       log('❌ Error finding profile confirmation button:', err.message);
+      // Try to capture the current state for debugging
+      try {
+        await captureStep("profile-confirm-error");
+        log('📸 Captured error state snapshot');
+      } catch (snapshotErr) {
+        log('⚠️  Could not capture error snapshot:', snapshotErr.message);
+      }
       throw new Error(`Could not find profile confirmation button: ${err.message}`);
     }
 

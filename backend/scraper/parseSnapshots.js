@@ -41,9 +41,17 @@ export async function parseProfileSnapshot(htmlPath) {
     const avatar = extractAvatar(doc);
 
     // Find username (usually starts with @)
-    const usernameNode = Array.from(doc.querySelectorAll("span, div, p")).find(
-      (node) => /^@/.test((node.textContent || "").trim())
-    );
+    // Look for nodes that contain @username, prioritizing shorter text (to avoid concatenated text)
+    const usernameNodes = Array.from(doc.querySelectorAll("span, div, p"))
+      .filter((node) => {
+        const text = (node.textContent || "").trim();
+        return /^@/.test(text);
+      })
+      .sort((a, b) => {
+        // Prefer shorter text (likely just the username, not concatenated)
+        return (a.textContent?.trim().length || Infinity) - (b.textContent?.trim().length || Infinity);
+      });
+    const usernameNode = usernameNodes[0];
 
     // Find greeting (usually h1 or h2)
     const greetingNode = doc.querySelector("h1, h2");
@@ -71,10 +79,32 @@ export async function parseProfileSnapshot(htmlPath) {
       }
     }
 
+    // Extract clean username - only get the @username part, not any concatenated text
+    let cleanUsername = "";
+    if (usernameNode) {
+      const rawText = usernameNode.textContent?.trim() || "";
+      // Try to extract just the @username part
+      // Match @username pattern and stop before "Hello", "Is", or any capital letter that starts a new word
+      const usernameMatch = rawText.match(/^(@[\w_]+)/i);
+      if (usernameMatch) {
+        cleanUsername = usernameMatch[1];
+        // Additional cleanup: remove common concatenated words
+        // If username ends with common words like "Hello", "Is", etc., remove them
+        const cleaned = cleanUsername.replace(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i, '');
+        if (cleaned.startsWith('@')) {
+          cleanUsername = cleaned;
+        }
+      } else if (rawText.startsWith("@")) {
+        // If it starts with @, extract up to first non-username character or common words
+        const parts = rawText.split(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i);
+        cleanUsername = parts[0] || "";
+      }
+    }
+
     return {
       avatar: avatar || null,
       progressPercent,
-      username: (usernameNode?.textContent?.trim() || "").trim(),
+      username: cleanUsername || "",
       greeting: (greetingNode?.textContent || "Hello").trim(),
       question: (questionNode?.textContent || "Is this your profile?").trim(),
       primaryCta:
@@ -105,18 +135,47 @@ export async function parseProcessingSnapshot(htmlPath) {
     // Find subtitle (usually first p)
     const subtitleNode = doc.querySelector("p");
 
-    // Find bullet points - be more inclusive to catch all processing messages
-    const allTextNodes = Array.from(doc.querySelectorAll("p, li, span, div"));
-    const bullets = allTextNodes
-      .map((node) => node.textContent.trim())
-      .filter((text) => {
-        // More inclusive filter - look for processing-related content
-        return text.length > 15 && (
-          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers/i.test(text) ||
-          /found.*\d+|detected.*\d+|visited.*\d+|people.*\d+/i.test(text)
-        );
-      })
-      .filter((text, index, arr) => arr.indexOf(text) === index); // Remove duplicates
+    // Extract bullet points - focus on list items first, then individual paragraphs
+    const bullets = [];
+    
+    // First, try to get list items (most reliable for bullet points)
+    const listItems = Array.from(doc.querySelectorAll("li"));
+    listItems.forEach((li) => {
+      // Get direct text content, excluding nested list items
+      const directText = Array.from(li.childNodes)
+        .filter(node => node.nodeType === 3) // Text nodes only
+        .map(node => node.textContent.trim())
+        .join(" ")
+        .trim();
+      
+      if (directText && directText.length > 20) {
+        // Also check if it has nested elements with text
+        const nestedText = li.textContent.trim();
+        // Use nested text if it's reasonable length (not concatenated)
+        const text = nestedText.length < 200 ? nestedText : directText;
+        if (text && /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      }
+    });
+    
+    // If no list items found, look for individual paragraphs
+    if (bullets.length === 0) {
+      const paragraphs = Array.from(doc.querySelectorAll("p"));
+      paragraphs.forEach((p) => {
+        const text = p.textContent.trim();
+        // Only include if it looks like a bullet point (not too long, contains keywords)
+        if (text.length > 20 && text.length < 200 && 
+            /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      });
+    }
+    
+    // Remove duplicates and filter out very long concatenated text
+    const uniqueBullets = bullets
+      .filter((text, index, arr) => arr.indexOf(text) === index)
+      .filter(text => text.length < 200); // Filter out concatenated long text
 
     return {
       avatar: avatar || null,
@@ -124,7 +183,7 @@ export async function parseProcessingSnapshot(htmlPath) {
       subtitle:
         subtitleNode?.textContent?.trim() ||
         "Our robots are analyzing the behavior of your followers",
-      bullets: bullets.length > 0 ? bullets : [],
+      bullets: uniqueBullets.length > 0 ? uniqueBullets : [],
     };
   } catch (err) {
     console.error("Failed to parse processing snapshot:", err.message);

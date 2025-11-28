@@ -43,7 +43,7 @@ const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
-const PROFILE_STAGE_HOLD_MS = 3000;
+const PROFILE_STAGE_HOLD_MS = 5000;
 const PROCESSING_STAGE_HOLD_MS = 2000;
 
 const randBetween = (min, max) =>
@@ -125,10 +125,32 @@ const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username)
       }
     }
 
+    // Extract clean username - only get the @username part, not any concatenated text
+    let cleanUsername = fallbackUsername;
+    if (usernameNode) {
+      const rawText = usernameNode.textContent?.trim() || "";
+      // Try to extract just the @username part
+      // Match @username pattern and stop before "Hello", "Is", or any capital letter that starts a new word
+      const usernameMatch = rawText.match(/^(@[\w_]+)/i);
+      if (usernameMatch) {
+        cleanUsername = usernameMatch[1];
+        // Additional cleanup: remove common concatenated words
+        // If username ends with common words like "Hello", "Is", etc., remove them
+        const cleaned = cleanUsername.replace(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i, '');
+        if (cleaned.startsWith('@')) {
+          cleanUsername = cleaned;
+        }
+      } else if (rawText.startsWith("@")) {
+        // If it starts with @, extract up to first non-username character or common words
+        const parts = rawText.split(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i);
+        cleanUsername = parts[0] || fallbackUsername;
+      }
+    }
+
     return {
       avatar,
       progressPercent,
-      username: (usernameNode?.textContent?.trim() || fallbackUsername).trim(),
+      username: cleanUsername,
       greeting: (greetingNode?.textContent || "Hello").trim(),
       question: (questionNode?.textContent || "Is this your profile?").trim(),
       primaryCta:
@@ -149,18 +171,47 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
     const avatar = extractInlineAvatar(doc) || fallbackAvatar;
     const titleNode = doc.querySelector("h1, h2");
     const subtitleNode = doc.querySelector("p");
-    // Extract all bullet points - be more inclusive to catch all processing messages
-    const allTextNodes = Array.from(doc.querySelectorAll("p, li, span, div"));
-    const bullets = allTextNodes
-      .map((node) => node.textContent.trim())
-      .filter((text) => {
-        // More inclusive filter - look for processing-related content
-        return text.length > 15 && (
-          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers/i.test(text) ||
-          /found.*\d+|detected.*\d+|visited.*\d+|people.*\d+/i.test(text)
-        );
-      })
-      .filter((text, index, arr) => arr.indexOf(text) === index); // Remove duplicates
+    // Extract bullet points - focus on list items first, then individual paragraphs
+    const bullets = [];
+    
+    // First, try to get list items (most reliable for bullet points)
+    const listItems = Array.from(doc.querySelectorAll("li"));
+    listItems.forEach((li) => {
+      // Get direct text content, excluding nested list items
+      const directText = Array.from(li.childNodes)
+        .filter(node => node.nodeType === 3) // Text nodes only
+        .map(node => node.textContent.trim())
+        .join(" ")
+        .trim();
+      
+      if (directText && directText.length > 20) {
+        // Also check if it has nested elements with text
+        const nestedText = li.textContent.trim();
+        // Use nested text if it's reasonable length (not concatenated)
+        const text = nestedText.length < 200 ? nestedText : directText;
+        if (text && /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      }
+    });
+    
+    // If no list items found, look for individual paragraphs
+    if (bullets.length === 0) {
+      const paragraphs = Array.from(doc.querySelectorAll("p"));
+      paragraphs.forEach((p) => {
+        const text = p.textContent.trim();
+        // Only include if it looks like a bullet point (not too long, contains keywords)
+        if (text.length > 20 && text.length < 200 && 
+            /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+          bullets.push(text);
+        }
+      });
+    }
+    
+    // Remove duplicates and filter out very long concatenated text
+    const uniqueBullets = bullets
+      .filter((text, index, arr) => arr.indexOf(text) === index)
+      .filter(text => text.length < 200); // Filter out concatenated long text
 
     return {
       avatar,
@@ -169,8 +220,8 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
         subtitleNode?.textContent?.trim() ||
         "Our robots are analyzing the behavior of your followers",
       bullets:
-        bullets.length > 0
-          ? bullets
+        uniqueBullets.length > 0
+          ? uniqueBullets
           : [
               `Found 10 mentions of ${fallbackUsername} in messages from your followers`,
               "Our AI detected a possible screenshot of someone talking about you",
@@ -869,26 +920,38 @@ function App() {
     </section>
   );
 
-  const renderProfile = () => (
-    <section className="screen snapshot-stage">
-      <div className="stage-card profile-card profile-card--dynamic">
-        <div className="stage-progress-track subtle">
-          <div
-            className="stage-progress-fill"
-            style={{ width: `${profileStage.progressPercent}%` }}
-          />
+  const renderProfile = () => {
+    // Extract name from greeting (e.g., "Hello, Pratik Patil" -> "Pratik Patil")
+    // or use profile.name as fallback
+    const nameMatch = profileStage.greeting?.match(/Hello,?\s*(.+)/i);
+    const displayName = nameMatch?.[1]?.trim() || profile.name || profileStage.username?.replace("@", "") || "User";
+    
+    return (
+      <section className="screen snapshot-stage">
+        <div className="stage-card profile-card profile-card--dynamic">
+          <div className="stage-progress-track subtle">
+            <div
+              className="stage-progress-fill"
+              style={{ width: `${profileStage.progressPercent}%` }}
+            />
+          </div>
+          <div className="profile-avatar-ring">
+            <img src={profileStage.avatar} alt={profileStage.username} />
+          </div>
+          <div className="profile-username-badge">{profileStage.username}</div>
+          <h1 className="profile-greeting">Hello, {displayName}</h1>
+          <div className="profile-message">
+            <h2 className="profile-congrats">🎉 Congratulations, we found your account!</h2>
+            <p className="profile-description">
+              We're analyzing your profile to reveal who's checking you out, 
+              talking about you, and visiting your profile. 
+              Get ready to discover the truth!
+            </p>
+          </div>
         </div>
-        <div className="profile-avatar-ring">
-          <img src={profileStage.avatar} alt={profileStage.username} />
-        </div>
-        <div className="profile-username">{profileStage.username}</div>
-        <h1>{profileStage.greeting}</h1>
-        <p className="stage-subtitle">{profileStage.question}</p>
-        <button className="profile-primary-btn">{profileStage.primaryCta}</button>
-        <button className="profile-secondary-btn">{profileStage.secondaryCta}</button>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   const renderProcessing = () => (
     <section className="screen snapshot-stage">
