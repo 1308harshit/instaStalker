@@ -66,8 +66,8 @@ async function connectDB() {
 }
 
 // Cashfree configuration
-const CASHFREE_API_KEY = "CF10379956D4L7A539JJ6C7392MERG";
-const CASHFREE_SECRET_KEY = "cfsk_ma_test_aa7226f430da99a29e094eeeae88e3a1_ea9041ff";
+const CASHFREE_API_KEY = "TEST109008515d75e5ec413fed90301215800901";
+const CASHFREE_SECRET_KEY = "cfsk_ma_test_78043720ce0ec944f12f495521d5022d_d5c5925d";
 // Cashfree API base URL - sandbox for testing
 const CASHFREE_API_URL = "https://sandbox.cashfree.com/pg"; 
 // Try different API versions - Cashfree supports multiple versions
@@ -147,12 +147,16 @@ app.post("/api/payment/create-session", async (req, res) => {
       phone = `91${phone}`;
     }
 
+    // Generate valid customer_id (alphanumeric with underscores/hyphens only)
+    // Cashfree requires customer_id to be alphanumeric and may contain underscore or hyphens
+    const customerId = email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `customer_${Date.now()}`;
+
     const paymentData = {
       order_id: orderId,
       order_amount: orderAmount,
       order_currency: "INR",
       customer_details: {
-        customer_id: email,
+        customer_id: customerId,
         customer_name: fullName,
         customer_email: email,
         customer_phone: phone,
