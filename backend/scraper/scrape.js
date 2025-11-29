@@ -15,7 +15,7 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || "");
 };
 
-export async function scrape(username) {
+export async function scrape(username, onStep = null) {
   const startTime = Date.now();
   log(`🚀 Starting scrape for username: ${username}`);
   
@@ -48,6 +48,12 @@ export async function scrape(username) {
       };
       steps.push(entry);
       log(`📝 Snapshot saved for "${name}" -> ${relativePath}`);
+      
+      // Emit step immediately if callback provided (for SSE streaming)
+      if (onStep) {
+        onStep(entry);
+      }
+      
       return entry;
     } catch (snapshotErr) {
       log(`⚠️  Failed to capture snapshot for "${name}"`, snapshotErr.message);

@@ -265,6 +265,7 @@ function App() {
   const analyzingTimerRef = useRef(null);
   const analyzingStartRef = useRef(null);
   const notificationTimerRef = useRef(null);
+  const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
     analyzing: null,
@@ -342,6 +343,7 @@ function App() {
           const parsed = parseProfileSnapshot(html, profile.username);
           if (parsed) {
             setProfileStage(parsed);
+            setProfileConfirmParsed(true);  // Mark as parsed
           }
         }
         if (stepName === "processing") {
@@ -399,9 +401,11 @@ function App() {
       return;
     }
 
+    // Transition to profile-confirm when: HTML fetched + parsed + analyzing complete
     if (
       screen === SCREEN.ANALYZING &&
       snapshotHtml["profile-confirm"] &&
+      profileConfirmParsed &&
       analyzingProgress >= 100 &&
       (!analyzingStartRef.current ||
         Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
@@ -434,6 +438,7 @@ function App() {
     snapshotHtml.processing,
     canAdvanceFromProfile,
     analyzingProgress,
+    profileConfirmParsed,
   ]);
 
   useEffect(() => {
@@ -444,9 +449,10 @@ function App() {
   }, [cards]);
 
   useEffect(() => {
-    if (screen !== SCREEN.ANALYZING || snapshotHtml.analyzing) {
-      return;
-    }
+    // Start analyzing immediately when screen becomes ANALYZING
+    // DO NOT wait for 03-analyzing.html to arrive
+    if (screen !== SCREEN.ANALYZING) return;
+    
     analyzingStartRef.current = Date.now();
     setAnalyzingProgress(0);
     clearInterval(analyzingTimerRef.current);
@@ -460,22 +466,19 @@ function App() {
       });
     }, 800);
     return () => clearInterval(analyzingTimerRef.current);
-  }, [screen, snapshotHtml.analyzing]);
+  }, [screen]);
 
   useEffect(() => {
-    if (!snapshotHtml.analyzing) return;
+    // Immediately set analyzing to 100% when profile-confirm is parsed
+    // DO NOT animate - set it instantly
+    if (screen !== SCREEN.ANALYZING) return;
+    if (!snapshotHtml["profile-confirm"]) return;
+    if (!profileConfirmParsed) return;  // Wait until parsing is complete
+    
+    // Force analyzing to 100% immediately
     clearInterval(analyzingTimerRef.current);
-    const timer = setInterval(() => {
-      setAnalyzingProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(timer);
-          return 100;
-        }
-        return prev + 1;
-      });
-    }, 40);
-    return () => clearInterval(timer);
-  }, [snapshotHtml.analyzing]);
+    setAnalyzingProgress(100);
+  }, [screen, snapshotHtml["profile-confirm"], profileConfirmParsed]);
 
   useEffect(() => {
     if (screen !== SCREEN.PROCESSING) {
@@ -728,7 +731,8 @@ function App() {
         { file: "06-results.html", name: "results" },
       ];
 
-      for (const step of steps) {
+      // Check all files in parallel - register each as soon as it's detected
+      const stepPromises = steps.map(async (step) => {
         if (activeRequestRef.current !== requestId) {
           return;
         }
@@ -740,10 +744,17 @@ function App() {
           step.name === "results" ? 1200 : 600,
           step.name === "results" ? 700 : 500
         );
-        if (exists) {
+        if (exists && activeRequestRef.current === requestId) {
           registerSnapshot(username, timestamp, step.file, step.name, requestId);
         }
-      }
+      });
+
+      // Don't wait for all - let them run independently and register as they're found
+      Promise.all(stepPromises).catch((err) => {
+        if (activeRequestRef.current === requestId) {
+          console.error("Error monitoring snapshots:", err);
+        }
+      });
     } catch (err) {
       console.error("Snapshot monitor error:", err);
     }
@@ -781,6 +792,7 @@ function App() {
     clearInterval(analyzingTimerRef.current);
     analyzingStartRef.current = Date.now();
     stepHtmlFetchRef.current = {};
+    setProfileConfirmParsed(false);  // Reset flag for new request
     setAnalyzingProgress(0);
     setProcessingMessageIndex(0);
 
@@ -790,14 +802,15 @@ function App() {
       console.error("Snapshot monitor failed", err)
     );
 
-    try {
-      setScreen(SCREEN.ANALYZING);
-      await fetchCards(formatted);
-    } catch (err) {
-      setErrorMessage(err.message || "Unable to fetch stalkers right now.");
-      setScreen(SCREEN.ERROR);
-      activeRequestRef.current += 1;
-    }
+    // Set analyzing screen immediately - don't wait for fetchCards
+    setScreen(SCREEN.ANALYZING);
+    
+    // Fetch cards in background - don't block UI transitions
+    fetchCards(formatted).catch((err) => {
+      console.error("Failed to fetch cards:", err);
+      // Don't show error screen - let the flow continue with snapshots
+      // Cards are optional, snapshots are the main flow
+    });
   };
 
   const mergeSnapshotSteps = (existing = [], incoming = []) => {
@@ -811,13 +824,72 @@ function App() {
   };
 
   const fetchCards = async (usernameValue) => {
-    const res = await fetch(`${API_URL}?username=${encodeURIComponent(usernameValue)}`);
-    const data = await res.json();
-    if (!data || !Array.isArray(data.cards)) {
-      throw new Error(data?.error || "Unexpected response from server");
-    }
-    setCards(data.cards);
-    setSnapshots((prev) => mergeSnapshotSteps(prev, data.steps || []));
+    // Use Server-Sent Events for real-time snapshot streaming
+    return new Promise((resolve, reject) => {
+      const eventSource = new EventSource(`${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`);
+      
+      eventSource.addEventListener("snapshot", (e) => {
+        try {
+          const step = JSON.parse(e.data);
+          console.log(`📥 Received snapshot via SSE: ${step.name}`);
+          
+          // Register snapshot immediately as it arrives
+          setSnapshots((prev) => {
+            const filtered = prev.filter((s) => s.name !== step.name);
+            return [...filtered, step];
+          });
+          
+          // If this is profile-confirm, trigger immediate UI update
+          if (step.name === "profile-confirm") {
+            console.log(`✅ Profile-confirm snapshot received - UI will update immediately`);
+          }
+        } catch (err) {
+          console.error("Error parsing snapshot data:", err);
+        }
+      });
+      
+      eventSource.addEventListener("done", (e) => {
+        try {
+          const finalResult = JSON.parse(e.data);
+          console.log(`✅ Scrape completed - received ${finalResult.cards?.length || 0} cards`);
+          
+          // Set cards and final snapshots
+          if (finalResult.cards && Array.isArray(finalResult.cards)) {
+            setCards(finalResult.cards);
+          }
+          if (finalResult.steps && Array.isArray(finalResult.steps)) {
+            setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
+          }
+          
+          eventSource.close();
+          resolve(finalResult);
+        } catch (err) {
+          console.error("Error parsing final result:", err);
+          eventSource.close();
+          reject(err);
+        }
+      });
+      
+      eventSource.addEventListener("error", (e) => {
+        try {
+          const errorData = JSON.parse(e.data);
+          console.error(`❌ Scrape error: ${errorData.error}`);
+          eventSource.close();
+          reject(new Error(errorData.error || "Unknown error"));
+        } catch (err) {
+          console.error("Error parsing error data:", err);
+          eventSource.close();
+          reject(new Error("Failed to process error"));
+        }
+      });
+      
+      // Handle connection errors
+      eventSource.onerror = (err) => {
+        console.error("EventSource error:", err);
+        eventSource.close();
+        reject(new Error("Connection error"));
+      };
+    });
   };
 
   const handleViewFullReport = async () => {

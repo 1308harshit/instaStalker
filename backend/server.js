@@ -296,21 +296,74 @@ app.get("/api/stalkers", async (req, res) => {
     return res.json({ error: "username required" });
   }
 
-  log(`⏱️  Starting scrape process... (this may take 30-60 seconds)`);
+  // Check if client wants SSE streaming (EventSource)
+  const acceptHeader = req.headers.accept || '';
+  const wantsSSE = acceptHeader.includes('text/event-stream') || req.query.stream === 'true';
   
-  try {
-    const result = await scrape(username);
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    log(`✅ Scrape completed successfully in ${duration}s`);
-    log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
-    res.json(result);
-  } catch (err) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
-    log(`❌ Scrape failed after ${duration}s:`, errorMessage);
-    log(`📋 Error details:`, err?.stack || 'No stack trace available');
-    log(`📋 Full error object:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
-    res.json({ error: errorMessage });
+  if (wantsSSE) {
+    // Server-Sent Events streaming mode
+    log(`📡 Starting SSE streaming for username: ${username}`);
+    
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Cache-Control",
+    });
+
+    const send = (event, data) => {
+      try {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch (err) {
+        log(`⚠️ Error sending SSE event: ${err.message}`);
+      }
+    };
+
+    // Start scraping with callback to emit snapshots immediately
+    scrape(username, (step) => {
+      log(`📤 Emitting snapshot via SSE: ${step.name}`);
+      send("snapshot", step);
+    })
+    .then((finalResult) => {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      log(`✅ Scrape completed successfully in ${duration}s`);
+      log(`📊 Sending final result with ${finalResult.cards?.length || 0} cards`);
+      send("done", finalResult);
+      res.end();
+    })
+    .catch((err) => {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
+      log(`❌ Scrape failed after ${duration}s:`, errorMessage);
+      send("error", { error: errorMessage });
+      res.end();
+    });
+
+    // Handle client disconnect
+    req.on('close', () => {
+      log(`🔌 Client disconnected for username: ${username}`);
+      res.end();
+    });
+  } else {
+    // Legacy mode: return everything at once (for backward compatibility)
+    log(`⏱️  Starting scrape process... (this may take 30-60 seconds)`);
+    
+    try {
+      const result = await scrape(username);
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      log(`✅ Scrape completed successfully in ${duration}s`);
+      log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
+      res.json(result);
+    } catch (err) {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
+      log(`❌ Scrape failed after ${duration}s:`, errorMessage);
+      log(`📋 Error details:`, err?.stack || 'No stack trace available');
+      log(`📋 Full error object:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      res.json({ error: errorMessage });
+    }
   }
 });
 
