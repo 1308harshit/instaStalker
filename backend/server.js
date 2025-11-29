@@ -66,8 +66,8 @@ async function connectDB() {
 }
 
 // Cashfree configuration
-const CASHFREE_API_KEY = "TEST103799567adb826730905364403665997301";
-const CASHFREE_SECRET_KEY = "cfsk_ma_test_db698565f78361d5632173bcfb2c9c55_69beb2a8";
+const CASHFREE_API_KEY = "CF10379956D4L7A539JJ6C7392MERG";
+const CASHFREE_SECRET_KEY = "cfsk_ma_test_aa7226f430da99a29e094eeeae88e3a1_ea9041ff";
 // Cashfree API base URL - sandbox for testing
 const CASHFREE_API_URL = "https://sandbox.cashfree.com/pg"; 
 // Try different API versions - Cashfree supports multiple versions
