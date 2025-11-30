@@ -1,6 +1,7 @@
 FROM node:18-slim
 
-# Install system dependencies for Playwright
+WORKDIR /app/backend
+
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libnss3 \
@@ -20,22 +21,14 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+COPY backend/package*.json ./
 
-# Copy package files
-COPY package*.json ./
-
-# Install Node.js dependencies
 RUN npm install
 
-# Install Playwright browsers
 RUN npx playwright install chromium
 
-# Copy application code
-COPY . .
+COPY backend .
 
-# Expose port
 EXPOSE 3000
 
-# Start server
 CMD ["npm", "start"]
