@@ -573,6 +573,20 @@ function App() {
     setCarouselIndex(0);
   }, [cards, analysis]);
 
+  // Auto-scroll carousel
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    
+    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+    if (allCards.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+    }, 3000); // Change slide every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, cards, analysis]);
+
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
       clearTimeout(notificationTimerRef.current);
@@ -1293,21 +1307,23 @@ function App() {
                         backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
                       }}
                     />
-                    {card?.username && (
-                      <h4 className="username">{card.username}</h4>
-                    )}
-                    {showLines &&
-                      card.lines.map((line, idx) => (
-                        <p
-                          key={`${line.text}-${idx}`}
-                          className={line.blurred ? "blurred-text" : ""}
-                        >
-                          {renderSensitiveText(line.text, line.blurred)}
-                        </p>
-                      ))}
-                    {card?.badge && (
-                      <span className="slider-badge">{card.badge}</span>
-                    )}
+                    <div className="slider-card-content">
+                      {card?.username && (
+                        <h4 className="username">{card.username}</h4>
+                      )}
+                      {showLines &&
+                        card.lines.map((line, idx) => (
+                          <p
+                            key={`${line.text}-${idx}`}
+                            className={line.blurred ? "blurred-text" : ""}
+                          >
+                            {renderSensitiveText(line.text, line.blurred)}
+                          </p>
+                        ))}
+                      {card?.badge && (
+                        <span className="slider-badge">{card.badge}</span>
+                      )}
+                    </div>
                   </article>
                 );
               })}
