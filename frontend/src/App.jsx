@@ -582,7 +582,7 @@ function App() {
 
     const interval = setInterval(() => {
       setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
-    }, 3000); // Change slide every 3 seconds
+    }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
   }, [screen, cards, analysis]);
@@ -1222,22 +1222,11 @@ function App() {
               
               return allCards.length > 0 ? (
             <div className="carousel-container">
-              {allCards.length > 1 && (
-              <button 
-                className="carousel-btn carousel-btn--prev"
-                onClick={() => {
-                  setCarouselIndex((prev) => (prev > 0 ? prev - 1 : allCards.length - 1));
-                }}
-                aria-label="Previous"
-              >
-                ‹
-              </button>
-              )}
               <div className="carousel-wrapper">
                 <div 
                   className="carousel-track"
                   style={{
-                    transform: `translateX(-${currentIndex * 100}%)`
+                    transform: `translateX(calc(-${currentIndex * (280 + 16)}px))`
                   }}
                 >
               {allCards.map((card, index) => {
@@ -1263,7 +1252,7 @@ function App() {
                 if (isLocked) {
                   return (
                     <article
-                      className="slider-card slider-card--locked"
+                      className={`slider-card slider-card--locked ${index === currentIndex ? 'active' : ''}`}
                       key={`locked-${card?.username || index}`}
                     >
                       <div className="lock-overlay">
@@ -1282,7 +1271,7 @@ function App() {
                 if (shouldBlurImage && imageUrl) {
                   return (
                     <article
-                      className="slider-card slider-card--blurred"
+                      className={`slider-card slider-card--blurred ${index === currentIndex ? 'active' : ''}`}
                       key={`blurred-${card?.username || index}`}
                     >
                       <div
@@ -1299,7 +1288,10 @@ function App() {
                 }
 
                 return (
-                  <article className="slider-card" key={`${card.title}-${index}`}>
+                  <article 
+                    className={`slider-card ${index === currentIndex ? 'active' : ''}`} 
+                    key={`${card.title}-${index}`}
+                  >
                     <div
                       className="slider-image"
                       style={{
@@ -1329,33 +1321,7 @@ function App() {
               })}
                 </div>
               </div>
-              {allCards.length > 1 && (
-              <button 
-                className="carousel-btn carousel-btn--next"
-                onClick={() => {
-                  setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
-                }}
-                aria-label="Next"
-              >
-                ›
-              </button>
-              )}
             </div>
-            ) : null;
-            })()}
-            {(() => {
-              const allCards = slider.cards.length ? slider.cards : cards;
-              return allCards.length > 1 ? (
-              <div className="carousel-dots">
-                {allCards.map((_, index) => (
-                  <button
-                    key={index}
-                    className={`carousel-dot ${index === carouselIndex ? 'active' : ''}`}
-                    onClick={() => setCarouselIndex(index)}
-                    aria-label={`Go to slide ${index + 1}`}
-                  />
-                ))}
-              </div>
             ) : null;
             })()}
           </section>
