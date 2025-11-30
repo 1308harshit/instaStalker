@@ -258,6 +258,7 @@ function App() {
   const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [carouselIndex, setCarouselIndex] = useState(0);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -566,6 +567,11 @@ function App() {
       setScreen(SCREEN.PREVIEW);
     }
   }, [analysis, screen, canAdvanceFromProcessing, processingMessageIndex, processingStage.bullets.length]);
+
+  useEffect(() => {
+    // Reset carousel when cards or analysis changes
+    setCarouselIndex(0);
+  }, [cards, analysis]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -1196,8 +1202,31 @@ function App() {
 
           <section className="slider-section">
             <h3>{slider.heading}</h3>
-            <div className="slider-grid">
-              {(slider.cards.length ? slider.cards : cards).map((card, index) => {
+            {(() => {
+              const allCards = slider.cards.length ? slider.cards : cards;
+              const currentIndex = Math.min(carouselIndex, Math.max(0, allCards.length - 1));
+              
+              return allCards.length > 0 ? (
+            <div className="carousel-container">
+              {allCards.length > 1 && (
+              <button 
+                className="carousel-btn carousel-btn--prev"
+                onClick={() => {
+                  setCarouselIndex((prev) => (prev > 0 ? prev - 1 : allCards.length - 1));
+                }}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              )}
+              <div className="carousel-wrapper">
+                <div 
+                  className="carousel-track"
+                  style={{
+                    transform: `translateX(-${currentIndex * 100}%)`
+                  }}
+                >
+              {allCards.map((card, index) => {
                 const imageUrl =
                   card.image || hero.profileImage || profile.avatar;
                 const isLocked = Boolean(
@@ -1282,7 +1311,37 @@ function App() {
                   </article>
                 );
               })}
+                </div>
+              </div>
+              {allCards.length > 1 && (
+              <button 
+                className="carousel-btn carousel-btn--next"
+                onClick={() => {
+                  setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+                }}
+                aria-label="Next"
+              >
+                ›
+              </button>
+              )}
             </div>
+            ) : null;
+            })()}
+            {(() => {
+              const allCards = slider.cards.length ? slider.cards : cards;
+              return allCards.length > 1 ? (
+              <div className="carousel-dots">
+                {allCards.map((_, index) => (
+                  <button
+                    key={index}
+                    className={`carousel-dot ${index === carouselIndex ? 'active' : ''}`}
+                    onClick={() => setCarouselIndex(index)}
+                    aria-label={`Go to slide ${index + 1}`}
+                  />
+                ))}
+              </div>
+            ) : null;
+            })()}
           </section>
 
           {revealStalkersCta && (
