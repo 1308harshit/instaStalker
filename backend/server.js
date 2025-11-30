@@ -3,67 +3,28 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
-import { MongoClient } from "mongodb";
+import { scrapeQueue } from "./utils/queue.js";
+import { 
+  connectDB, 
+  getSnapshotStep, 
+  getRecentSnapshot,
+  closeDB 
+} from "./utils/mongodb.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json()); // For parsing JSON request bodies
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// Keep static serving for backward compatibility (if files exist)
 const SNAPSHOT_ROOT = path.join(__dirname, "snapshots");
 app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 
-// MongoDB connection
+// MongoDB configuration
 // Note: Make sure your IP is whitelisted in MongoDB Atlas Network Access
 // Password is URL-encoded: @ becomes %40
-const MONGODB_URI = "mongodb+srv://instaStalker_db_user:Home%401234@instastalkerdb.qytzbce.mongodb.net/?retryWrites=true&w=majority&appName=instaStalkerDb";
-const DB_NAME = "insta_analyzer";
 const COLLECTION_NAME = "user_orders";
-
-let dbClient = null;
-let db = null;
-
-// Initialize MongoDB connection
-async function connectDB() {
-  try {
-    if (!dbClient || !db) {
-      // MongoDB connection options with proper SSL/TLS handling
-      // Using minimal options to avoid SSL handshake issues
-      const options = {
-        serverSelectionTimeoutMS: 10000, // 10 second timeout
-        socketTimeoutMS: 45000,
-        connectTimeoutMS: 10000,
-        retryWrites: true,
-        // Try without explicit TLS settings - let MongoDB handle it
-      };
-
-      dbClient = new MongoClient(MONGODB_URI, options);
-      
-      // Test connection
-      await dbClient.connect();
-      await dbClient.db("admin").command({ ping: 1 });
-      
-      db = dbClient.db(DB_NAME);
-      log('✅ MongoDB connected successfully');
-    }
-    return db;
-  } catch (err) {
-    log('❌ MongoDB connection error:', err.message);
-    // Reset client on error so it can retry
-    if (dbClient) {
-      try {
-        await dbClient.close();
-      } catch (closeErr) {
-        // Ignore close errors
-      }
-      dbClient = null;
-      db = null;
-    }
-    // Don't throw error, allow server to continue without DB
-    // Payment endpoints will handle DB errors gracefully
-    return null;
-  }
-}
+// connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
 // Cashfree configuration
 const CASHFREE_API_KEY = "TEST109008515d75e5ec413fed90301215800901";
@@ -285,6 +246,25 @@ app.post("/api/payment/create-session", async (req, res) => {
   }
 });
 
+// New endpoint: Serve HTML snapshots from MongoDB
+app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
+  const { snapshotId, stepName } = req.params;
+  
+  try {
+    const html = await getSnapshotStep(snapshotId, stepName);
+    
+    if (!html) {
+      return res.status(404).json({ error: "Snapshot not found" });
+    }
+    
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    log(`❌ Error serving snapshot: ${err.message}`);
+    res.status(500).json({ error: "Failed to retrieve snapshot" });
+  }
+});
+
 app.get("/api/stalkers", async (req, res) => {
   const startTime = Date.now();
   const username = req.query.username;
@@ -294,6 +274,31 @@ app.get("/api/stalkers", async (req, res) => {
   if (!username) {
     log('❌ Request rejected: username required');
     return res.json({ error: "username required" });
+  }
+
+  // Check for recent cached snapshot (within last hour)
+  try {
+    const recentSnapshot = await getRecentSnapshot(username, 60); // 60 minutes cache
+    if (recentSnapshot) {
+      log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
+      
+      const cachedSteps = recentSnapshot.steps.map(step => ({
+        name: step.name,
+        htmlPath: `/api/snapshots/${recentSnapshot._id}/${step.name}`,
+        meta: step.meta
+      }));
+      
+      return res.json({
+        cards: recentSnapshot.cards || [],
+        steps: cachedSteps,
+        snapshotId: recentSnapshot._id.toString(),
+        runId: recentSnapshot.runId,
+        cached: true
+      });
+    }
+  } catch (cacheErr) {
+    log(`⚠️  Error checking cache: ${cacheErr.message}`);
+    // Continue with scraping if cache check fails
   }
 
   // Check if client wants SSE streaming (EventSource)
@@ -321,10 +326,12 @@ app.get("/api/stalkers", async (req, res) => {
       }
     };
 
-    // Start scraping with callback to emit snapshots immediately
-    scrape(username, (step) => {
-      log(`📤 Emitting snapshot via SSE: ${step.name}`);
-      send("snapshot", step);
+    // Use queue to handle concurrent requests
+    scrapeQueue.enqueue(username, async (username) => {
+      return await scrape(username, (step) => {
+        log(`📤 Emitting snapshot via SSE: ${step.name}`);
+        send("snapshot", step);
+      });
     })
     .then((finalResult) => {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -351,7 +358,8 @@ app.get("/api/stalkers", async (req, res) => {
     log(`⏱️  Starting scrape process... (this may take 30-60 seconds)`);
     
     try {
-      const result = await scrape(username);
+      // Use queue to handle concurrent requests
+      const result = await scrapeQueue.enqueue(username, scrape);
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       log(`✅ Scrape completed successfully in ${duration}s`);
       log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
@@ -372,10 +380,25 @@ connectDB().catch((err) => {
   log('⚠️ MongoDB connection failed on startup (will retry on first use):', err.message);
 });
 
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  log('🛑 SIGTERM received, closing connections...');
+  await closeDB();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  log('🛑 SIGINT received, closing connections...');
+  await closeDB();
+  process.exit(0);
+});
+
 app.listen(3000, () => {
   log('🚀 API server started on port 3000');
   log('📍 Endpoint: http://localhost:3000/api/stalkers?username=<instagram_username>');
+  log('📍 Snapshot Endpoint: http://localhost:3000/api/snapshots/:snapshotId/:stepName');
   log('📍 Payment Endpoint: http://localhost:3000/api/payment/create-session');
   log('⏱️  Expected response time: 30-60 seconds per request');
+  log('🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)');
 });
 
