@@ -699,6 +699,53 @@ body {
   gap: 12px;
 }
 
+.stories-section .carousel-container {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  display: block !important;
+}
+
+.stories-section .carousel-wrapper {
+  overflow: hidden !important;
+  width: 100% !important;
+  position: relative;
+  display: block !important;
+}
+
+.stories-section .carousel-track {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  transition: transform 0.4s ease-in-out;
+  will-change: transform;
+  align-items: center;
+  gap: 16px;
+  padding: 0 calc(50% - 140px);
+}
+
+.stories-section .carousel-track .story-card {
+  width: 280px !important;
+  min-width: 280px !important;
+  max-width: 280px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  opacity: 0.6;
+  transform: scale(0.9);
+  transition: all 0.4s ease;
+  position: relative;
+}
+
+.stories-section .carousel-track .story-card.active {
+  opacity: 1;
+  transform: scale(1);
+  z-index: 2;
+  position: relative;
+}
+
 .story-card {
   background: #fff;
   border-radius: 18px;
@@ -708,11 +755,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .story-cover {
   width: 100%;
-  height: 220px;
+  height: 300px;
   border-radius: 14px;
   background-size: cover;
   background-position: center;
@@ -857,7 +906,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 400px;
+  min-height: 350px;
   height: 100%;
 }
 
@@ -867,7 +916,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  min-height: 400px;
+  min-height: 350px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -899,7 +948,7 @@ body {
 .blurred-image,
 .slider-card--blurred .slider-image {
   filter: blur(10px) saturate(0);
-  height: 340px;
+  height: 300px;
 }
 
 .blurred-lock {
@@ -913,7 +962,7 @@ body {
 
 .slider-image {
   width: 100%;
-  height: 340px;
+  height: 300px;
   border-radius: 16px 16px 0 0;
   background-size: cover;
   background-position: center;
