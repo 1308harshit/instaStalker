@@ -1,7 +1,22 @@
 import { MongoClient, ObjectId } from "mongodb";
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://instaStalker_db_user:Home%401234@instastalkerdb.qytzbce.mongodb.net/?retryWrites=true&w=majority&appName=instaStalkerDb";
-const DB_NAME = process.env.MONGODB_DB_NAME || "insta_analyzer";
+// Validate required environment variables (will be checked when functions are called)
+const getMongoDBUri = () => {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error("❌ MONGODB_URI environment variable is required. Please set it in .env file or Railway environment variables.");
+  }
+  return uri;
+};
+
+const getDBName = () => {
+  const name = process.env.MONGODB_DB_NAME;
+  if (!name) {
+    throw new Error("❌ MONGODB_DB_NAME environment variable is required. Please set it in .env file or Railway environment variables.");
+  }
+  return name;
+};
+
 const SNAPSHOTS_COLLECTION = "snapshots";
 
 let dbClient = null;
@@ -18,6 +33,9 @@ const log = (message, data = null) => {
 export async function connectDB() {
   try {
     if (!dbClient || !db) {
+      const MONGODB_URI = getMongoDBUri();
+      const DB_NAME = getDBName();
+      
       const options = {
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
