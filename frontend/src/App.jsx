@@ -621,8 +621,10 @@ function App() {
   // Auto-scroll carousel
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
-    
-    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+
+    const allCards = analysis?.slider?.cards?.length
+      ? analysis.slider.cards
+      : cards;
     if (allCards.length <= 1) return;
 
     const interval = setInterval(() => {
@@ -635,12 +637,14 @@ function App() {
   // Auto-scroll stories carousel
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
-    
+
     const storiesSlides = analysis?.stories?.slides || [];
     if (storiesSlides.length <= 1) return;
 
     const interval = setInterval(() => {
-      setStoriesCarouselIndex((prev) => (prev < storiesSlides.length - 1 ? prev + 1 : 0));
+      setStoriesCarouselIndex((prev) =>
+        prev < storiesSlides.length - 1 ? prev + 1 : 0
+      );
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
@@ -1136,9 +1140,9 @@ function App() {
     <section className="screen hero">
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
+      <button className="result-btn">Result in 1 minute</button>
       <p className="hero-copy">
-        We analyze your Instagram profile to identify who loves watching your
-        life, who hasn't forgotten you, and who pretends to be your friend.
+        We analyze your Instagram profile to identify:
       </p>
       <div className="inline-cards">
         <div className="inline-card">
@@ -1154,7 +1158,7 @@ function App() {
           <p>Our AI searches conversations talking about you.</p>
         </div>
         <div className="inline-card">
-          <h3>Who wants you</h3>
+          <h3>Who wants you 🔥</h3>
           <p>Visits daily, screenshots stories and shares your profile.</p>
         </div>
       </div>
@@ -1176,7 +1180,11 @@ function App() {
           />
         </div>
         <button type="submit">Reveal Stalkers</button>
-        <small>Secure data – we will NEVER ask for your password.</small>
+        <small className="small-text-footer">
+          Also NOT GOOGLE or FACEBOOK: This site is not a part of the Google
+          website, Google Inc, Facebook/Meta website, or Meta, Inc.
+          Additionally, This site is NOT endorsed by Google or Meta in any way.
+        </small>
       </form>
     </section>
   );
@@ -1461,111 +1469,133 @@ function App() {
             </h3>
             {(() => {
               const allCards = slider.cards.length ? slider.cards : cards;
-              const currentIndex = Math.min(carouselIndex, Math.max(0, allCards.length - 1));
-              
+              const currentIndex = Math.min(
+                carouselIndex,
+                Math.max(0, allCards.length - 1)
+              );
+
               return allCards.length > 0 ? (
-            <div className="carousel-container">
-              <div className="carousel-wrapper">
-                <div 
-                  className="carousel-track"
-                  style={{
-                    transform: `translateX(calc(-${currentIndex * (220 + 16)}px))`
-                  }}
-                >
-              {allCards.map((card, index) => {
-                const imageUrl =
-                  card.image || hero.profileImage || profile.avatar;
-                const isLocked = Boolean(
-                  card?.isLocked || card?.title?.includes("🔒")
-                );
-                const shouldBlurImage = Boolean(
-                  card?.blurImage || (!card?.username && imageUrl)
-                );
-        const lockText =
-                  card?.lockText ||
-                  card?.lines?.[0]?.text ||
-                  card?.title ||
-                  "Profile locked";
-                const showLines =
-                  !isLocked &&
-                  !shouldBlurImage &&
-                  Array.isArray(card?.lines) &&
-                  card.lines.length > 0;
-
-                if (isLocked) {
-                  return (
-                    <article
-                      className={`slider-card slider-card--locked ${index === currentIndex ? 'active' : ''}`}
-                      key={`locked-${card?.username || index}`}
-                    >
-                      <div className="lock-overlay">
-                        <span className="lock-icon">🔒</span>
-                        <p className="lock-text">
-                          {renderSensitiveText(
-                            lockText,
-                            card.lockTextBlurred
-                          )}
-                        </p>
-                      </div>
-                    </article>
-                  );
-                }
-
-                if (shouldBlurImage && imageUrl) {
-                  return (
-                    <article
-                      className={`slider-card slider-card--blurred ${index === currentIndex ? 'active' : ''}`}
-                      key={`blurred-${card?.username || index}`}
-                    >
-                      <div
-                        className="slider-image blurred-image"
-                        style={{ backgroundImage: `url(${imageUrl})` }}
-                      />
-                      <div className="blurred-lock">
-                        <span role="img" aria-label="locked">
-                          🔒
-                        </span>
-                      </div>
-                    </article>
-                  );
-                }
-
-                return (
-                  <article 
-                    className={`slider-card ${index === currentIndex ? 'active' : ''}`} 
-                    key={`${card.title}-${index}`}
-                  >
+                <div className="carousel-container">
+                  <div className="carousel-wrapper">
                     <div
-                      className="slider-image"
+                      className="carousel-track"
                       style={{
-                        backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
-                        backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
+                        transform: `translateX(calc(-${
+                          currentIndex * (220 + 16)
+                        }px))`,
                       }}
-                    />
-                    <div className="slider-card-content">
-                      {card?.username && (
-                        <h4 className="username">{card.username}</h4>
-                      )}
-                      {showLines &&
-                        card.lines.map((line, idx) => (
-                          <p
-                            key={`${line.text}-${idx}`}
-                            className={line.blurred ? "blurred-text" : ""}
+                    >
+                      {allCards.map((card, index) => {
+                        const imageUrl =
+                          card.image || hero.profileImage || profile.avatar;
+                        const isLocked = Boolean(
+                          card?.isLocked || card?.title?.includes("🔒")
+                        );
+                        const shouldBlurImage = Boolean(
+                          card?.blurImage || (!card?.username && imageUrl)
+                        );
+                        const lockText =
+                          card?.lockText ||
+                          card?.lines?.[0]?.text ||
+                          card?.title ||
+                          "Profile locked";
+                        const showLines =
+                          !isLocked &&
+                          !shouldBlurImage &&
+                          Array.isArray(card?.lines) &&
+                          card.lines.length > 0;
+
+                        if (isLocked) {
+                          return (
+                            <article
+                              className={`slider-card slider-card--locked ${
+                                index === currentIndex ? "active" : ""
+                              }`}
+                              key={`locked-${card?.username || index}`}
+                            >
+                              <div className="lock-overlay">
+                                <span className="lock-icon">🔒</span>
+                                <p className="lock-text">
+                                  {renderSensitiveText(
+                                    lockText,
+                                    card.lockTextBlurred
+                                  )}
+                                </p>
+                              </div>
+                            </article>
+                          );
+                        }
+
+                        if (shouldBlurImage && imageUrl) {
+                          return (
+                            <article
+                              className={`slider-card slider-card--blurred ${
+                                index === currentIndex ? "active" : ""
+                              }`}
+                              key={`blurred-${card?.username || index}`}
+                            >
+                              <div
+                                className="slider-image blurred-image"
+                                style={{ backgroundImage: `url(${imageUrl})` }}
+                              />
+                              <div className="blurred-lock">
+                                <span role="img" aria-label="locked">
+                                  🔒
+                                </span>
+                              </div>
+                            </article>
+                          );
+                        }
+
+                        return (
+                          <article
+                            className={`slider-card ${
+                              index === currentIndex ? "active" : ""
+                            }`}
+                            key={`${card.title}-${index}`}
                           >
-                            {renderSensitiveText(line.text, line.blurred)}
-                          </p>
-                        ))}
-                      {card?.badge && (
-                        <span className="slider-badge">{card.badge}</span>
-                      )}
+                            <div
+                              className="slider-image"
+                              style={{
+                                backgroundImage: imageUrl
+                                  ? `url(${imageUrl})`
+                                  : "none",
+                                backgroundColor: imageUrl
+                                  ? "transparent"
+                                  : "#f5f5f5",
+                              }}
+                            />
+                            <div className="slider-card-content">
+                              {card?.username && (
+                                <h4 className="username">{card.username}</h4>
+                              )}
+                              {showLines &&
+                                card.lines.map((line, idx) => (
+                                  <p
+                                    key={`${line.text}-${idx}`}
+                                    className={
+                                      line.blurred ? "blurred-text" : ""
+                                    }
+                                  >
+                                    {renderSensitiveText(
+                                      line.text,
+                                      line.blurred
+                                    )}
+                                  </p>
+                                ))}
+                              {card?.badge && (
+                                <span className="slider-badge">
+                                  {card.badge}
+                                </span>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
-                  </article>
-                );
-              })}
+                  </div>
                 </div>
-              </div>
-            </div>
-            ) : null;
+              ) : null;
             })()}
           </section>
 
@@ -1582,81 +1612,120 @@ function App() {
               <h3>{stories.heading || "Stories activity"}</h3>
               {(() => {
                 const storiesSlides = stories.slides || [];
-                const currentStoriesIndex = Math.min(storiesCarouselIndex, Math.max(0, storiesSlides.length - 1));
-                
+                const currentStoriesIndex = Math.min(
+                  storiesCarouselIndex,
+                  Math.max(0, storiesSlides.length - 1)
+                );
+
                 return storiesSlides.length > 0 ? (
                   <div className="carousel-container">
                     <div className="carousel-wrapper">
-                      <div 
+                      <div
                         className="carousel-track"
                         style={{
-                          transform: `translateX(calc(-${currentStoriesIndex * (220 + 16)}px))`
+                          transform: `translateX(calc(-${
+                            currentStoriesIndex * (220 + 16)
+                          }px))`,
                         }}
                       >
                         {storiesSlides.map((story, index) => (
-                          <article 
-                            key={`${story.caption}-${index}`} 
-                            className={`story-card ${index === currentStoriesIndex ? 'active' : ''}`}
+                          <article
+                            key={`${story.caption}-${index}`}
+                            className={`story-card ${
+                              index === currentStoriesIndex ? "active" : ""
+                            }`}
                           >
                             <div
                               className="story-cover"
-                              style={{ 
-                                backgroundImage: story.image ? `url(${story.image})` : "none",
-                                backgroundColor: story.image ? "transparent" : "#000"
+                              style={{
+                                backgroundImage: story.image
+                                  ? `url(${story.image})`
+                                  : "none",
+                                backgroundColor: story.image
+                                  ? "transparent"
+                                  : "#000",
                               }}
                             >
                               <div className="story-hero-info">
-                                <img 
-                                  src={hero.profileImage || profile.avatar} 
+                                <img
+                                  src={hero.profileImage || profile.avatar}
                                   alt={hero.name || profile.name}
                                   className="story-hero-avatar"
                                 />
-                                <span className="story-hero-username">{hero.name || profile.name}</span>
+                                <span className="story-hero-username">
+                                  {hero.name || profile.name}
+                                </span>
                               </div>
                               {(story.caption || story.meta) && (
                                 <div className="story-bottom-overlay">
                                   <div className="story-bottom-text">
-                                    {story.caption && <p className="story-caption">{story.caption}</p>}
-                                    {story.meta && (() => {
-                                      // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
-                                      const metaText = story.meta.trim();
-                                      // Match pattern: number + "profiles" + rest of text
-                                      const match = metaText.match(/^(\d+)\s*(profiles?)\s*(.+)?/i);
-                                      if (match) {
-                                        const number = match[1];
-                                        const profiles = match[2];
-                                        const status = match[3] ? match[3].trim() : '';
-                                        return (
-                                          <div className="story-meta-formatted">
-                                            <div className="story-meta-line1">
-                                              <svg 
-                                                xmlns="http://www.w3.org/2000/svg" 
-                                                width="18" 
-                                                height="18" 
-                                                viewBox="0 0 24 24" 
-                                                fill="none" 
-                                                stroke="currentColor" 
-                                                strokeWidth="2" 
-                                                strokeLinecap="round" 
-                                                strokeLinejoin="round" 
-                                                className="story-lock-icon"
-                                                aria-hidden="true"
-                                              >
-                                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
-                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                                              </svg>
-                                              <span className="story-meta-number">{number}</span>
-                                              <span className="story-meta-profiles">{profiles}</span>
-                                            </div>
-                                            {status && (
-                                              <div className="story-meta-line2">{status}</div>
-                                            )}
-                                          </div>
+                                    {story.caption && (
+                                      <p className="story-caption">
+                                        {story.caption}
+                                      </p>
+                                    )}
+                                    {story.meta &&
+                                      (() => {
+                                        // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
+                                        const metaText = story.meta.trim();
+                                        // Match pattern: number + "profiles" + rest of text
+                                        const match = metaText.match(
+                                          /^(\d+)\s*(profiles?)\s*(.+)?/i
                                         );
-                                      }
-                                      // Fallback: display as is
-                                      return <span className="story-meta">{story.meta}</span>;
-                                    })()}
+                                        if (match) {
+                                          const number = match[1];
+                                          const profiles = match[2];
+                                          const status = match[3]
+                                            ? match[3].trim()
+                                            : "";
+                                          return (
+                                            <div className="story-meta-formatted">
+                                              <div className="story-meta-line1">
+                                                <svg
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                  width="18"
+                                                  height="18"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  strokeWidth="2"
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  className="story-lock-icon"
+                                                  aria-hidden="true"
+                                                >
+                                                  <rect
+                                                    width="18"
+                                                    height="11"
+                                                    x="3"
+                                                    y="11"
+                                                    rx="2"
+                                                    ry="2"
+                                                  ></rect>
+                                                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                                </svg>
+                                                <span className="story-meta-number">
+                                                  {number}
+                                                </span>
+                                                <span className="story-meta-profiles">
+                                                  {profiles}
+                                                </span>
+                                              </div>
+                                              {status && (
+                                                <div className="story-meta-line2">
+                                                  {status}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                        // Fallback: display as is
+                                        return (
+                                          <span className="story-meta">
+                                            {story.meta}
+                                          </span>
+                                        );
+                                      })()}
                                   </div>
                                 </div>
                               )}
@@ -1683,7 +1752,11 @@ function App() {
             <h3 className="screenshots-heading">
               <span style={{ color: "#f43f3f" }}>Screenshots</span> recovered
             </h3>
-            <p className="screenshots-description">Our artificial intelligence searches <strong>THE ENTIRE INTERNET</strong> for any mention of you in leaked <strong>photos and screenshots.</strong></p>
+            <p className="screenshots-description">
+              Our artificial intelligence searches{" "}
+              <strong>THE ENTIRE INTERNET</strong> for any mention of you in
+              leaked <strong>photos and screenshots.</strong>
+            </p>
             <ul className="screenshots-list">
               <li>Among your followers</li>
               <li>Friends of your followers</li>
@@ -1692,88 +1765,98 @@ function App() {
             </ul>
             {/* Message bubbles from screenshots.chat data */}
             {screenshots.chat && screenshots.chat.length > 0 ? (
-              <div 
+              <div
                 style={{
-                  position: 'relative',
-                  width: '100%',
-                  display: 'block',
-                  borderRadius: '1rem',
-                  overflow: 'hidden'
+                  position: "relative",
+                  width: "100%",
+                  display: "block",
+                  borderRadius: "1rem",
+                  overflow: "hidden",
                 }}
               >
-                <img 
+                <img
                   src={printMessageBg}
                   alt="Chat background"
                   style={{
-                    width: '100%',
-                    height: '230px',
-                    display: 'block',
-                    
+                    width: "100%",
+                    height: "230px",
+                    display: "block",
                   }}
                 />
-                <div 
-                  style={{ 
-                    position: 'absolute', 
-                    left: '4%', 
-                    top: '45%', 
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "4%",
+                    top: "45%",
                     zIndex: 4,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '3px'
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "3px",
                   }}
                 >
                   {screenshots.chat.map((bubble, index) => {
                     if (!bubble || !bubble.text) return null;
                     return (
-                      <div 
+                      <div
                         key={`chat-bubble-${index}`}
                         style={{
-                          display: 'flex',
-                          alignItems: 'flex-end',
-                          gap: '12px'
+                          display: "flex",
+                          alignItems: "flex-end",
+                          gap: "12px",
                         }}
                       >
-                        <div 
+                        <div
                           style={{
-                            width: '25px',
-                            height: '25px',
-                            minWidth: '25px',
-                            minHeight: '25px',
-                            borderRadius: '50%',
-                            backgroundSize: 'cover',
-                            backgroundRepeat: 'no-repeat',
+                            width: "25px",
+                            height: "25px",
+                            minWidth: "25px",
+                            minHeight: "25px",
+                            borderRadius: "50%",
+                            backgroundSize: "cover",
+                            backgroundRepeat: "no-repeat",
                             backgroundImage: `url(${profileNewPng})`,
-                            filter: 'blur(4px)',
+                            filter: "blur(4px)",
                             flexShrink: 0,
-                            marginBottom: '8px'
+                            marginBottom: "8px",
                           }}
                         />
                         <div
                           style={{
-                            backgroundColor: '#262626',
-                            color: '#eee',
-                            padding: '8px 14px',
-                            borderRadius: index === 0 ? '18px 18px 18px 4px' : index === screenshots.chat.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                            fontSize: '14px',
-                            whiteSpace: 'nowrap',
-                            lineHeight: '1.4',
-                            width: 'fit-content'
+                            backgroundColor: "#262626",
+                            color: "#eee",
+                            padding: "8px 14px",
+                            borderRadius:
+                              index === 0
+                                ? "18px 18px 18px 4px"
+                                : index === screenshots.chat.length - 1
+                                ? "18px 18px 4px 18px"
+                                : "18px 18px 18px 4px",
+                            fontSize: "14px",
+                            whiteSpace: "nowrap",
+                            lineHeight: "1.4",
+                            width: "fit-content",
                           }}
                         >
                           {bubble.segments ? (
                             // Render segments with individual blur status
                             bubble.segments.map((segment, segIndex) => (
-                              <span 
+                              <span
                                 key={`segment-${segIndex}`}
-                                style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                                style={
+                                  segment.blurred ? { filter: "blur(4px)" } : {}
+                                }
                               >
                                 {segment.text}
-                                {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                                {segIndex < bubble.segments.length - 1
+                                  ? " "
+                                  : ""}
                               </span>
                             ))
                           ) : bubble.blurred ? (
                             // Fallback for old format
-                            <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                            <span style={{ filter: "blur(4px)" }}>
+                              {bubble.text}
+                            </span>
                           ) : (
                             <span>{bubble.text}</span>
                           )}
@@ -1784,113 +1867,134 @@ function App() {
                 </div>
               </div>
             ) : screenshots.chatHtml ? (
-              <div 
+              <div
                 style={{
-                  position: 'relative',
-                  width: '100%',
-                  display: 'block',
-                  borderRadius: '1rem',
-                  overflow: 'hidden'
+                  position: "relative",
+                  width: "100%",
+                  display: "block",
+                  borderRadius: "1rem",
+                  overflow: "hidden",
                 }}
               >
-                <img 
+                <img
                   src={printMessageBg}
                   alt="Chat background"
                   style={{
-                    width: '100%',
-                    height: '250px',
-                    display: 'block',
+                    width: "100%",
+                    height: "250px",
+                    display: "block",
                   }}
                 />
                 {/* Fallback: Try to extract messages from chatHtml if chat array is empty */}
                 {(() => {
                   try {
                     const parser = new DOMParser();
-                    const doc = parser.parseFromString(screenshots.chatHtml, 'text/html');
-                    const messagesWrapper = doc.querySelector("div.space-y-\\[3px\\], div[class*='space-y']");
+                    const doc = parser.parseFromString(
+                      screenshots.chatHtml,
+                      "text/html"
+                    );
+                    const messagesWrapper = doc.querySelector(
+                      "div.space-y-\\[3px\\], div[class*='space-y']"
+                    );
                     const messages = [];
-                    
+
                     if (messagesWrapper) {
-                      const spans = messagesWrapper.querySelectorAll('span');
-                      spans.forEach(span => {
+                      const spans = messagesWrapper.querySelectorAll("span");
+                      spans.forEach((span) => {
                         const text = span.textContent?.trim();
                         if (text) {
-                          const isBlurred = span.className?.includes('blur') || false;
+                          const isBlurred =
+                            span.className?.includes("blur") || false;
                           messages.push({
-                            segments: [{
-                              text: text,
-                              blurred: isBlurred
-                            }],
+                            segments: [
+                              {
+                                text: text,
+                                blurred: isBlurred,
+                              },
+                            ],
                             text: text,
-                            blurred: isBlurred
+                            blurred: isBlurred,
                           });
                         }
                       });
                     }
-                    
+
                     if (messages.length > 0) {
                       return (
-                        <div 
-                          style={{ 
-                            position: 'absolute', 
-                            left: '4%', 
-                            top: '45%', 
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: "4%",
+                            top: "45%",
                             zIndex: 4,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '3px'
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "3px",
                           }}
                         >
                           {messages.map((bubble, index) => (
-                            <div 
+                            <div
                               key={`chat-bubble-fallback-${index}`}
                               style={{
-                                display: 'flex',
-                                alignItems: 'flex-end',
-                                gap: '12px'
+                                display: "flex",
+                                alignItems: "flex-end",
+                                gap: "12px",
                               }}
                             >
-                              <div 
+                              <div
                                 style={{
-                                  width: '25px',
-                                  height: '25px',
-                                  minWidth: '25px',
-                                  minHeight: '25px',
-                                  borderRadius: '50%',
-                                  backgroundSize: 'cover',
-                                  backgroundRepeat: 'no-repeat',
+                                  width: "25px",
+                                  height: "25px",
+                                  minWidth: "25px",
+                                  minHeight: "25px",
+                                  borderRadius: "50%",
+                                  backgroundSize: "cover",
+                                  backgroundRepeat: "no-repeat",
                                   backgroundImage: `url(${profileNewPng})`,
-                                  filter: 'blur(4px)',
+                                  filter: "blur(4px)",
                                   flexShrink: 0,
-                                  marginBottom: '8px'
+                                  marginBottom: "8px",
                                 }}
                               />
                               <div
                                 style={{
-                                  backgroundColor: '#262626',
-                                  color: '#eee',
-                                  padding: '8px 14px',
-                                  borderRadius: index === 0 ? '18px 18px 18px 4px' : index === messages.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                  fontSize: '14px',
-                                  whiteSpace: 'nowrap',
-                                  lineHeight: '1.4',
-                                  width: 'fit-content'
+                                  backgroundColor: "#262626",
+                                  color: "#eee",
+                                  padding: "8px 14px",
+                                  borderRadius:
+                                    index === 0
+                                      ? "18px 18px 18px 4px"
+                                      : index === messages.length - 1
+                                      ? "18px 18px 4px 18px"
+                                      : "18px 18px 18px 4px",
+                                  fontSize: "14px",
+                                  whiteSpace: "nowrap",
+                                  lineHeight: "1.4",
+                                  width: "fit-content",
                                 }}
                               >
                                 {bubble.segments ? (
                                   // Render segments with individual blur status
                                   bubble.segments.map((segment, segIndex) => (
-                                    <span 
+                                    <span
                                       key={`segment-fallback-${segIndex}`}
-                                      style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                                      style={
+                                        segment.blurred
+                                          ? { filter: "blur(4px)" }
+                                          : {}
+                                      }
                                     >
                                       {segment.text}
-                                      {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                                      {segIndex < bubble.segments.length - 1
+                                        ? " "
+                                        : ""}
                                     </span>
                                   ))
                                 ) : bubble.blurred ? (
                                   // Fallback for old format
-                                  <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                                  <span style={{ filter: "blur(4px)" }}>
+                                    {bubble.text}
+                                  </span>
                                 ) : (
                                   <span>{bubble.text}</span>
                                 )}
@@ -1901,17 +2005,21 @@ function App() {
                       );
                     }
                   } catch (e) {
-                    console.error('Error parsing chatHtml fallback:', e);
+                    console.error("Error parsing chatHtml fallback:", e);
                   }
                   return null;
                 })()}
               </div>
             ) : null}
             <p className="screenshots-uncensored">
-              SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE REPORT
+              SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE
+              REPORT
             </p>
             <div className="cta-inline">
-              <button className="uncensored-screenshots-btn" onClick={scrollToFullReport}>
+              <button
+                className="uncensored-screenshots-btn"
+                onClick={scrollToFullReport}
+              >
                 VIEW UNCENSORED SCREENSHOTS
               </button>
             </div>
@@ -1922,7 +2030,7 @@ function App() {
             )}
           </>
 
-          {alert.title && (
+          {/* {alert.title && (
             <section className="alert-panel">
               <h3 dangerouslySetInnerHTML={{ __html: alert.title }} />
               {alert.badge && (
@@ -1930,7 +2038,7 @@ function App() {
               )}
               <p dangerouslySetInnerHTML={{ __html: alert.copy }} />
             </section>
-          )}
+          )} */}
 
           {addicted.tiles.length > 0 && (
             <section className="addicted-panel">
@@ -1962,11 +2070,27 @@ function App() {
                 <p className="cta-banner">{addicted.footer}</p>
               )}
               {ctas.tertiary && (
-                <button className="primary-btn" onClick={handleViewFullReport}>
+                <button className="primary-btn cta-eye-btn" onClick={handleViewFullReport}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-eye mr-[10px]"
+                    aria-hidden="true"
+                  >
+                    <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
                   {ctas.tertiary}
                 </button>
               )}
-              {addicted.subfooter && <small>{addicted.subfooter}</small>}
+              {addicted.subfooter && <small className="small-text-footer-sub">{addicted.subfooter}</small>}
             </section>
           )}
 
