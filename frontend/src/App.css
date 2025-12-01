@@ -27,18 +27,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px 80px;
+  /* padding: 32px 16px; */
 }
 
 .screen {
-  width: min(960px, 100%);
+  width: min(420px, 100%);
   background: #fff;
   border-radius: 28px;
-  padding: 40px;
+  padding: 28px;
 }
 
 .hero {
   text-align: center;
+}
+
+.result-btn {
+  background: #fb2c36;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 40px;
+  font-size: 1.05rem;
+  margin-bottom: 30px;
+  font-weight: 600;
 }
 
 .hero h4 {
@@ -48,20 +59,24 @@ body {
 }
 
 .hero h1 {
+  text-align: center;
   margin: 0 0 20px;
-  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-size: 1.75em;
+  /* font-size: clamp(2rem, 4vw, 2.8rem); */
 }
 
 .hero-copy {
-  color: var(--text-light);
   max-width: 520px;
-  margin: 0 auto 32px;
+  margin: 0 auto 20px;
+  font-size: larger;
+  padding: 20px 10px;
+  font-weight: 400;
 }
 
 .inline-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 10px;
   margin-bottom: 36px;
 }
 
@@ -70,18 +85,21 @@ body {
   border-radius: 18px;
   padding: 16px;
   text-align: left;
-  background: #fff;
+  background: #f4f4f442;
 }
 
 .inline-card h3 {
   margin: 0 0 8px;
   font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
 }
 
 .inline-card p {
   margin: 0;
   color: var(--text-light);
   font-size: 0.9rem;
+  text-align: center;
 }
 
 .cta {
@@ -110,6 +128,21 @@ body {
 
 .input-wrapper input:focus {
   outline: none;
+}
+
+.small-text-footer {
+  margin-top: 20px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  text-align: center;
+  color: var(--text-light);
+}
+
+.cta-eye-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .cta button,
@@ -577,7 +610,7 @@ body {
 .summary-grid article {
   background: linear-gradient(135deg, #fafafa, #fff);
   border-radius: 20px;
-  padding: 18px;
+  padding: 18px 10px;
   text-align: center;
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
@@ -1188,10 +1221,25 @@ body {
   text-align: center;
 }
 
+.small-text-footer-sub{
+  -webkit-text-stroke: 0.5px currentColor;
+  font-size: larger;
+  font-style: italic;
+  color: #ff4e4e;
+
+}
+
 .cta-banner {
   font-weight: 700;
   text-transform: uppercase;
   color: #ff4e4e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0px 70px;
+  -webkit-text-stroke: 0.5px currentColor;
+  font-size: larger;
 }
 
 .secondary-btn {
@@ -1474,12 +1522,14 @@ body {
 .addicted-grid article {
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 16px;
-  padding: 16px;
-  background: #fff;
+  padding: 0px 10px;
+  background: #f4f4f442;
   text-align: center;
+  box-shadow: 1px 1px rgba(0,0,0,0.12);
 }
 
 .addicted-lock {
+  padding-top: 10px;
   font-size: 2.4rem;
   filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
 }
@@ -2400,9 +2450,6 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .inline-cards {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ============================================
