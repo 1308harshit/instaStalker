@@ -1533,7 +1533,7 @@ function App() {
                   alt="Chat background"
                   style={{
                     width: '100%',
-                    height: '230px',
+                    height: '250px',
                     display: 'block',
                   }}
                 />
