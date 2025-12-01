@@ -1028,25 +1028,26 @@ body {
 
 .screenshots-panel ul {
   padding-left: 0;
-  margin: 16px 0;
+  margin: 16px auto;
   color: var(--text-light);
-  text-align: left;
+  text-align: center;
   display: inline-block;
   list-style: none;
 }
 
 .screenshots-panel ul li {
-  padding-left: 24px;
+  padding-left: 0;
   position: relative;
   margin-bottom: 8px;
+  list-style: none;
 }
 
 .screenshots-panel ul li::before {
-  content: "✔";
-  position: absolute;
-  left: 0;
-  color: #22c55e;
+  content: "✔ ";
+  position: relative;
+  color: #000;
   font-weight: bold;
+  margin-right: 4px;
 }
 
 .chat-interface-html {
