@@ -1501,8 +1501,7 @@ function App() {
                             padding: '8px 14px',
                             borderRadius: index === 0 ? '18px 18px 18px 4px' : index === screenshots.chat.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                             fontSize: '14px',
-                            maxWidth: '70%',
-                            wordWrap: 'break-word',
+                            whiteSpace: 'nowrap',
                             lineHeight: '1.4',
                             width: 'fit-content'
                           }}
@@ -1602,8 +1601,7 @@ function App() {
                                   padding: '8px 14px',
                                   borderRadius: index === 0 ? '18px 18px 18px 4px' : index === messages.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                                   fontSize: '14px',
-                                  maxWidth: '70%',
-                                  wordWrap: 'break-word',
+                                  whiteSpace: 'nowrap',
                                   lineHeight: '1.4',
                                   width: 'fit-content'
                                 }}
