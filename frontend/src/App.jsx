@@ -1695,6 +1695,11 @@ function App() {
             <p className="screenshots-uncensored">
               SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE REPORT
             </p>
+            <div className="cta-inline">
+              <button className="uncensored-screenshots-btn" onClick={scrollToFullReport}>
+                VIEW UNCENSORED SCREENSHOTS
+              </button>
+            </div>
             {ctas.secondary && !revealProfilesCta && (
               <div className="cta-inline">
                 <button className="secondary-btn">{ctas.secondary}</button>
