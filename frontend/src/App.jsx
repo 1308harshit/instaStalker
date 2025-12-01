@@ -1400,10 +1400,48 @@ function App() {
                               </div>
                               {(story.caption || story.meta) && (
                                 <div className="story-bottom-overlay">
-                                  <span className="story-lock-icon">🔒</span>
                                   <div className="story-bottom-text">
                                     {story.caption && <p className="story-caption">{story.caption}</p>}
-                                    {story.meta && <span className="story-meta">{story.meta}</span>}
+                                    {story.meta && (() => {
+                                      // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
+                                      const metaText = story.meta.trim();
+                                      // Match pattern: number + "profiles" + rest of text
+                                      const match = metaText.match(/^(\d+)\s*(profiles?)\s*(.+)?/i);
+                                      if (match) {
+                                        const number = match[1];
+                                        const profiles = match[2];
+                                        const status = match[3] ? match[3].trim() : '';
+                                        return (
+                                          <div className="story-meta-formatted">
+                                            <div className="story-meta-line1">
+                                              <svg 
+                                                xmlns="http://www.w3.org/2000/svg" 
+                                                width="18" 
+                                                height="18" 
+                                                viewBox="0 0 24 24" 
+                                                fill="none" 
+                                                stroke="currentColor" 
+                                                strokeWidth="2" 
+                                                strokeLinecap="round" 
+                                                strokeLinejoin="round" 
+                                                className="story-lock-icon"
+                                                aria-hidden="true"
+                                              >
+                                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                              </svg>
+                                              <span className="story-meta-number">{number}</span>
+                                              <span className="story-meta-profiles">{profiles}</span>
+                                            </div>
+                                            {status && (
+                                              <div className="story-meta-line2">{status}</div>
+                                            )}
+                                          </div>
+                                        );
+                                      }
+                                      // Fallback: display as is
+                                      return <span className="story-meta">{story.meta}</span>;
+                                    })()}
                                   </div>
                                 </div>
                               )}

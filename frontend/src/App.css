@@ -773,7 +773,7 @@ body {
 .story-hero-info {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -806,23 +806,30 @@ body {
   right: 0;
   padding: 16px 20px;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(8px);
   z-index: 2;
 }
 
 .story-lock-icon {
-  font-size: 1.5rem;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
+  color: #fff;
+  margin-right: 5px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .story-bottom-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
+  align-items: flex-end;
+  text-align: right;
 }
 
 .story-caption {
@@ -842,9 +849,65 @@ body {
   line-height: 1.2;
 }
 
+.story-meta-formatted {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.story-meta-line1 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.story-meta-number {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff !important;
+}
+
+.story-meta-profiles {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #fff !important;
+}
+
+.story-meta-line2 {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #fff !important;
+  padding-left: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .story-card span {
   font-weight: 600;
   color: #ff4e4e;
+}
+
+/* Override red color for story meta elements */
+.story-meta-formatted span,
+.story-meta-line1 span,
+.story-meta-number,
+.story-meta-profiles,
+.story-meta-line2 {
+  color: #fff !important;
+}
+
+.story-hero-username {
+  color: #fff !important;
+}
+
+.story-meta {
+  color: #fff !important;
 }
 
 .cta-inline {
