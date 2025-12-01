@@ -2233,6 +2233,7 @@ body {
   margin-bottom: 0;
   color: #999;
   margin-top: 30px;
+  font-weight: 600;
   /* line-height: 1.5; */
 }
 
@@ -2268,6 +2269,7 @@ body {
   font-size: 20px;
   color: #999;
   margin: 0;
+  font-weight: 600;
 }
 
 .full-report-benefits {
@@ -2310,7 +2312,7 @@ body {
   padding: 20px;
   text-align: left;
   box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-
+  text-align: center;
 }
 
 .full-report-bonus h4 {
@@ -2390,10 +2392,6 @@ body {
 
   .full-report-goal {
     font-size: 28px;
-  }
-
-  .full-report-benefits {
-    grid-template-columns: 1fr;
   }
 
   .full-report-current-price {
