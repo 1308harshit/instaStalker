@@ -269,14 +269,8 @@ export function parseResultsSnapshot(html) {
       });
     }
   }
-  if (sliderHeading) {
-    const headingText = clean(sliderHeading.textContent || "");
-    const colonIndex = headingText.indexOf(":");
-    const beforeColon =
-      colonIndex >= 0 ? headingText.slice(0, colonIndex + 1) : headingText;
-    const sanitized = beforeColon.split("🔒")[0].trim();
-    analysis.slider.heading = sanitized || beforeColon || headingText;
-  }
+  // Hardcode the slider heading
+  analysis.slider.heading = "Visited your profile this week between 2 to 7 times:";
 
   const rawSliderCards = queryAll(
     doc,

@@ -1231,7 +1231,10 @@ function App() {
           </section>
 
           <section className="slider-section">
-            <h3>{slider.heading}</h3>
+            <h3>
+              Visited your profile this week{" "}
+              <span style={{ color: "#f43f3f" }}>between 2 to 7 times:</span>
+            </h3>
             {(() => {
               const allCards = slider.cards.length ? slider.cards : cards;
               const currentIndex = Math.min(carouselIndex, Math.max(0, allCards.length - 1));
