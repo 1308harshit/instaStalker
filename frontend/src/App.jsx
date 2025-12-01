@@ -258,6 +258,8 @@ function App() {
   const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -566,6 +568,40 @@ function App() {
       setScreen(SCREEN.PREVIEW);
     }
   }, [analysis, screen, canAdvanceFromProcessing, processingMessageIndex, processingStage.bullets.length]);
+
+  useEffect(() => {
+    // Reset carousel when cards or analysis changes
+    setCarouselIndex(0);
+    setStoriesCarouselIndex(0);
+  }, [cards, analysis]);
+
+  // Auto-scroll carousel
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    
+    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+    if (allCards.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+    }, 1500); // Change slide every 1.5 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, cards, analysis]);
+
+  // Auto-scroll stories carousel
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    
+    const storiesSlides = analysis?.stories?.slides || [];
+    if (storiesSlides.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setStoriesCarouselIndex((prev) => (prev < storiesSlides.length - 1 ? prev + 1 : 0));
+    }, 1500); // Change slide every 1.5 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, analysis]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -1196,8 +1232,20 @@ function App() {
 
           <section className="slider-section">
             <h3>{slider.heading}</h3>
-            <div className="slider-grid">
-              {(slider.cards.length ? slider.cards : cards).map((card, index) => {
+            {(() => {
+              const allCards = slider.cards.length ? slider.cards : cards;
+              const currentIndex = Math.min(carouselIndex, Math.max(0, allCards.length - 1));
+              
+              return allCards.length > 0 ? (
+            <div className="carousel-container">
+              <div className="carousel-wrapper">
+                <div 
+                  className="carousel-track"
+                  style={{
+                    transform: `translateX(calc(-${currentIndex * (280 + 16)}px))`
+                  }}
+                >
+              {allCards.map((card, index) => {
                 const imageUrl =
                   card.image || hero.profileImage || profile.avatar;
                 const isLocked = Boolean(
@@ -1220,7 +1268,7 @@ function App() {
                 if (isLocked) {
                   return (
                     <article
-                      className="slider-card slider-card--locked"
+                      className={`slider-card slider-card--locked ${index === currentIndex ? 'active' : ''}`}
                       key={`locked-${card?.username || index}`}
                     >
                       <div className="lock-overlay">
@@ -1239,7 +1287,7 @@ function App() {
                 if (shouldBlurImage && imageUrl) {
                   return (
                     <article
-                      className="slider-card slider-card--blurred"
+                      className={`slider-card slider-card--blurred ${index === currentIndex ? 'active' : ''}`}
                       key={`blurred-${card?.username || index}`}
                     >
                       <div
@@ -1256,7 +1304,10 @@ function App() {
                 }
 
                 return (
-                  <article className="slider-card" key={`${card.title}-${index}`}>
+                  <article 
+                    className={`slider-card ${index === currentIndex ? 'active' : ''}`} 
+                    key={`${card.title}-${index}`}
+                  >
                     <div
                       className="slider-image"
                       style={{
@@ -1264,25 +1315,31 @@ function App() {
                         backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
                       }}
                     />
-                    {card?.username && (
-                      <h4 className="username">{card.username}</h4>
-                    )}
-                    {showLines &&
-                      card.lines.map((line, idx) => (
-                        <p
-                          key={`${line.text}-${idx}`}
-                          className={line.blurred ? "blurred-text" : ""}
-                        >
-                          {renderSensitiveText(line.text, line.blurred)}
-                        </p>
-                      ))}
-                    {card?.badge && (
-                      <span className="slider-badge">{card.badge}</span>
-                    )}
+                    <div className="slider-card-content">
+                      {card?.username && (
+                        <h4 className="username">{card.username}</h4>
+                      )}
+                      {showLines &&
+                        card.lines.map((line, idx) => (
+                          <p
+                            key={`${line.text}-${idx}`}
+                            className={line.blurred ? "blurred-text" : ""}
+                          >
+                            {renderSensitiveText(line.text, line.blurred)}
+                          </p>
+                        ))}
+                      {card?.badge && (
+                        <span className="slider-badge">{card.badge}</span>
+                      )}
+                    </div>
                   </article>
                 );
               })}
+                </div>
+              </div>
             </div>
+            ) : null;
+            })()}
           </section>
 
           {revealStalkersCta && (
@@ -1294,37 +1351,56 @@ function App() {
           {stories?.slides?.length > 0 && (
             <section className="stories-section">
               <h3>{stories.heading || "Stories activity"}</h3>
-              <div className="stories-grid">
-                {stories.slides.map((story, index) => (
-                  <article key={`${story.caption}-${index}`} className="story-card">
-                    <div
-                      className="story-cover"
-                      style={{ 
-                        backgroundImage: story.image ? `url(${story.image})` : "none",
-                        backgroundColor: story.image ? "transparent" : "#000"
-                      }}
-                    >
-                      <div className="story-hero-info">
-                        <img 
-                          src={hero.profileImage || profile.avatar} 
-                          alt={hero.name || profile.name}
-                          className="story-hero-avatar"
-                        />
-                        <span className="story-hero-username">{hero.name || profile.name}</span>
+              {(() => {
+                const storiesSlides = stories.slides || [];
+                const currentStoriesIndex = Math.min(storiesCarouselIndex, Math.max(0, storiesSlides.length - 1));
+                
+                return storiesSlides.length > 0 ? (
+                  <div className="carousel-container">
+                    <div className="carousel-wrapper">
+                      <div 
+                        className="carousel-track"
+                        style={{
+                          transform: `translateX(calc(-${currentStoriesIndex * (280 + 16)}px))`
+                        }}
+                      >
+                        {storiesSlides.map((story, index) => (
+                          <article 
+                            key={`${story.caption}-${index}`} 
+                            className={`story-card ${index === currentStoriesIndex ? 'active' : ''}`}
+                          >
+                            <div
+                              className="story-cover"
+                              style={{ 
+                                backgroundImage: story.image ? `url(${story.image})` : "none",
+                                backgroundColor: story.image ? "transparent" : "#000"
+                              }}
+                            >
+                              <div className="story-hero-info">
+                                <img 
+                                  src={hero.profileImage || profile.avatar} 
+                                  alt={hero.name || profile.name}
+                                  className="story-hero-avatar"
+                                />
+                                <span className="story-hero-username">{hero.name || profile.name}</span>
+                              </div>
+                              {(story.caption || story.meta) && (
+                                <div className="story-bottom-overlay">
+                                  <span className="story-lock-icon">🔒</span>
+                                  <div className="story-bottom-text">
+                                    {story.caption && <p className="story-caption">{story.caption}</p>}
+                                    {story.meta && <span className="story-meta">{story.meta}</span>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                      {(story.caption || story.meta) && (
-                        <div className="story-bottom-overlay">
-                          <span className="story-lock-icon">🔒</span>
-                          <div className="story-bottom-text">
-                            {story.caption && <p className="story-caption">{story.caption}</p>}
-                            {story.meta && <span className="story-meta">{story.meta}</span>}
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  </article>
-                ))}
-              </div>
+                  </div>
+                ) : null;
+              })()}
             </section>
           )}
 

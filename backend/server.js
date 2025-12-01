@@ -48,7 +48,7 @@ const COLLECTION_NAME = "user_orders";
 const CASHFREE_API_KEY = process.env.CASHFREE_API_KEY;
 const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
 // Cashfree API base URL - sandbox for testing (default is acceptable)
-const CASHFREE_API_URL = process.env.CASHFREE_API_URL || "https://sandbox.cashfree.com/pg";
+const CASHFREE_API_URL = process.env.CASHFREE_API_URL;
 
 // Validate required environment variables
 if (!CASHFREE_API_KEY) {
