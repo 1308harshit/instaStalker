@@ -1,11 +1,16 @@
 {
   "name": "insta-scraper",
   "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
-    "express": "^4.18.2",
-    "playwright": "^1.43.0",
     "cors": "^2.8.5",
-    "mongodb": "^6.3.0"
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "playwright": "^1.43.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1"
   }
 }
-
