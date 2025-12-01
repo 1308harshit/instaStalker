@@ -1012,50 +1012,57 @@ body {
   text-align: center;
 }
 
-.screenshots-footer {
-  text-align: center;
-  margin-top: 18px;
-  font-weight: 600;
-  color: #ff4e4e;
-  text-transform: uppercase;
-}
-
-.screenshots-panel h3 {
+.screenshots-heading {
   font-size: 2rem;
   font-weight: 700;
   margin-bottom: 20px;
   white-space: nowrap;
+  text-align: center;
 }
 
 @media (max-width: 480px) {
-  .screenshots-panel h3 {
+  .screenshots-heading {
     font-size: 1.5rem;
     white-space: nowrap;
   }
 }
 
-.screenshots-panel ul {
+.screenshots-description {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #000;
+}
+
+.screenshots-list {
   padding-left: 0;
   margin: 16px auto;
-  color: var(--text-light);
+  color: #000;
   text-align: center;
   display: inline-block;
   list-style: none;
 }
 
-.screenshots-panel ul li {
+.screenshots-list li {
   padding-left: 0;
   position: relative;
   margin-bottom: 8px;
   list-style: none;
 }
 
-.screenshots-panel ul li::before {
-  content: "✔ ";
+.screenshots-list li::before {
+  content: "✓ ";
   position: relative;
   color: #000;
   font-weight: bold;
   margin-right: 4px;
+}
+
+.screenshots-footer {
+  text-align: center;
+  margin-top: 18px;
+  font-weight: 600;
+  color: #ff4e4e;
+  text-transform: uppercase;
 }
 
 .chat-interface-html {
@@ -1202,12 +1209,13 @@ body {
   margin-top: 20px;
   text-align: center;
   color: #f43f3f;
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: 400;
+  font-size: 0.85rem;
 }
 
 .screenshots-uncensored strong {
   font-weight: 700;
+  color: #f43f3f;
 }
 
 .alert-panel {

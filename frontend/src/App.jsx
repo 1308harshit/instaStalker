@@ -1426,12 +1426,12 @@ function App() {
             </div>
           )}
 
-          <section className="screenshots-panel">
-            <h3>
+          <>
+            <h3 className="screenshots-heading">
               <span style={{ color: "#f43f3f" }}>Screenshots</span> recovered
             </h3>
-            <p>Our artificial intelligence searches <strong>THE ENTIRE INTERNET</strong> for any mention of you in leaked <strong>photos and screenshots.</strong></p>
-            <ul>
+            <p className="screenshots-description">Our artificial intelligence searches <strong>THE ENTIRE INTERNET</strong> for any mention of you in leaked <strong>photos and screenshots.</strong></p>
+            <ul className="screenshots-list">
               <li>Among your followers</li>
               <li>Friends of your followers</li>
               <li>From those who pretend to be your friend</li>
@@ -1657,15 +1657,12 @@ function App() {
             <p className="screenshots-uncensored">
               SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE REPORT
             </p>
-            {screenshots.footer && (
-              <p className="screenshots-footer">{screenshots.footer}</p>
-            )}
             {ctas.secondary && !revealProfilesCta && (
               <div className="cta-inline">
                 <button className="secondary-btn">{ctas.secondary}</button>
               </div>
             )}
-          </section>
+          </>
 
           {alert.title && (
             <section className="alert-panel">
