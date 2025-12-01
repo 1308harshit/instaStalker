@@ -9,8 +9,7 @@ import printMessageBg from "./assets/print-message-new.png";
 import profileNewPng from "./assets/profile-new.png";
 
 const API_URL =
-  import.meta.env.VITE_API_URL?.trim() ||
-  "http://localhost:3000/api/stalkers";
+  import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
 const API_BASE = (() => {
   try {
     const url = new URL(API_URL);
@@ -19,8 +18,7 @@ const API_BASE = (() => {
     return "http://localhost:3000";
   }
 })();
-const SNAPSHOT_BASE =
-  import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
+const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
 const SCREEN = {
   LANDING: "landing",
@@ -46,7 +44,8 @@ const INITIAL_PROFILE = {
 const DEFAULT_STATS = { mentions: 0, screenshots: 0, visits: 0 };
 const BLUR_KEYWORD_REGEX = /bluredus/i;
 const INVALID_USERNAME_REGEX = /unknown/i;
-const NON_EN_SUMMARY_REGEX = /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
+const NON_EN_SUMMARY_REGEX =
+  /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,8 +79,7 @@ const createProcessingStageData = (
 ) => ({
   avatar,
   title: "Processing data",
-  subtitle:
-    "Our robots are analyzing the behavior of your followers",
+  subtitle: "Our robots are analyzing the behavior of your followers",
   bullets: [
     `Found 10 mentions of ${username} in messages from your followers`,
     "Our AI detected a possible screenshot of someone talking about you",
@@ -106,7 +104,10 @@ const extractInlineAvatar = (doc) => {
   return imgNode?.getAttribute("src") || INITIAL_PROFILE.avatar;
 };
 
-const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username) => {
+const parseProfileSnapshot = (
+  html,
+  fallbackUsername = INITIAL_PROFILE.username
+) => {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
@@ -115,12 +116,12 @@ const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username)
       (node) => /^@/.test((node.textContent || "").trim())
     );
     const greetingNode = doc.querySelector("h1, h2");
-    const questionNode = Array.from(doc.querySelectorAll("p, span")).find((node) =>
-      /profile/i.test((node.textContent || "").trim())
+    const questionNode = Array.from(doc.querySelectorAll("p, span")).find(
+      (node) => /profile/i.test((node.textContent || "").trim())
     );
     const buttons = Array.from(doc.querySelectorAll("button"));
-    const progressNode = Array.from(doc.querySelectorAll("[style]")).find((node) =>
-      /width:\s*\d+%/i.test(node.getAttribute("style") || "")
+    const progressNode = Array.from(doc.querySelectorAll("[style]")).find(
+      (node) => /width:\s*\d+%/i.test(node.getAttribute("style") || "")
     );
 
     let progressPercent = 55;
@@ -144,13 +145,18 @@ const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username)
         cleanUsername = usernameMatch[1];
         // Additional cleanup: remove common concatenated words
         // If username ends with common words like "Hello", "Is", etc., remove them
-        const cleaned = cleanUsername.replace(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i, '');
-        if (cleaned.startsWith('@')) {
+        const cleaned = cleanUsername.replace(
+          /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i,
+          ""
+        );
+        if (cleaned.startsWith("@")) {
           cleanUsername = cleaned;
         }
       } else if (rawText.startsWith("@")) {
         // If it starts with @, extract up to first non-username character or common words
-        const parts = rawText.split(/(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i);
+        const parts = rawText.split(
+          /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i
+        );
         cleanUsername = parts[0] || fallbackUsername;
       }
     }
@@ -161,10 +167,12 @@ const parseProfileSnapshot = (html, fallbackUsername = INITIAL_PROFILE.username)
       username: cleanUsername,
       greeting: (greetingNode?.textContent || "Hello").trim(),
       question: (questionNode?.textContent || "Is this your profile?").trim(),
-      primaryCta:
-        (buttons[0]?.textContent || "Continue, the profile is correct").trim(),
-      secondaryCta:
-        (buttons[1]?.textContent || "No, I want to correct it").trim(),
+      primaryCta: (
+        buttons[0]?.textContent || "Continue, the profile is correct"
+      ).trim(),
+      secondaryCta: (
+        buttons[1]?.textContent || "No, I want to correct it"
+      ).trim(),
     };
   } catch (err) {
     console.error("Failed to parse profile snapshot", err);
@@ -181,45 +189,55 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
     const subtitleNode = doc.querySelector("p");
     // Extract bullet points - focus on list items first, then individual paragraphs
     const bullets = [];
-    
+
     // First, try to get list items (most reliable for bullet points)
     const listItems = Array.from(doc.querySelectorAll("li"));
     listItems.forEach((li) => {
       // Get direct text content, excluding nested list items
       const directText = Array.from(li.childNodes)
-        .filter(node => node.nodeType === 3) // Text nodes only
-        .map(node => node.textContent.trim())
+        .filter((node) => node.nodeType === 3) // Text nodes only
+        .map((node) => node.textContent.trim())
         .join(" ")
         .trim();
-      
+
       if (directText && directText.length > 20) {
         // Also check if it has nested elements with text
         const nestedText = li.textContent.trim();
         // Use nested text if it's reasonable length (not concatenated)
         const text = nestedText.length < 200 ? nestedText : directText;
-        if (text && /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+        if (
+          text &&
+          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
+            text
+          )
+        ) {
           bullets.push(text);
         }
       }
     });
-    
+
     // If no list items found, look for individual paragraphs
     if (bullets.length === 0) {
       const paragraphs = Array.from(doc.querySelectorAll("p"));
       paragraphs.forEach((p) => {
         const text = p.textContent.trim();
         // Only include if it looks like a bullet point (not too long, contains keywords)
-        if (text.length > 20 && text.length < 200 && 
-            /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(text)) {
+        if (
+          text.length > 20 &&
+          text.length < 200 &&
+          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
+            text
+          )
+        ) {
           bullets.push(text);
         }
       });
     }
-    
+
     // Remove duplicates and filter out very long concatenated text
     const uniqueBullets = bullets
       .filter((text, index, arr) => arr.indexOf(text) === index)
-      .filter(text => text.length < 200); // Filter out concatenated long text
+      .filter((text) => text.length < 200); // Filter out concatenated long text
 
     return {
       avatar,
@@ -257,7 +275,8 @@ function App() {
     createProcessingStageData(INITIAL_PROFILE.username, INITIAL_PROFILE.avatar)
   );
   const [canAdvanceFromProfile, setCanAdvanceFromProfile] = useState(false);
-  const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] = useState(false);
+  const [canAdvanceFromProcessing, setCanAdvanceFromProcessing] =
+    useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -281,7 +300,7 @@ function App() {
   const [fullReportLoading, setFullReportLoading] = useState(false);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
-  
+
   // Payment page state
   const [paymentForm, setPaymentForm] = useState({
     email: "",
@@ -332,7 +351,8 @@ function App() {
   useEffect(() => {
     const loadSnapshotHtml = async (stepName) => {
       const step = snapshotLookup[stepName];
-      if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName]) return;
+      if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName])
+        return;
       stepHtmlFetchRef.current[stepName] = true;
       const html = await fetchSnapshotHtml(stepName, step.htmlPath);
       if (html) {
@@ -347,11 +367,15 @@ function App() {
           const parsed = parseProfileSnapshot(html, profile.username);
           if (parsed) {
             setProfileStage(parsed);
-            setProfileConfirmParsed(true);  // Mark as parsed
+            setProfileConfirmParsed(true); // Mark as parsed
           }
         }
         if (stepName === "processing") {
-          const parsed = parseProcessingSnapshot(html, profile.avatar, profile.username);
+          const parsed = parseProcessingSnapshot(
+            html,
+            profile.avatar,
+            profile.username
+          );
           if (parsed) {
             setProcessingStage(parsed);
           }
@@ -456,19 +480,24 @@ function App() {
     // Start analyzing immediately when screen becomes ANALYZING
     // DO NOT wait for 03-analyzing.html to arrive
     if (screen !== SCREEN.ANALYZING) return;
-    
+
     analyzingStartRef.current = Date.now();
     setAnalyzingProgress(0);
     clearInterval(analyzingTimerRef.current);
-    analyzingTimerRef.current = setInterval(() => {
-      setAnalyzingProgress((prev) => {
-        if (prev >= 98) {
-          clearInterval(analyzingTimerRef.current);
-          return 98;
-        }
-        return Math.min(98, prev + randBetween(2, 5));
-      });
-    }, 800);
+    analyzingTimerRef.current = setInterval(
+      () => {
+        setAnalyzingProgress((prev) => {
+          if (prev >= 98) {
+            clearInterval(analyzingTimerRef.current);
+            return 98;
+          }
+          return Math.min(98, prev + 1);
+          // randBetween(2, 5));
+        });
+      },
+      // 800
+      120
+    );
     return () => clearInterval(analyzingTimerRef.current);
   }, [screen]);
 
@@ -477,8 +506,8 @@ function App() {
     // DO NOT animate - set it instantly
     if (screen !== SCREEN.ANALYZING) return;
     if (!snapshotHtml["profile-confirm"]) return;
-    if (!profileConfirmParsed) return;  // Wait until parsing is complete
-    
+    if (!profileConfirmParsed) return; // Wait until parsing is complete
+
     // Force analyzing to 100% immediately
     clearInterval(analyzingTimerRef.current);
     setAnalyzingProgress(100);
@@ -491,7 +520,7 @@ function App() {
     // Show first bullet immediately (no delay)
     setProcessingMessageIndex(0);
     setCanAdvanceFromProcessing(false); // Reset when processing starts
-    
+
     // If there's only one bullet, wait 1 second then allow transition
     if (processingStage.bullets.length <= 1) {
       const singleBulletTimer = setTimeout(() => {
@@ -499,10 +528,10 @@ function App() {
       }, 1000);
       return () => clearTimeout(singleBulletTimer);
     }
-    
+
     let bulletTimer = null;
     let finalDelayTimer = null;
-    
+
     // Show remaining bullets one by one with 1.5 second delay (starting from second bullet)
     bulletTimer = setInterval(() => {
       setProcessingMessageIndex((prev) => {
@@ -519,7 +548,7 @@ function App() {
         return nextIndex;
       });
     }, 1500); // 1.5 second delay between each bullet
-    
+
     return () => {
       if (bulletTimer) {
         clearInterval(bulletTimer);
@@ -563,13 +592,25 @@ function App() {
 
   useEffect(() => {
     // Wait until all processing bullets are shown before transitioning to preview
-    const allBulletsShown = processingStage.bullets.length > 0 && 
+    const allBulletsShown =
+      processingStage.bullets.length > 0 &&
       processingMessageIndex >= processingStage.bullets.length - 1;
-    
-    if (analysis && screen === SCREEN.PROCESSING && canAdvanceFromProcessing && allBulletsShown) {
+
+    if (
+      analysis &&
+      screen === SCREEN.PROCESSING &&
+      canAdvanceFromProcessing &&
+      allBulletsShown
+    ) {
       setScreen(SCREEN.PREVIEW);
     }
-  }, [analysis, screen, canAdvanceFromProcessing, processingMessageIndex, processingStage.bullets.length]);
+  }, [
+    analysis,
+    screen,
+    canAdvanceFromProcessing,
+    processingMessageIndex,
+    processingStage.bullets.length,
+  ]);
 
   useEffect(() => {
     // Reset carousel when cards or analysis changes
@@ -613,22 +654,22 @@ function App() {
     let index = 0;
     let toggle = 0;
 
-           const schedule = (wait) => {
+    const schedule = (wait) => {
       notificationTimerRef.current = setTimeout(() => {
-               let item = null;
-               let attempts = 0;
-               while (attempts < notifications.length && !item) {
-                 const candidate = notifications[index % notifications.length];
-                 index += 1;
-                 attempts += 1;
-                 if (isValidUsername(candidate?.username)) {
-                   item = candidate;
-                 }
-               }
+        let item = null;
+        let attempts = 0;
+        while (attempts < notifications.length && !item) {
+          const candidate = notifications[index % notifications.length];
+          index += 1;
+          attempts += 1;
+          if (isValidUsername(candidate?.username)) {
+            item = candidate;
+          }
+        }
 
-               if (item) {
-                 pushToast(`${item.username} visited your profile`, item.image);
-               }
+        if (item) {
+          pushToast(`${item.username} visited your profile`, item.image);
+        }
 
         toggle = toggle === 0 ? 1 : 0;
         const nextDelay = toggle === 0 ? 7000 : 10000;
@@ -646,14 +687,16 @@ function App() {
     return `${SNAPSHOT_BASE}${normalized}`;
   };
 
-  const profileStatsFromState = () => ([
+  const profileStatsFromState = () => [
     { value: profile.posts, label: "posts" },
     { value: profile.followers, label: "followers" },
     { value: profile.following, label: "following" },
-  ]);
+  ];
 
   const pushToast = (message, image) => {
-    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const id = crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, image }]);
     toastTimers.current[id] = setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -662,19 +705,21 @@ function App() {
   };
 
   const checkSnapshotExists = async (username, timestamp, fileName) => {
-    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    const snapshotPath = `/snapshots/${encodeURIComponent(
+      username
+    )}/${timestamp}/${fileName}`;
     const url = buildSnapshotUrl(snapshotPath);
     try {
       // Try HEAD first (lighter), fallback to GET if HEAD fails
-      let res = await fetch(url, { 
+      let res = await fetch(url, {
         method: "HEAD",
-        cache: 'no-cache'
+        cache: "no-cache",
       });
       if (!res.ok && res.status === 405) {
         // If HEAD not supported, try GET
-        res = await fetch(url, { 
+        res = await fetch(url, {
           method: "GET",
-          cache: 'no-cache'
+          cache: "no-cache",
         });
       }
       return res.ok;
@@ -689,34 +734,53 @@ function App() {
     const now = Date.now();
     const checkRange = 60 * 1000; // 1 minute in milliseconds
     const step = 1000; // Check every 1 second
-    
+
     // Check for any snapshot file (03, 04, 05, or 06) to find the directory
-    const snapshotFiles = ["03-analyzing.html", "04-profile-confirm.html", "05-processing.html", "06-results.html"];
-    
+    const snapshotFiles = [
+      "03-analyzing.html",
+      "04-profile-confirm.html",
+      "05-processing.html",
+      "06-results.html",
+    ];
+
     // Check files in parallel for each timestamp to speed up discovery
-    for (let timestamp = now; timestamp >= now - checkRange; timestamp -= step) {
+    for (
+      let timestamp = now;
+      timestamp >= now - checkRange;
+      timestamp -= step
+    ) {
       if (activeRequestRef.current !== requestId) {
         return null;
       }
       // Check all files in parallel for this timestamp
       const checks = await Promise.all(
-        snapshotFiles.map(fileName => checkSnapshotExists(username, timestamp, fileName))
+        snapshotFiles.map((fileName) =>
+          checkSnapshotExists(username, timestamp, fileName)
+        )
       );
-      
+
       // If any file exists, we found the directory
-      if (checks.some(exists => exists)) {
+      if (checks.some((exists) => exists)) {
         return timestamp;
       }
-      
+
       // Small delay to avoid hammering the server
       await delay(100);
     }
     return null;
   };
 
-  const registerSnapshot = (username, timestamp, fileName, stepName, requestId) => {
+  const registerSnapshot = (
+    username,
+    timestamp,
+    fileName,
+    stepName,
+    requestId
+  ) => {
     if (activeRequestRef.current !== requestId) return;
-    const snapshotPath = `/snapshots/${encodeURIComponent(username)}/${timestamp}/${fileName}`;
+    const snapshotPath = `/snapshots/${encodeURIComponent(
+      username
+    )}/${timestamp}/${fileName}`;
     setSnapshots((prev) => {
       const filtered = prev.filter((s) => s.name !== stepName);
       return [...filtered, { name: stepName, htmlPath: snapshotPath }];
@@ -783,7 +847,13 @@ function App() {
           step.name === "results" ? 700 : 500
         );
         if (exists && activeRequestRef.current === requestId) {
-          registerSnapshot(username, timestamp, step.file, step.name, requestId);
+          registerSnapshot(
+            username,
+            timestamp,
+            step.file,
+            step.name,
+            requestId
+          );
         }
       });
 
@@ -821,7 +891,9 @@ function App() {
       processing: null,
     });
     const friendlyName = formatted.replace("@", "") || profile.name || "friend";
-    setProfileStage(createProfileStageData(formatted, profile.avatar, friendlyName));
+    setProfileStage(
+      createProfileStageData(formatted, profile.avatar, friendlyName)
+    );
     setProcessingStage(createProcessingStageData(formatted, profile.avatar));
     setCanAdvanceFromProfile(false);
     setCanAdvanceFromProcessing(false);
@@ -830,7 +902,7 @@ function App() {
     clearInterval(analyzingTimerRef.current);
     analyzingStartRef.current = Date.now();
     stepHtmlFetchRef.current = {};
-    setProfileConfirmParsed(false);  // Reset flag for new request
+    setProfileConfirmParsed(false); // Reset flag for new request
     setAnalyzingProgress(0);
     setProcessingMessageIndex(0);
 
@@ -842,7 +914,7 @@ function App() {
 
     // Set analyzing screen immediately - don't wait for fetchCards
     setScreen(SCREEN.ANALYZING);
-    
+
     // Fetch cards in background - don't block UI transitions
     fetchCards(formatted).catch((err) => {
       console.error("Failed to fetch cards:", err);
@@ -864,33 +936,41 @@ function App() {
   const fetchCards = async (usernameValue) => {
     // Use Server-Sent Events for real-time snapshot streaming
     return new Promise((resolve, reject) => {
-      const eventSource = new EventSource(`${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`);
-      
+      const eventSource = new EventSource(
+        `${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`
+      );
+
       eventSource.addEventListener("snapshot", (e) => {
         try {
           const step = JSON.parse(e.data);
           console.log(`📥 Received snapshot via SSE: ${step.name}`);
-          
+
           // Register snapshot immediately as it arrives
           setSnapshots((prev) => {
             const filtered = prev.filter((s) => s.name !== step.name);
             return [...filtered, step];
           });
-          
+
           // If this is profile-confirm, trigger immediate UI update
           if (step.name === "profile-confirm") {
-            console.log(`✅ Profile-confirm snapshot received - UI will update immediately`);
+            console.log(
+              `✅ Profile-confirm snapshot received - UI will update immediately`
+            );
           }
         } catch (err) {
           console.error("Error parsing snapshot data:", err);
         }
       });
-      
+
       eventSource.addEventListener("done", (e) => {
         try {
           const finalResult = JSON.parse(e.data);
-          console.log(`✅ Scrape completed - received ${finalResult.cards?.length || 0} cards`);
-          
+          console.log(
+            `✅ Scrape completed - received ${
+              finalResult.cards?.length || 0
+            } cards`
+          );
+
           // Set cards and final snapshots
           if (finalResult.cards && Array.isArray(finalResult.cards)) {
             setCards(finalResult.cards);
@@ -898,7 +978,7 @@ function App() {
           if (finalResult.steps && Array.isArray(finalResult.steps)) {
             setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
           }
-          
+
           eventSource.close();
           resolve(finalResult);
         } catch (err) {
@@ -907,7 +987,7 @@ function App() {
           reject(err);
         }
       });
-      
+
       eventSource.addEventListener("error", (e) => {
         try {
           const errorData = JSON.parse(e.data);
@@ -920,7 +1000,7 @@ function App() {
           reject(new Error("Failed to process error"));
         }
       });
-      
+
       // Handle connection errors
       eventSource.onerror = (err) => {
         console.error("EventSource error:", err);
@@ -939,7 +1019,9 @@ function App() {
 
   const handleViewFullReport = async () => {
     // Find the full-report snapshot
-    const fullReportStep = snapshots.find((step) => step.name === "full-report");
+    const fullReportStep = snapshots.find(
+      (step) => step.name === "full-report"
+    );
     if (!fullReportStep) {
       console.error("Full report snapshot not found");
       return;
@@ -960,7 +1042,7 @@ function App() {
       }
 
       const html = await res.text();
-      
+
       // Parse the HTML to extract structured data
       const parsedData = parseFullReport(html);
       if (parsedData) {
@@ -1023,7 +1105,11 @@ function App() {
   const renderAnalyzingFallback = () => (
     <div className="stage-card analyzing-card">
       <div className="stage-progress-track">
-        <div className="stage-progress-fill" style={{ width: `${analyzingProgress}%` }} />
+        <div
+          className="stage-progress-fill"
+          // style={{ width: `${analyzingProgress}%` }}
+          style={{ width: "30%" }}
+        />
       </div>
       <div className="stage-spinner" />
       <h1>Analyzing...</h1>
@@ -1036,7 +1122,10 @@ function App() {
           <small>{analyzingProgress}%</small>
         </div>
         <div className="stage-bar">
-          <div className="stage-bar-fill" style={{ width: `${analyzingProgress}%` }} />
+          <div
+            className="stage-bar-fill"
+            style={{ width: `${analyzingProgress}%` }}
+          />
         </div>
       </div>
       <p className="stage-status">Analyzing your profile 🔎</p>
@@ -1048,8 +1137,8 @@ function App() {
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
       <p className="hero-copy">
-        We analyze your Instagram profile to identify who loves watching your life,
-        who hasn't forgotten you, and who pretends to be your friend.
+        We analyze your Instagram profile to identify who loves watching your
+        life, who hasn't forgotten you, and who pretends to be your friend.
       </p>
       <div className="inline-cards">
         <div className="inline-card">
@@ -1102,8 +1191,12 @@ function App() {
     // Extract name from greeting (e.g., "Hello, Pratik Patil" -> "Pratik Patil")
     // or use profile.name as fallback
     const nameMatch = profileStage.greeting?.match(/Hello,?\s*(.+)/i);
-    const displayName = nameMatch?.[1]?.trim() || profile.name || profileStage.username?.replace("@", "") || "User";
-    
+    const displayName =
+      nameMatch?.[1]?.trim() ||
+      profile.name ||
+      profileStage.username?.replace("@", "") ||
+      "User";
+
     return (
       <section className="screen snapshot-stage">
         <div className="stage-card profile-card profile-card--dynamic">
@@ -1119,11 +1212,13 @@ function App() {
           <div className="profile-username-badge">{profileStage.username}</div>
           <h1 className="profile-greeting">Hello, {displayName}</h1>
           <div className="profile-message">
-            <h2 className="profile-congrats">🎉 Congratulations, we found your account!</h2>
+            <h2 className="profile-congrats">
+              🎉 Congratulations, we found your account!
+            </h2>
             <p className="profile-description">
-              We're analyzing your profile to reveal who's checking you out, 
-              talking about you, and visiting your profile. 
-              Get ready to discover the truth!
+              We're analyzing your profile to reveal who's checking you out,
+              talking about you, and visiting your profile. Get ready to
+              discover the truth!
             </p>
           </div>
         </div>
@@ -1138,7 +1233,14 @@ function App() {
           <div className="stage-progress-fill" style={{ width: "82%" }} />
         </div>
         <div className="processing-avatar-ring">
-          <img src={processingStage.avatar || profile.avatar} alt={profile.name} />
+          <div className="scanner-overlay">
+            <img
+              src={processingStage.avatar || profile.avatar}
+              alt={profile.name}
+            />
+            <div className="grid-background"></div>
+            <div className="scan-grid-line"></div>
+          </div>
         </div>
         <h1>{processingStage.title}</h1>
         <p className="stage-subtitle">{processingStage.subtitle}</p>
@@ -1175,15 +1277,42 @@ function App() {
       );
     }
 
-    const { hero, summary, slider, screenshots, stories, alert, addicted, ctas } = analysis;
+    const {
+      hero,
+      summary,
+      slider,
+      screenshots,
+      stories,
+      alert,
+      addicted,
+      ctas,
+    } = analysis;
     const filteredSummaryCards = summary.cards.filter((card) => {
       const text = `${card.title} ${card.detail}`.trim();
-      return text && !NON_EN_SUMMARY_REGEX.test(text) && !SUMMARY_EXCLUDE_REGEX.test(text);
+      return (
+        text &&
+        !NON_EN_SUMMARY_REGEX.test(text) &&
+        !SUMMARY_EXCLUDE_REGEX.test(text)
+      );
     });
-    
     // Determine which CTA is for "REVEAL STALKERS" and which is for "REVEAL PROFILES"
-    const revealStalkersCta = ctas.primary && ctas.primary.toLowerCase().includes("stalker") ? ctas.primary : null;
-    const revealProfilesCta = ctas.secondary && (ctas.secondary.toLowerCase().includes("profile") || ctas.secondary.toLowerCase().includes("uncensored")) ? ctas.secondary : null;
+    const revealStalkersCta =
+      ctas.primary && ctas.primary.toLowerCase().includes("stalker")
+        ? ctas.primary
+        : null;
+    const revealProfilesCta =
+      ctas.secondary &&
+      (ctas.secondary.toLowerCase().includes("profile") ||
+        ctas.secondary.toLowerCase().includes("uncensored"))
+        ? ctas.secondary
+        : null;
+
+    const hardcodedBodies = [
+      "Visited your profile <b>12 times yesterday</b>",
+      "Visited your profile late at night",
+      'Added <span class="red">only you to their close friends</span>',
+      "Took a screenshot of your profile and stories",
+    ];
 
     return (
       <section className="screen preview-screen">
@@ -1191,12 +1320,18 @@ function App() {
           <section className="hero-panel">
             <div className="hero-top">
               <div className="hero-avatar">
-                <img src={hero.profileImage || profile.avatar} alt={hero.name || profile.name} />
+                <img
+                  src={hero.profileImage || profile.avatar}
+                  alt={hero.name || profile.name}
+                />
               </div>
               <div className="hero-meta">
                 <h1>{hero.name || profile.name}</h1>
                 <div className="hero-stats">
-                  {(hero.stats.length ? hero.stats : profileStatsFromState()).map((stat) => (
+                  {(hero.stats.length
+                    ? hero.stats
+                    : profileStatsFromState()
+                  ).map((stat) => (
                     <div key={`${stat.label}-${stat.value}`}>
                       <strong>{stat.value}</strong>
                       <span>{stat.label}</span>
@@ -1212,27 +1347,107 @@ function App() {
               <div className="hero-visitors">
                 <div className="visitor-stack">
                   {hero.visitors.slice(0, 6).map((visitor, index) => (
-                    <img
-                      key={`${visitor.alt}-${index}`}
-                      src={visitor.image}
-                      alt={visitor.alt || `visitor-${index + 1}`}
-                    />
+                    <div className="visitor-item" key={index}>
+                      {index % 2 !== 0 ? (
+                        <div className="locked-circle">
+                          <span className="visitor-stack-lock-icon">🔒</span>
+                        </div>
+                      ) : (
+                        <img
+                          key={`${visitor.alt}-${index}`}
+                          src={visitor.image}
+                          alt={visitor.alt || `visitor-${index + 1}`}
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
-                <small>Live data from the remote analyzer</small>
+                <small className="hero-visitors-views">
+                  <strong>8 people&nbsp;</strong>visited your profile this week
+                </small>
               </div>
             )}
           </section>
 
           <section className="preview-header">
             <div className="preview-titles">
-              <p>{summary.warning || "Don't leave this page."}</p>
-              {summary.weekRange && <span>{summary.weekRange}</span>}
+              {/* <p>{summary.warning || "Don't leave this page."}</p>
+              {summary.weekRange && <span>{summary.weekRange}</span>} */}
+              <h1>Preview</h1>
+              <div class="warning-pill">
+                <div className="warning-icon">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-triangle-alert mr-[8px]"
+                    aria-hidden="true"
+                  >
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path>
+                    <path d="M12 9v4"></path>
+                    <path d="M12 17h.01"></path>
+                  </svg>
+                </div>
+                Don't leave this page.
+              </div>
+
+              <div class="arrow-separator">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-arrow-big-down-dash mt-[20px]"
+                  aria-hidden="true"
+                >
+                  <path d="M15 11a1 1 0 0 0 1 1h2.939a1 1 0 0 1 .75 1.811l-6.835 6.836a1.207 1.207 0 0 1-1.707 0L4.31 13.81a1 1 0 0 1 .75-1.811H8a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1z"></path>
+                  <path d="M9 4h6"></path>
+                </svg>
+              </div>
+
+              <div class="week-section">
+                <div class="week-icon">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-clock inline-block mb-[5px] mr-[10px]"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 6v6l4 2"></path>
+                    <circle cx="12" cy="12" r="10"></circle>
+                  </svg>
+                </div>
+                <div class="week-text">
+                  <h3>Last week</h3>
+                </div>
+              </div>
+              <div className="week-range">24/11 - 30/11</div>
             </div>
             <div className="summary-grid">
-              {(filteredSummaryCards.length ? filteredSummaryCards : summary.cards).map((card) => (
+              {(filteredSummaryCards.length
+                ? filteredSummaryCards
+                : summary.cards
+              ).map((card) => (
                 <article key={`${card.title}-${card.detail}`}>
-                  <h3>{card.title}</h3>
+                  <div className="summary-grid-title">{card.title}</div>
                   <p>{card.detail}</p>
                 </article>
               ))}
@@ -1710,7 +1925,9 @@ function App() {
           {alert.title && (
             <section className="alert-panel">
               <h3 dangerouslySetInnerHTML={{ __html: alert.title }} />
-              {alert.badge && <span className="alert-badge">{alert.badge}</span>}
+              {alert.badge && (
+                <span className="alert-badge">{alert.badge}</span>
+              )}
               <p dangerouslySetInnerHTML={{ __html: alert.copy }} />
             </section>
           )}
@@ -1721,10 +1938,19 @@ function App() {
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => (
                   <article key={`${tile.body}-${index}`}>
-                    <h4 className={tile.blurred ? "blurred-text" : ""}>
-                      {renderSensitiveText(tile.title, tile.blurred)}
-                    </h4>
-                    <p>{tile.body}</p>
+                    {tile.blurred && <div className="addicted-lock">🔒</div>}
+                    <div className="addicted-blur-name">
+                      <strong>@</strong>
+                      <h4 className={tile.blurred ? "blurred-text" : ""}>
+                        {renderSensitiveText(tile.title, tile.blurred)}
+                      </h4>
+                    </div>
+                    <p
+                      dangerouslySetInnerHTML={{
+                        __html: hardcodedBodies[index],
+                      }}
+                    />
+                    {/* <p>{tile.body}</p> */}
                   </article>
                 ))}
               </div>
@@ -1736,10 +1962,7 @@ function App() {
                 <p className="cta-banner">{addicted.footer}</p>
               )}
               {ctas.tertiary && (
-                <button 
-                  className="primary-btn"
-                  onClick={handleViewFullReport}
-                >
+                <button className="primary-btn" onClick={handleViewFullReport}>
                   {ctas.tertiary}
                 </button>
               )}
@@ -1768,7 +1991,10 @@ function App() {
         <section className="screen hero">
           <h1>Full Report Not Available</h1>
           <p>The full report could not be loaded.</p>
-          <button className="primary-btn" onClick={() => setScreen(SCREEN.PREVIEW)}>
+          <button
+            className="primary-btn"
+            onClick={() => setScreen(SCREEN.PREVIEW)}
+          >
             Back to Preview
           </button>
         </section>
@@ -1777,7 +2003,7 @@ function App() {
 
     // Extract avatar from parsed data or use profile avatar
     const profileAvatar = fullReportData?.avatar || profile.avatar;
-    
+
     // Debug: Log avatar source
     if (fullReportData?.avatar) {
       console.log("✅ Using avatar from fullReportData");
@@ -1836,31 +2062,54 @@ function App() {
           {/* Marketing Section */}
           <div className="full-report-marketing">
             <p className="full-report-more">And much more...</p>
-            <p className="full-report-system">Our reporting system is the only truly functional system on the market.</p>
-            <p className="full-report-emotional">We could charge what you've already spent on dates, clothes and dinners that never led to anything.</p>
-            <p className="full-report-disappointment">Where you only got disappointed.</p>
-            
+            <p className="full-report-system">
+              Our reporting system is the only truly functional system on the
+              market.
+            </p>
+            <p className="full-report-emotional">
+              We could charge what you've already spent on dates, clothes and
+              dinners that never led to anything.
+            </p>
+            <p className="full-report-disappointment">
+              Where you only got disappointed.
+            </p>
+
             <div className="full-report-divider"></div>
-            
-            <p className="full-report-not-going">But we're not going to do that,</p>
+
+            <p className="full-report-not-going">
+              But we're not going to do that,
+            </p>
             <h2 className="full-report-goal">We want you to have a goal</h2>
-            <p className="full-report-direction">We're here giving you the only thing you're still missing, direction.</p>
+            <p className="full-report-direction">
+              We're here giving you the only thing you're still missing,
+              direction.
+            </p>
             <p className="full-report-certainty">
-              It's not worth humiliating yourself for someone who doesn't want you, <strong>this is your chance to have certainty.</strong>
+              It's not worth humiliating yourself for someone who doesn't want
+              you, <strong>this is your chance to have certainty.</strong>
             </p>
           </div>
 
           {/* Urgency Section */}
           <div className="full-report-urgency">
             <div className="full-report-countdown">
-              <span>Limited time offer: <span className="countdown-timer">14:57</span></span>
+              <span>
+                Limited time offer:{" "}
+                <span className="countdown-timer">14:57</span>
+              </span>
             </div>
             <div className="full-report-warning">
               <div className="full-report-warning-content">
                 <span className="full-report-warning-icon">⚠️</span>
                 <div className="full-report-warning-text">
-                  <p><strong>Don't leave this page!</strong></p>
-                  <p>We only allow viewing the<br />preview <strong>ONCE</strong></p>
+                  <p>
+                    <strong>Don't leave this page!</strong>
+                  </p>
+                  <p>
+                    We only allow viewing the
+                    <br />
+                    preview <strong>ONCE</strong>
+                  </p>
                 </div>
               </div>
             </div>
@@ -1869,16 +2118,27 @@ function App() {
           {/* Pricing Section */}
           <div className="full-report-pricing">
             <div className="full-report-pricing-card">
-              <span className="full-report-discount-badge">80% OFF PROMOTION</span>
+              <span className="full-report-discount-badge">
+                80% OFF PROMOTION
+              </span>
               <div className="full-report-pricing-header">
                 <div className="full-report-pricing-left">
                   <span className="full-report-lock-icon">🔓</span>
-                  <h3>Complete<br />Report</h3>
+                  <h3>
+                    Complete
+                    <br />
+                    Report
+                  </h3>
                 </div>
               </div>
               <div className="full-report-pricing-details">
-                <p className="full-report-original-price">from <span className="strikethrough">1299₹</span> for:</p>
-                <p className="full-report-current-price"><span className="price-number">199</span> <span className="price-currency">₹</span></p>
+                <p className="full-report-original-price">
+                  from <span className="strikethrough">1299₹</span> for:
+                </p>
+                <p className="full-report-current-price">
+                  <span className="price-number">199</span>{" "}
+                  <span className="price-currency">₹</span>
+                </p>
                 <p className="full-report-payment-type">one-time payment</p>
               </div>
             </div>
@@ -1902,7 +2162,7 @@ function App() {
 
           {/* CTA Button */}
           <div className="full-report-cta">
-            <button 
+            <button
               className="full-report-cta-button"
               onClick={() => setScreen(SCREEN.PAYMENT)}
             >
@@ -1912,7 +2172,12 @@ function App() {
 
           {/* Footer */}
           <div className="full-report-footer">
-            <p>2025 © Cartpanda Inc. (United States) Inc. and/or its licensors. Review <a href="#">legal terms of use here</a> and <a href="#">privacy policy here</a>. <a href="#">Contact us here</a>.</p>
+            <p>
+              2025 © Cartpanda Inc. (United States) Inc. and/or its licensors.
+              Review <a href="#">legal terms of use here</a> and{" "}
+              <a href="#">privacy policy here</a>.{" "}
+              <a href="#">Contact us here</a>.
+            </p>
           </div>
         </div>
       </section>
@@ -1921,7 +2186,7 @@ function App() {
     // Fallback to raw HTML rendering
     return (
       <section className="screen full-report-screen">
-        <div 
+        <div
           className="full-report-content"
           dangerouslySetInnerHTML={{ __html: fullReportHtml }}
         />
@@ -1961,30 +2226,41 @@ function App() {
       });
 
       if (!saveResponse.ok) {
-        const errorData = await saveResponse.json().catch(() => ({ error: "Unknown error" }));
+        const errorData = await saveResponse
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
         throw new Error(errorData.error || "Failed to save user data");
       }
 
       // Create payment session
       const amount = 199 * quantity; // 199₹ per item
-      const sessionResponse = await fetch(`${API_BASE}/api/payment/create-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...paymentForm,
-          amount,
-        }),
-      });
+      const sessionResponse = await fetch(
+        `${API_BASE}/api/payment/create-session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...paymentForm,
+            amount,
+          }),
+        }
+      );
 
       if (!sessionResponse.ok) {
-        const errorData = await sessionResponse.json().catch(() => ({ error: "Unknown error" }));
+        const errorData = await sessionResponse
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
         console.error("Payment session error:", errorData);
-        throw new Error(errorData.message || errorData.error || "Failed to create payment session");
+        throw new Error(
+          errorData.message ||
+            errorData.error ||
+            "Failed to create payment session"
+        );
       }
 
       const sessionData = await sessionResponse.json();
       console.log("Payment session created:", sessionData);
-      
+
       // Check if payment session ID exists
       if (!sessionData.paymentSessionId) {
         throw new Error("Payment session ID not received from server");
@@ -1994,7 +2270,7 @@ function App() {
       let retries = 0;
       const maxRetries = 10;
       while (!window.Cashfree && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         retries++;
       }
 
@@ -2004,33 +2280,49 @@ function App() {
           const cashfree = new window.Cashfree({
             mode: "sandbox", // Test mode
           });
-          
-          console.log("Initializing Cashfree checkout with session:", sessionData.paymentSessionId);
-          
-          cashfree.checkout({
-            paymentSessionId: sessionData.paymentSessionId,
-            redirectTarget: "_self",
-          }).catch((err) => {
-            console.error("Cashfree checkout error:", err);
-            alert(`Payment initialization failed: ${err.message || "Unknown error"}`);
-            setPaymentLoading(false);
-          });
+
+          console.log(
+            "Initializing Cashfree checkout with session:",
+            sessionData.paymentSessionId
+          );
+
+          cashfree
+            .checkout({
+              paymentSessionId: sessionData.paymentSessionId,
+              redirectTarget: "_self",
+            })
+            .catch((err) => {
+              console.error("Cashfree checkout error:", err);
+              alert(
+                `Payment initialization failed: ${
+                  err.message || "Unknown error"
+                }`
+              );
+              setPaymentLoading(false);
+            });
         } catch (initErr) {
           console.error("Cashfree initialization error:", initErr);
-          alert(`Failed to initialize payment gateway: ${initErr.message || "Unknown error"}`);
+          alert(
+            `Failed to initialize payment gateway: ${
+              initErr.message || "Unknown error"
+            }`
+          );
           setPaymentLoading(false);
         }
       } else {
         console.error("Cashfree SDK not loaded after waiting");
         console.log("Window.Cashfree:", window.Cashfree);
-        alert("Payment gateway SDK not loaded. Please refresh the page and try again.");
+        alert(
+          "Payment gateway SDK not loaded. Please refresh the page and try again."
+        );
         setPaymentLoading(false);
       }
     } catch (err) {
       console.error("Payment error:", err);
       console.error("Error details:", err.message, err.stack);
       // Show more detailed error message
-      const errorMsg = err.message || "Failed to process payment. Please try again.";
+      const errorMsg =
+        err.message || "Failed to process payment. Please try again.";
       alert(errorMsg);
     } finally {
       setPaymentLoading(false);
@@ -2070,7 +2362,9 @@ function App() {
         <div className="payment-container">
           {/* Top Banner - Countdown */}
           <div className="payment-banner">
-            <span>Your report expires in {formatCountdown(paymentCountdown)}</span>
+            <span>
+              Your report expires in {formatCountdown(paymentCountdown)}
+            </span>
           </div>
 
           {/* Main Content */}
@@ -2101,7 +2395,10 @@ function App() {
                       required
                       value={paymentForm.email}
                       onChange={(e) =>
-                        setPaymentForm({ ...paymentForm, email: e.target.value })
+                        setPaymentForm({
+                          ...paymentForm,
+                          email: e.target.value,
+                        })
                       }
                       placeholder="your.email@example.com"
                     />
@@ -2115,7 +2412,10 @@ function App() {
                       required
                       value={paymentForm.fullName}
                       onChange={(e) =>
-                        setPaymentForm({ ...paymentForm, fullName: e.target.value })
+                        setPaymentForm({
+                          ...paymentForm,
+                          fullName: e.target.value,
+                        })
                       }
                       placeholder="Enter your full name"
                     />
@@ -2150,8 +2450,8 @@ function App() {
                 <div className="guarantee-content">
                   <h4>14-Day Money-Back Guarantee</h4>
                   <p>
-                    Try it risk-free. If you're not happy within 14 days, we'll refund you — no
-                    questions asked.
+                    Try it risk-free. If you're not happy within 14 days, we'll
+                    refund you — no questions asked.
                   </p>
                 </div>
               </div>
@@ -2161,7 +2461,9 @@ function App() {
                 <div className="urgency-icon">⚠️</div>
                 <div className="urgency-content">
                   <p>Your report expires in</p>
-                  <div className="urgency-timer">{formatCountdown(paymentCountdown)}</div>
+                  <div className="urgency-timer">
+                    {formatCountdown(paymentCountdown)}
+                  </div>
                 </div>
               </div>
 
@@ -2169,7 +2471,11 @@ function App() {
               <div className="payment-reviews">
                 {reviews.map((review, index) => (
                   <div key={index} className="payment-review-card">
-                    <img src={review.avatar} alt={review.name} className="review-avatar" />
+                    <img
+                      src={review.avatar}
+                      alt={review.name}
+                      className="review-avatar"
+                    />
                     <div className="review-content">
                       <div className="review-name">{review.name}</div>
                       <div className="review-stars">
@@ -2193,8 +2499,12 @@ function App() {
                 <div className="order-item">
                   <div className="order-item-icon">📱</div>
                   <div className="order-item-details">
-                    <div className="order-item-name">Unlock Insta Full Report</div>
-                    <div className="order-item-price">₹{currentPrice.toLocaleString("en-IN")}</div>
+                    <div className="order-item-name">
+                      Unlock Insta Full Report
+                    </div>
+                    <div className="order-item-price">
+                      ₹{currentPrice.toLocaleString("en-IN")}
+                    </div>
                   </div>
                   <div className="order-item-quantity">
                     <button
@@ -2290,12 +2600,15 @@ function App() {
         {toasts.map((toast) => (
           <div className="toast" key={toast.id}>
             <div className="notification">
-              {toast.image && (
-                <img src={toast.image} alt="" />
-              )}
+              {toast.image && <img src={toast.image} alt="" />}
               <div>
                 <p>{toast.message}</p>
-                <small>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
+                <small>
+                  {new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </small>
               </div>
             </div>
           </div>
