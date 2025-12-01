@@ -2159,26 +2159,26 @@ function App() {
           {/* Features Grid */}
           <div className="full-report-features">
             <div className="full-report-feature-card">
-              <div className="full-report-feature-icon">🔍</div>
-              <h3>Story Repeats</h3>
+              <div className="full-report-feature-icon">
+              <h3>🔍Story Repeats</h3></div>
               <p>People who viewed and re-viewed your stories</p>
             </div>
 
             <div className="full-report-feature-card">
-              <div className="full-report-feature-icon">🔍</div>
-              <h3>Visit Tracking</h3>
+              <div className="full-report-feature-icon">
+              <h3>🔍Visit Tracking</h3></div>
               <p>Discover who is visiting your profile</p>
             </div>
 
             <div className="full-report-feature-card">
-              <div className="full-report-feature-icon">🔍</div>
-              <h3>Mention Tracking</h3>
+              <div className="full-report-feature-icon">
+              <h3>🔍Mention Tracking</h3></div>
               <p>Find out which followers talk about you the most</p>
             </div>
 
             <div className="full-report-feature-card">
-              <div className="full-report-feature-icon">🔍</div>
-              <h3>Who's Watching You</h3>
+              <div className="full-report-feature-icon">
+              <h3>🔍Who's Watching You</h3></div>
               <p>See who took SCREENSHOTS of your profile and stories</p>
             </div>
           </div>
@@ -2245,6 +2245,7 @@ function App() {
               <span className="full-report-discount-badge">
                 80% OFF PROMOTION
               </span>
+              <div className="full-report-pricing-block">
               <div className="full-report-pricing-header">
                 <div className="full-report-pricing-left">
                   <span className="full-report-lock-icon">🔓</span>
@@ -2264,6 +2265,7 @@ function App() {
                   <span className="price-currency">₹</span>
                 </p>
                 <p className="full-report-payment-type">one-time payment</p>
+              </div>
               </div>
             </div>
 
