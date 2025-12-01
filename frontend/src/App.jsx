@@ -5,6 +5,8 @@ import { parseFullReport } from "./utils/parseFullReport";
 import b1Image from "./assets/b1.jpg";
 import g1Image from "./assets/g1.jpg";
 import g2Image from "./assets/g2.jpg";
+import printMessageBg from "./assets/print-message-new.png";
+import profileNewPng from "./assets/profile-new.png";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() ||
@@ -1252,7 +1254,7 @@ function App() {
                 <div 
                   className="carousel-track"
                   style={{
-                    transform: `translateX(calc(-${currentIndex * (280 + 16)}px))`
+                    transform: `translateX(calc(-${currentIndex * (220 + 16)}px))`
                   }}
                 >
               {allCards.map((card, index) => {
@@ -1373,7 +1375,7 @@ function App() {
                       <div 
                         className="carousel-track"
                         style={{
-                          transform: `translateX(calc(-${currentStoriesIndex * (280 + 16)}px))`
+                          transform: `translateX(calc(-${currentStoriesIndex * (220 + 16)}px))`
                         }}
                       >
                         {storiesSlides.map((story, index) => (
@@ -1435,18 +1437,198 @@ function App() {
               <li>From those who pretend to be your friend</li>
               <li>People interested in you</li>
             </ul>
-            <div className="chat-preview">
-              {screenshots.chat.map((bubble, index) => (
-                <div
-                  key={`${bubble.text}-${index}`}
-                  className={`chat-bubble ${
-                    index % 2 === 0 ? "from-me" : "from-them"
-                  } ${bubble.blurred ? "blurred-text" : ""}`}
+            {/* Message bubbles from screenshots.chat data */}
+            {screenshots.chat && screenshots.chat.length > 0 ? (
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'block',
+                  borderRadius: '1rem',
+                  overflow: 'hidden'
+                }}
+              >
+                <img 
+                  src={printMessageBg}
+                  alt="Chat background"
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block'
+                  }}
+                />
+                <div 
+                  style={{ 
+                    position: 'absolute', 
+                    left: '4%', 
+                    top: '45%', 
+                    zIndex: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '3px'
+                  }}
                 >
-                  {renderSensitiveText(bubble.text, bubble.blurred)}
+                  {screenshots.chat.map((bubble, index) => {
+                    if (!bubble || !bubble.text) return null;
+                    return (
+                      <div 
+                        key={`chat-bubble-${index}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          gap: '12px'
+                        }}
+                      >
+                        <div 
+                          style={{
+                            width: '25px',
+                            height: '25px',
+                            minWidth: '25px',
+                            minHeight: '25px',
+                            borderRadius: '50%',
+                            backgroundSize: 'cover',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundImage: `url(${profileNewPng})`,
+                            filter: 'blur(4px)',
+                            flexShrink: 0,
+                            marginBottom: '8px'
+                          }}
+                        />
+                        <div
+                          style={{
+                            backgroundColor: '#262626',
+                            color: '#eee',
+                            padding: '8px 14px',
+                            borderRadius: index === 0 ? '18px 18px 18px 4px' : index === screenshots.chat.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                            fontSize: '14px',
+                            maxWidth: '70%',
+                            wordWrap: 'break-word',
+                            lineHeight: '1.4',
+                            width: 'fit-content'
+                          }}
+                        >
+                          {bubble.blurred ? (
+                            <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                          ) : (
+                            <span>{bubble.text}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : screenshots.chatHtml ? (
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'block',
+                  borderRadius: '1rem',
+                  overflow: 'hidden'
+                }}
+              >
+                <img 
+                  src={printMessageBg}
+                  alt="Chat background"
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block'
+                  }}
+                />
+                {/* Fallback: Try to extract messages from chatHtml if chat array is empty */}
+                {(() => {
+                  try {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(screenshots.chatHtml, 'text/html');
+                    const messagesWrapper = doc.querySelector("div.space-y-\\[3px\\], div[class*='space-y']");
+                    const messages = [];
+                    
+                    if (messagesWrapper) {
+                      const spans = messagesWrapper.querySelectorAll('span');
+                      spans.forEach(span => {
+                        const text = span.textContent?.trim();
+                        if (text) {
+                          messages.push({
+                            text: text,
+                            blurred: span.className?.includes('blur') || false
+                          });
+                        }
+                      });
+                    }
+                    
+                    if (messages.length > 0) {
+                      return (
+                        <div 
+                          style={{ 
+                            position: 'absolute', 
+                            left: '4%', 
+                            top: '45%', 
+                            zIndex: 4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          {messages.map((bubble, index) => (
+                            <div 
+                              key={`chat-bubble-fallback-${index}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                gap: '12px'
+                              }}
+                            >
+                              <div 
+                                style={{
+                                  width: '25px',
+                                  height: '25px',
+                                  minWidth: '25px',
+                                  minHeight: '25px',
+                                  borderRadius: '50%',
+                                  backgroundSize: 'cover',
+                                  backgroundRepeat: 'no-repeat',
+                                  backgroundImage: `url(${profileNewPng})`,
+                                  filter: 'blur(4px)',
+                                  flexShrink: 0,
+                                  marginBottom: '8px'
+                                }}
+                              />
+                              <div
+                                style={{
+                                  backgroundColor: '#262626',
+                                  color: '#eee',
+                                  padding: '8px 14px',
+                                  borderRadius: index === 0 ? '18px 18px 18px 4px' : index === messages.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                                  fontSize: '14px',
+                                  maxWidth: '70%',
+                                  wordWrap: 'break-word',
+                                  lineHeight: '1.4',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                {bubble.blurred ? (
+                                  <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                                ) : (
+                                  <span>{bubble.text}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                  } catch (e) {
+                    console.error('Error parsing chatHtml fallback:', e);
+                  }
+                  return null;
+                })()}
+              </div>
+            ) : null}
+            <p className="screenshots-uncensored">
+              SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE REPORT
+            </p>
             {screenshots.footer && (
               <p className="screenshots-footer">{screenshots.footer}</p>
             )}

@@ -65,6 +65,8 @@ export function parseResultsSnapshot(html) {
       description: "",
       bullets: [],
       chat: [],
+      chatHtml: "",
+      chatStyles: "",
       footer: "",
     },
     stories: {
@@ -351,22 +353,213 @@ export function parseResultsSnapshot(html) {
     );
   }
 
-  const chatWrapper = doc.querySelector("div.space-y-\\[3px\\]");
-  if (chatWrapper) {
-    analysis.screenshots.chat = queryAll(chatWrapper, "span").map((span) => ({
-      text: clean(span.textContent || ""),
-      blurred: span.className.includes("blur"),
-    }));
-    if (!analysis.screenshots.footer) {
-      const footerCandidate = findByText(
-        chatWrapper.parentElement,
-        "p",
-        (text) => /uncensored|relat[óo]rio/i.test(text)
-      );
-      analysis.screenshots.footer = clean(
-        footerCandidate?.textContent || ""
-      );
+  // Extract chat messages from the messages container
+  const messagesContainer = doc.querySelector("div.itens.space-x-3, div[class*='itens'][class*='space-x-3'], div[class*='space-x'][class*='flex'][class*='items-end']");
+  
+  if (messagesContainer) {
+    // Find the messages wrapper (div.space-y-[3px] or similar)
+    const messagesWrapper = messagesContainer.querySelector("div.space-y-\\[3px\\], div[class*='space-y']");
+    
+    if (messagesWrapper) {
+      // Extract all message divs (bubbles)
+      const messageBubbles = queryAll(messagesWrapper, "div[class*='bg-'], div[class*='rounded']");
+      
+      if (messageBubbles.length > 0) {
+        analysis.screenshots.chat = messageBubbles.map((bubble) => {
+          // Find all spans with text
+          const spans = queryAll(bubble, "span");
+          let fullText = "";
+          let hasBlur = false;
+          
+          spans.forEach(span => {
+            const text = clean(span.textContent || "");
+            if (text && text.trim()) {
+              fullText += (fullText ? " " : "") + text.trim();
+            }
+            // Check if span has blur class
+            const spanClass = span.className || "";
+            if (spanClass.includes("blur") || spanClass.includes("blur-sm")) {
+              hasBlur = true;
+            }
+          });
+          
+          // If no spans found, get direct text content
+          if (!fullText || !fullText.trim()) {
+            fullText = clean(bubble.textContent || "");
+          }
+          
+          return {
+            text: fullText.trim(),
+            blurred: hasBlur || (bubble.className && bubble.className.includes("blur"))
+          };
+        }).filter(bubble => bubble.text && bubble.text.length > 0);
+      } else {
+        // Fallback: try to find spans directly in messagesWrapper
+        const spans = queryAll(messagesWrapper, "span");
+        if (spans.length > 0) {
+          analysis.screenshots.chat = spans.map((span) => {
+            const text = clean(span.textContent || "");
+            const spanClass = span.className || "";
+            return {
+              text: text.trim(),
+              blurred: spanClass.includes("blur") || spanClass.includes("blur-sm")
+            };
+          }).filter(bubble => bubble.text && bubble.text.length > 0);
+        }
+      }
+    } else {
+      // If no messagesWrapper, try to find message bubbles directly in messagesContainer
+      const messageBubbles = queryAll(messagesContainer, "div[class*='bg-\\[#262626\\]'], div[class*='bg-\\[#2'], div[class*='rounded']");
+      if (messageBubbles.length > 0) {
+        analysis.screenshots.chat = messageBubbles.map((bubble) => {
+          const spans = queryAll(bubble, "span");
+          let fullText = "";
+          let hasBlur = false;
+          
+          spans.forEach(span => {
+            const text = clean(span.textContent || "");
+            if (text && text.trim()) {
+              fullText += (fullText ? " " : "") + text.trim();
+            }
+            const spanClass = span.className || "";
+            if (spanClass.includes("blur") || spanClass.includes("blur-sm")) {
+              hasBlur = true;
+            }
+          });
+          
+          if (!fullText || !fullText.trim()) {
+            fullText = clean(bubble.textContent || "");
+          }
+          
+          return {
+            text: fullText.trim(),
+            blurred: hasBlur || (bubble.className && bubble.className.includes("blur"))
+          };
+        }).filter(bubble => bubble.text && bubble.text.length > 0);
+      }
     }
+  }
+  
+  // Final fallback: try to find messages in space-y container anywhere in the document
+  if (!analysis.screenshots.chat || analysis.screenshots.chat.length === 0) {
+    const chatWrapper = doc.querySelector("div.space-y-\\[3px\\], div[class*='space-y-\\[3px\\]']");
+    if (chatWrapper) {
+      const spans = queryAll(chatWrapper, "span");
+      if (spans.length > 0) {
+        analysis.screenshots.chat = spans.map((span) => {
+          const text = clean(span.textContent || "");
+          const spanClass = span.className || "";
+          return {
+            text: text.trim(),
+            blurred: spanClass.includes("blur") || spanClass.includes("blur-sm")
+          };
+        }).filter(bubble => bubble.text && bubble.text.length > 0);
+      }
+    }
+  }
+
+  // Find the container with background image (print-message-new.png)
+  const backgroundDiv = doc.querySelector("div[style*='print-message-new.png']");
+  
+  // Find parent container that wraps both background and messages
+  let chatParent = null;
+  
+  if (backgroundDiv) {
+    // Start from background div and find parent that contains messages
+    let parent = backgroundDiv.parentElement;
+    while (parent && parent !== doc.body) {
+      // Check if this parent contains both background and messages
+      const hasBg = parent.contains(backgroundDiv) || parent === backgroundDiv;
+      const hasMsg = messagesContainer && parent.contains(messagesContainer);
+      
+      if (hasBg && hasMsg) {
+        chatParent = parent;
+        break;
+      }
+      
+      // Also check for relative/absolute positioning containers
+      const hasRelativeClass = parent.classList.contains("relative") || 
+                               parent.classList.contains("absolute");
+      const hasRelativeStyle = (parent.getAttribute("style") || "").includes("position");
+      
+      if (hasRelativeClass || hasRelativeStyle) {
+        const bgInParent = parent.querySelector("div[style*='print-message-new.png'], div[style*='background-image']");
+        const msgInParent = parent.querySelector("div.itens, div[class*='space-x-3']");
+        if (bgInParent && msgInParent) {
+          chatParent = parent;
+          break;
+        }
+      }
+      
+      parent = parent.parentElement;
+    }
+    
+    // If no parent found, try to find by looking for relative container
+    if (!chatParent) {
+      const relativeContainer = backgroundDiv.closest("div[class*='relative'], div[class*='absolute'], div[style*='position']");
+      if (relativeContainer) {
+        chatParent = relativeContainer;
+      } else if (backgroundDiv.parentElement) {
+        chatParent = backgroundDiv.parentElement;
+      }
+    }
+  } else if (messagesContainer) {
+    // If only messages found, find its parent with relative positioning or background
+    let parent = messagesContainer.parentElement;
+    while (parent && parent !== doc.body) {
+      const hasRelative = parent.classList.contains("relative") || 
+                         parent.classList.contains("absolute") ||
+                         (parent.getAttribute("style") || "").includes("position");
+      const hasBg = parent.querySelector("div[style*='background-image']");
+      
+      if (hasRelative || hasBg) {
+        chatParent = parent;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+    if (!chatParent && messagesContainer.parentElement) {
+      chatParent = messagesContainer.parentElement;
+    }
+  }
+  
+  if (chatParent) {
+    // Extract the HTML with all styles, classes, and inline styles
+    // Keep original paths - we'll replace them in the renderer
+    analysis.screenshots.chatHtml = chatParent.outerHTML;
+    
+    // Extract any relevant CSS from style tags that might affect this container
+    const styleTags = doc.querySelectorAll("style");
+    const relevantStyles = Array.from(styleTags)
+      .map(style => style.textContent || "")
+      .filter(styleText => {
+        // Check if style contains classes used in chat container
+        return styleText.includes("itens") || 
+               styleText.includes("space-x-3") || 
+               styleText.includes("print-message") ||
+               styleText.includes("messages") ||
+               styleText.includes("rounded-2xl");
+      })
+      .join("\n");
+    
+    if (relevantStyles) {
+      analysis.screenshots.chatStyles = relevantStyles;
+    }
+  } else if (backgroundDiv) {
+    analysis.screenshots.chatHtml = backgroundDiv.outerHTML;
+  } else if (messagesContainer) {
+    analysis.screenshots.chatHtml = messagesContainer.outerHTML;
+  }
+  
+  if (!analysis.screenshots.footer) {
+    const footerCandidate = findByText(
+      doc,
+      "p",
+      (text) => /uncensored|relat[óo]rio/i.test(text)
+    );
+    analysis.screenshots.footer = clean(
+      footerCandidate?.textContent || ""
+    );
   }
 
   const alertHeading = findByText(doc, "h3", (text) =>
