@@ -5,6 +5,8 @@ import { parseFullReport } from "./utils/parseFullReport";
 import b1Image from "./assets/b1.jpg";
 import g1Image from "./assets/g1.jpg";
 import g2Image from "./assets/g2.jpg";
+import printMessageBg from "./assets/print-message-new.png";
+import profileNewPng from "./assets/profile-new.png";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
@@ -277,6 +279,8 @@ function App() {
     useState(false);
   const [notifications, setNotifications] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -607,6 +611,40 @@ function App() {
     processingMessageIndex,
     processingStage.bullets.length,
   ]);
+
+  useEffect(() => {
+    // Reset carousel when cards or analysis changes
+    setCarouselIndex(0);
+    setStoriesCarouselIndex(0);
+  }, [cards, analysis]);
+
+  // Auto-scroll carousel
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    
+    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+    if (allCards.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+    }, 1500); // Change slide every 1.5 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, cards, analysis]);
+
+  // Auto-scroll stories carousel
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    
+    const storiesSlides = analysis?.stories?.slides || [];
+    if (storiesSlides.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setStoriesCarouselIndex((prev) => (prev < storiesSlides.length - 1 ? prev + 1 : 0));
+    }, 1500); // Change slide every 1.5 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, analysis]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
@@ -970,6 +1008,13 @@ function App() {
         reject(new Error("Connection error"));
       };
     });
+  };
+
+  const scrollToFullReport = () => {
+    const fullReportSection = document.getElementById("full-report-section");
+    if (fullReportSection) {
+      fullReportSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
   const handleViewFullReport = async () => {
@@ -1411,199 +1456,471 @@ function App() {
 
           <section className="slider-section">
             <h3>
-              {" "}
-              Visited your profile this week
-              <span className="highlight-text"> between 2 to 7 times</span>:
+              Visited your profile this week{" "}
+              <span style={{ color: "#f43f3f" }}>between 2 to 7 times:</span>
             </h3>
-            <div className="slider-viewport">
-              <div className="slider-grid">
-                {(slider.cards.length ? slider.cards : cards).map(
-                  (card, index) => {
-                    const imageUrl =
-                      card.image || hero.profileImage || profile.avatar;
-                    const isLocked = Boolean(
-                      card?.isLocked || card?.title?.includes("🔒")
-                    );
-                    const shouldBlurImage = Boolean(
-                      card?.blurImage || (!card?.username && imageUrl)
-                    );
-                    const lockText =
-                      card?.lockText ||
-                      card?.lines?.[0]?.text ||
-                      card?.title ||
-                      "Profile locked";
-                    const showLines =
-                      !isLocked &&
-                      !shouldBlurImage &&
-                      Array.isArray(card?.lines) &&
-                      card.lines.length > 0;
+            {(() => {
+              const allCards = slider.cards.length ? slider.cards : cards;
+              const currentIndex = Math.min(carouselIndex, Math.max(0, allCards.length - 1));
+              
+              return allCards.length > 0 ? (
+            <div className="carousel-container">
+              <div className="carousel-wrapper">
+                <div 
+                  className="carousel-track"
+                  style={{
+                    transform: `translateX(calc(-${currentIndex * (220 + 16)}px))`
+                  }}
+                >
+              {allCards.map((card, index) => {
+                const imageUrl =
+                  card.image || hero.profileImage || profile.avatar;
+                const isLocked = Boolean(
+                  card?.isLocked || card?.title?.includes("🔒")
+                );
+                const shouldBlurImage = Boolean(
+                  card?.blurImage || (!card?.username && imageUrl)
+                );
+        const lockText =
+                  card?.lockText ||
+                  card?.lines?.[0]?.text ||
+                  card?.title ||
+                  "Profile locked";
+                const showLines =
+                  !isLocked &&
+                  !shouldBlurImage &&
+                  Array.isArray(card?.lines) &&
+                  card.lines.length > 0;
 
-                    if (isLocked) {
-                      return (
-                        <article
-                          className="slider-card slider-card--locked"
-                          key={`locked-${card?.username || index}`}
-                        >
-                          <div className="lock-overlay">
-                            <span className="lock-icon">🔒</span>
-                            <p className="lock-text">
-                              {renderSensitiveText(
-                                lockText,
-                                card.lockTextBlurred
-                              )}
-                            </p>
-                          </div>
-                        </article>
-                      );
-                    }
+                if (isLocked) {
+                  return (
+                    <article
+                      className={`slider-card slider-card--locked ${index === currentIndex ? 'active' : ''}`}
+                      key={`locked-${card?.username || index}`}
+                    >
+                      <div className="lock-overlay">
+                        <span className="lock-icon">🔒</span>
+                        <p className="lock-text">
+                          {renderSensitiveText(
+                            lockText,
+                            card.lockTextBlurred
+                          )}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                }
 
-                    if (shouldBlurImage && imageUrl) {
-                      return (
-                        <article
-                          className="slider-card slider-card--blurred"
-                          key={`blurred-${card?.username || index}`}
-                        >
-                          <div
-                            className="slider-image blurred-image"
-                            style={{ backgroundImage: `url(${imageUrl})` }}
-                          />
-                          <div className="blurred-lock">
-                            <span role="img" aria-label="locked">
-                              🔒
-                            </span>
-                          </div>
-                        </article>
-                      );
-                    }
+                if (shouldBlurImage && imageUrl) {
+                  return (
+                    <article
+                      className={`slider-card slider-card--blurred ${index === currentIndex ? 'active' : ''}`}
+                      key={`blurred-${card?.username || index}`}
+                    >
+                      <div
+                        className="slider-image blurred-image"
+                        style={{ backgroundImage: `url(${imageUrl})` }}
+                      />
+                      <div className="blurred-lock">
+                        <span role="img" aria-label="locked">
+                          🔒
+                        </span>
+                      </div>
+                    </article>
+                  );
+                }
 
-                    return (
-                      <article
-                        className="slider-card"
-                        key={`${card.title}-${index}`}
-                      >
-                        <div
-                          className="slider-image"
-                          style={{
-                            backgroundImage: imageUrl
-                              ? `url(${imageUrl})`
-                              : "none",
-                            backgroundColor: imageUrl
-                              ? "transparent"
-                              : "#f5f5f5",
-                          }}
-                        />
-                        {card?.username && (
-                          <div className="username">{card.username}</div>
-                        )}
-                        {showLines &&
-                          card.lines.map((line, idx) => (
-                            <p
-                              key={`${line.text}-${idx}`}
-                              className={line.blurred ? "blurred-text" : ""}
-                            >
-                              {renderSensitiveText(line.text, line.blurred)}
-                            </p>
-                          ))}
-                        {card?.badge && (
-                          <span className="slider-badge">{card.badge}</span>
-                        )}
-                      </article>
-                    );
-                  }
-                )}
+                return (
+                  <article 
+                    className={`slider-card ${index === currentIndex ? 'active' : ''}`} 
+                    key={`${card.title}-${index}`}
+                  >
+                    <div
+                      className="slider-image"
+                      style={{
+                        backgroundImage: imageUrl ? `url(${imageUrl})` : "none",
+                        backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
+                      }}
+                    />
+                    <div className="slider-card-content">
+                      {card?.username && (
+                        <h4 className="username">{card.username}</h4>
+                      )}
+                      {showLines &&
+                        card.lines.map((line, idx) => (
+                          <p
+                            key={`${line.text}-${idx}`}
+                            className={line.blurred ? "blurred-text" : ""}
+                          >
+                            {renderSensitiveText(line.text, line.blurred)}
+                          </p>
+                        ))}
+                      {card?.badge && (
+                        <span className="slider-badge">{card.badge}</span>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+                </div>
               </div>
             </div>
+            ) : null;
+            })()}
           </section>
 
           {revealStalkersCta && (
             <div className="cta-inline">
-              <button className="primary-btn">{revealStalkersCta}</button>
+              <button className="primary-btn" onClick={scrollToFullReport}>
+                Reveal Stalker
+              </button>
             </div>
           )}
 
           {stories?.slides?.length > 0 && (
             <section className="stories-section">
               <h3>{stories.heading || "Stories activity"}</h3>
-              <div className="stories-grid">
-                {stories.slides.map((story, index) => (
-                  <article
-                    key={`${story.caption}-${index}`}
-                    className="story-card"
-                  >
-                    <div
-                      className="story-cover"
-                      style={{
-                        backgroundImage: story.image
-                          ? `url(${story.image})`
-                          : "none",
-                        backgroundColor: story.image ? "transparent" : "#000",
-                      }}
-                    >
-                      <div className="story-hero-info">
-                        <img
-                          src={hero.profileImage || profile.avatar}
-                          alt={hero.name || profile.name}
-                          className="story-hero-avatar"
-                        />
-                        <span className="story-hero-username">
-                          {hero.name || profile.name}
-                        </span>
+              {(() => {
+                const storiesSlides = stories.slides || [];
+                const currentStoriesIndex = Math.min(storiesCarouselIndex, Math.max(0, storiesSlides.length - 1));
+                
+                return storiesSlides.length > 0 ? (
+                  <div className="carousel-container">
+                    <div className="carousel-wrapper">
+                      <div 
+                        className="carousel-track"
+                        style={{
+                          transform: `translateX(calc(-${currentStoriesIndex * (220 + 16)}px))`
+                        }}
+                      >
+                        {storiesSlides.map((story, index) => (
+                          <article 
+                            key={`${story.caption}-${index}`} 
+                            className={`story-card ${index === currentStoriesIndex ? 'active' : ''}`}
+                          >
+                            <div
+                              className="story-cover"
+                              style={{ 
+                                backgroundImage: story.image ? `url(${story.image})` : "none",
+                                backgroundColor: story.image ? "transparent" : "#000"
+                              }}
+                            >
+                              <div className="story-hero-info">
+                                <img 
+                                  src={hero.profileImage || profile.avatar} 
+                                  alt={hero.name || profile.name}
+                                  className="story-hero-avatar"
+                                />
+                                <span className="story-hero-username">{hero.name || profile.name}</span>
+                              </div>
+                              {(story.caption || story.meta) && (
+                                <div className="story-bottom-overlay">
+                                  <div className="story-bottom-text">
+                                    {story.caption && <p className="story-caption">{story.caption}</p>}
+                                    {story.meta && (() => {
+                                      // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
+                                      const metaText = story.meta.trim();
+                                      // Match pattern: number + "profiles" + rest of text
+                                      const match = metaText.match(/^(\d+)\s*(profiles?)\s*(.+)?/i);
+                                      if (match) {
+                                        const number = match[1];
+                                        const profiles = match[2];
+                                        const status = match[3] ? match[3].trim() : '';
+                                        return (
+                                          <div className="story-meta-formatted">
+                                            <div className="story-meta-line1">
+                                              <svg 
+                                                xmlns="http://www.w3.org/2000/svg" 
+                                                width="18" 
+                                                height="18" 
+                                                viewBox="0 0 24 24" 
+                                                fill="none" 
+                                                stroke="currentColor" 
+                                                strokeWidth="2" 
+                                                strokeLinecap="round" 
+                                                strokeLinejoin="round" 
+                                                className="story-lock-icon"
+                                                aria-hidden="true"
+                                              >
+                                                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                              </svg>
+                                              <span className="story-meta-number">{number}</span>
+                                              <span className="story-meta-profiles">{profiles}</span>
+                                            </div>
+                                            {status && (
+                                              <div className="story-meta-line2">{status}</div>
+                                            )}
+                                          </div>
+                                        );
+                                      }
+                                      // Fallback: display as is
+                                      return <span className="story-meta">{story.meta}</span>;
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        ))}
                       </div>
-                      {(story.caption || story.meta) && (
-                        <div className="story-bottom-overlay">
-                          <span className="story-lock-icon">🔒</span>
-                          <div className="story-bottom-text">
-                            {story.caption && (
-                              <p className="story-caption">{story.caption}</p>
-                            )}
-                            {story.meta && (
-                              <span className="story-meta">{story.meta}</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  </article>
-                ))}
-              </div>
+                  </div>
+                ) : null;
+              })()}
             </section>
           )}
 
-          {revealProfilesCta && (
+          {stories?.slides?.length > 0 && (
             <div className="cta-inline">
-              <button className="primary-btn">{revealProfilesCta}</button>
+              <button className="primary-btn" onClick={scrollToFullReport}>
+                🔍 Reveal Profile
+              </button>
             </div>
           )}
 
-          <section className="screenshots-panel">
-            <h3>{screenshots.heading}</h3>
-            <p>{screenshots.description}</p>
-            <ul>
-              {screenshots.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+          <>
+            <h3 className="screenshots-heading">
+              <span style={{ color: "#f43f3f" }}>Screenshots</span> recovered
+            </h3>
+            <p className="screenshots-description">Our artificial intelligence searches <strong>THE ENTIRE INTERNET</strong> for any mention of you in leaked <strong>photos and screenshots.</strong></p>
+            <ul className="screenshots-list">
+              <li>Among your followers</li>
+              <li>Friends of your followers</li>
+              <li>From those who pretend to be your friend</li>
+              <li>People interested in you</li>
             </ul>
-            <div className="chat-preview">
-              {screenshots.chat.map((bubble, index) => (
-                <div
-                  key={`${bubble.text}-${index}`}
-                  className={`chat-bubble ${
-                    index % 2 === 0 ? "from-me" : "from-them"
-                  } ${bubble.blurred ? "blurred-text" : ""}`}
+            {/* Message bubbles from screenshots.chat data */}
+            {screenshots.chat && screenshots.chat.length > 0 ? (
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'block',
+                  borderRadius: '1rem',
+                  overflow: 'hidden'
+                }}
+              >
+                <img 
+                  src={printMessageBg}
+                  alt="Chat background"
+                  style={{
+                    width: '100%',
+                    height: '230px',
+                    display: 'block',
+                    
+                  }}
+                />
+                <div 
+                  style={{ 
+                    position: 'absolute', 
+                    left: '4%', 
+                    top: '45%', 
+                    zIndex: 4,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '3px'
+                  }}
                 >
-                  {renderSensitiveText(bubble.text, bubble.blurred)}
+                  {screenshots.chat.map((bubble, index) => {
+                    if (!bubble || !bubble.text) return null;
+                    return (
+                      <div 
+                        key={`chat-bubble-${index}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          gap: '12px'
+                        }}
+                      >
+                        <div 
+                          style={{
+                            width: '25px',
+                            height: '25px',
+                            minWidth: '25px',
+                            minHeight: '25px',
+                            borderRadius: '50%',
+                            backgroundSize: 'cover',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundImage: `url(${profileNewPng})`,
+                            filter: 'blur(4px)',
+                            flexShrink: 0,
+                            marginBottom: '8px'
+                          }}
+                        />
+                        <div
+                          style={{
+                            backgroundColor: '#262626',
+                            color: '#eee',
+                            padding: '8px 14px',
+                            borderRadius: index === 0 ? '18px 18px 18px 4px' : index === screenshots.chat.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                            fontSize: '14px',
+                            whiteSpace: 'nowrap',
+                            lineHeight: '1.4',
+                            width: 'fit-content'
+                          }}
+                        >
+                          {bubble.segments ? (
+                            // Render segments with individual blur status
+                            bubble.segments.map((segment, segIndex) => (
+                              <span 
+                                key={`segment-${segIndex}`}
+                                style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                              >
+                                {segment.text}
+                                {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                              </span>
+                            ))
+                          ) : bubble.blurred ? (
+                            // Fallback for old format
+                            <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                          ) : (
+                            <span>{bubble.text}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
+            ) : screenshots.chatHtml ? (
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  display: 'block',
+                  borderRadius: '1rem',
+                  overflow: 'hidden'
+                }}
+              >
+                <img 
+                  src={printMessageBg}
+                  alt="Chat background"
+                  style={{
+                    width: '100%',
+                    height: '250px',
+                    display: 'block',
+                  }}
+                />
+                {/* Fallback: Try to extract messages from chatHtml if chat array is empty */}
+                {(() => {
+                  try {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(screenshots.chatHtml, 'text/html');
+                    const messagesWrapper = doc.querySelector("div.space-y-\\[3px\\], div[class*='space-y']");
+                    const messages = [];
+                    
+                    if (messagesWrapper) {
+                      const spans = messagesWrapper.querySelectorAll('span');
+                      spans.forEach(span => {
+                        const text = span.textContent?.trim();
+                        if (text) {
+                          const isBlurred = span.className?.includes('blur') || false;
+                          messages.push({
+                            segments: [{
+                              text: text,
+                              blurred: isBlurred
+                            }],
+                            text: text,
+                            blurred: isBlurred
+                          });
+                        }
+                      });
+                    }
+                    
+                    if (messages.length > 0) {
+                      return (
+                        <div 
+                          style={{ 
+                            position: 'absolute', 
+                            left: '4%', 
+                            top: '45%', 
+                            zIndex: 4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                          }}
+                        >
+                          {messages.map((bubble, index) => (
+                            <div 
+                              key={`chat-bubble-fallback-${index}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                gap: '12px'
+                              }}
+                            >
+                              <div 
+                                style={{
+                                  width: '25px',
+                                  height: '25px',
+                                  minWidth: '25px',
+                                  minHeight: '25px',
+                                  borderRadius: '50%',
+                                  backgroundSize: 'cover',
+                                  backgroundRepeat: 'no-repeat',
+                                  backgroundImage: `url(${profileNewPng})`,
+                                  filter: 'blur(4px)',
+                                  flexShrink: 0,
+                                  marginBottom: '8px'
+                                }}
+                              />
+                              <div
+                                style={{
+                                  backgroundColor: '#262626',
+                                  color: '#eee',
+                                  padding: '8px 14px',
+                                  borderRadius: index === 0 ? '18px 18px 18px 4px' : index === messages.length - 1 ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                                  fontSize: '14px',
+                                  whiteSpace: 'nowrap',
+                                  lineHeight: '1.4',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                {bubble.segments ? (
+                                  // Render segments with individual blur status
+                                  bubble.segments.map((segment, segIndex) => (
+                                    <span 
+                                      key={`segment-fallback-${segIndex}`}
+                                      style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                                    >
+                                      {segment.text}
+                                      {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                                    </span>
+                                  ))
+                                ) : bubble.blurred ? (
+                                  // Fallback for old format
+                                  <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
+                                ) : (
+                                  <span>{bubble.text}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }
+                  } catch (e) {
+                    console.error('Error parsing chatHtml fallback:', e);
+                  }
+                  return null;
+                })()}
+              </div>
+            ) : null}
+            <p className="screenshots-uncensored">
+              SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE REPORT
+            </p>
+            <div className="cta-inline">
+              <button className="uncensored-screenshots-btn" onClick={scrollToFullReport}>
+                VIEW UNCENSORED SCREENSHOTS
+              </button>
             </div>
-            {screenshots.footer && (
-              <p className="screenshots-footer">{screenshots.footer}</p>
-            )}
             {ctas.secondary && !revealProfilesCta && (
               <div className="cta-inline">
                 <button className="secondary-btn">{ctas.secondary}</button>
               </div>
             )}
-          </section>
+          </>
 
           {alert.title && (
             <section className="alert-panel">
@@ -1640,7 +1957,7 @@ function App() {
             </section>
           )}
           {(addicted.footer || addicted.subfooter || ctas.tertiary) && (
-            <section className="cta-block final">
+            <section id="full-report-section" className="cta-block final">
               {addicted.footer && (
                 <p className="cta-banner">{addicted.footer}</p>
               )}

@@ -1,14 +1,9 @@
 import { launchBrowser } from "./browser.js";
 import { elements } from "./selectors.js";
-import path from "path";
-import { fileURLToPath } from "url";
-import { mkdir, writeFile } from "fs/promises";
+import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
+import { writeFile } from "fs/promises";
 
 const DEBUG_SCRAPE = process.env.DEBUG_SCRAPE === "1";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const SNAPSHOT_DIR = path.join(__dirname, "..", "snapshots");
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -26,28 +21,35 @@ export async function scrape(username, onStep = null) {
   log('✅ New page created');
 
   const runId = `${Date.now()}`;
-  const snapshotBaseDir = path.join(SNAPSHOT_DIR, username || "unknown", runId);
   const steps = [];
   let stepIndex = 0;
+  let snapshotId = null; // Will be set after first save
 
   const captureStep = async (name, meta = {}) => {
     try {
       stepIndex += 1;
       const html = await page.content();
-      await mkdir(snapshotBaseDir, { recursive: true });
-      const fileName = `${String(stepIndex).padStart(2, "0")}-${name}.html`;
-      const filePath = path.join(snapshotBaseDir, fileName);
-      await writeFile(filePath, html, "utf8");
-      const relativePath = path
-        .relative(path.join(__dirname, ".."), filePath)
-        .replace(/\\/g, "/");
+      
+      // Save to MongoDB
+      const result = await saveSnapshotStep(username, runId, name, html, meta);
+      
+      if (!result || !result.snapshotId) {
+        log(`⚠️  Failed to save snapshot step "${name}" to MongoDB`);
+        return null;
+      }
+
+      // Update snapshotId if we got it from first save
+      if (!snapshotId && result.snapshotId) {
+        snapshotId = result.snapshotId;
+      }
+
       const entry = {
         name,
-        htmlPath: `/${relativePath}`,
+        htmlPath: `/api/snapshots/${result.snapshotId}/${name}`, // API endpoint
         meta: { ...meta, capturedAt: new Date().toISOString() },
       };
       steps.push(entry);
-      log(`📝 Snapshot saved for "${name}" -> ${relativePath}`);
+      log(`📝 Snapshot saved for "${name}" to MongoDB (ID: ${result.snapshotId})`);
       
       // Emit step immediately if callback provided (for SSE streaming)
       if (onStep) {
@@ -361,13 +363,24 @@ export async function scrape(username, onStep = null) {
     await browser.close();
     log('✅ Browser closed');
     
+    // Save final result to MongoDB with cards
+    await saveSnapshotResult(username, runId, data, steps);
+    
+    // snapshotId should already be set from captureStep, but verify
+    if (!snapshotId) {
+      const { getSnapshotByRunId } = await import("../utils/mongodb.js");
+      const savedSnapshot = await getSnapshotByRunId(username, runId);
+      snapshotId = savedSnapshot?._id?.toString() || null;
+    }
+    
     // Calculate and log total time
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log(`⏱️  Total scraping time: ${totalTime} seconds`);
     
     return {
       runId,
-      steps,
+      snapshotId, // Include snapshot ID for frontend
+      steps, // Steps already have correct htmlPath
       cards: data,
       totalTime,
     };
