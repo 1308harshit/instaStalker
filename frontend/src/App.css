@@ -1009,10 +1009,7 @@ body {
 .screenshots-panel {
   margin-top: 40px;
   padding: 24px;
-  border-radius: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: #fff;
-  box-shadow: var(--shadow);
+  text-align: center;
 }
 
 .screenshots-footer {
@@ -1023,10 +1020,33 @@ body {
   text-transform: uppercase;
 }
 
+.screenshots-panel h3 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
 .screenshots-panel ul {
-  padding-left: 20px;
+  padding-left: 0;
   margin: 16px 0;
   color: var(--text-light);
+  text-align: left;
+  display: inline-block;
+  list-style: none;
+}
+
+.screenshots-panel ul li {
+  padding-left: 24px;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.screenshots-panel ul li::before {
+  content: "✔";
+  position: absolute;
+  left: 0;
+  color: #22c55e;
+  font-weight: bold;
 }
 
 .chat-preview {

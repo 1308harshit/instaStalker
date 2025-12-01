@@ -928,6 +928,13 @@ function App() {
     });
   };
 
+  const scrollToFullReport = () => {
+    const fullReportSection = document.getElementById("full-report-section");
+    if (fullReportSection) {
+      fullReportSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const handleViewFullReport = async () => {
     // Find the full-report snapshot
     const fullReportStep = snapshots.find((step) => step.name === "full-report");
@@ -1347,7 +1354,9 @@ function App() {
 
           {revealStalkersCta && (
             <div className="cta-inline">
-              <button className="primary-btn">{revealStalkersCta}</button>
+              <button className="primary-btn" onClick={scrollToFullReport}>
+                Reveal Stalker
+              </button>
             </div>
           )}
 
@@ -1407,19 +1416,24 @@ function App() {
             </section>
           )}
 
-          {revealProfilesCta && (
+          {stories?.slides?.length > 0 && (
             <div className="cta-inline">
-              <button className="primary-btn">{revealProfilesCta}</button>
+              <button className="primary-btn" onClick={scrollToFullReport}>
+                🔍 Reveal Profile
+              </button>
             </div>
           )}
 
           <section className="screenshots-panel">
-            <h3>{screenshots.heading}</h3>
-            <p>{screenshots.description}</p>
+            <h3>
+              <span style={{ color: "#f43f3f" }}>Screenshots</span> recovered
+            </h3>
+            <p>Our artificial intelligence searches <strong>THE ENTIRE INTERNET</strong> for any mention of you in leaked <strong>photos and screenshots.</strong></p>
             <ul>
-              {screenshots.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+              <li>Among your followers</li>
+              <li>Friends of your followers</li>
+              <li>From those who pretend to be your friend</li>
+              <li>People interested in you</li>
             </ul>
             <div className="chat-preview">
               {screenshots.chat.map((bubble, index) => (
@@ -1467,7 +1481,7 @@ function App() {
             </section>
           )}
           {(addicted.footer || addicted.subfooter || ctas.tertiary) && (
-            <section className="cta-block final">
+            <section id="full-report-section" className="cta-block final">
               {addicted.footer && (
                 <p className="cta-banner">{addicted.footer}</p>
               )}
