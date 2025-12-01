@@ -1024,6 +1024,14 @@ body {
   font-size: 2rem;
   font-weight: 700;
   margin-bottom: 20px;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .screenshots-panel h3 {
+    font-size: 1.5rem;
+    white-space: nowrap;
+  }
 }
 
 .screenshots-panel ul {
