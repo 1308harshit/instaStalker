@@ -366,33 +366,44 @@ export function parseResultsSnapshot(html) {
       
       if (messageBubbles.length > 0) {
         analysis.screenshots.chat = messageBubbles.map((bubble) => {
-          // Find all spans with text
+          // Find all spans with text - extract segments with individual blur status
           const spans = queryAll(bubble, "span");
-          let fullText = "";
-          let hasBlur = false;
+          const segments = [];
           
-          spans.forEach(span => {
-            const text = clean(span.textContent || "");
-            if (text && text.trim()) {
-              fullText += (fullText ? " " : "") + text.trim();
-            }
-            // Check if span has blur class
-            const spanClass = span.className || "";
-            if (spanClass.includes("blur") || spanClass.includes("blur-sm")) {
-              hasBlur = true;
-            }
-          });
-          
-          // If no spans found, get direct text content
-          if (!fullText || !fullText.trim()) {
-            fullText = clean(bubble.textContent || "");
+          if (spans.length > 0) {
+            spans.forEach(span => {
+              const text = clean(span.textContent || "");
+              if (text && text.trim()) {
+                const spanClass = span.className || "";
+                const isBlurred = spanClass.includes("blur") || spanClass.includes("blur-sm");
+                segments.push({
+                  text: text.trim(),
+                  blurred: isBlurred
+                });
+              }
+            });
           }
           
+          // If no spans found, get direct text content
+          if (segments.length === 0) {
+            const fullText = clean(bubble.textContent || "");
+            if (fullText) {
+              const isBlurred = bubble.className && bubble.className.includes("blur");
+              segments.push({
+                text: fullText.trim(),
+                blurred: isBlurred
+              });
+            }
+          }
+          
+          // Return segments array for this message
           return {
-            text: fullText.trim(),
-            blurred: hasBlur || (bubble.className && bubble.className.includes("blur"))
+            segments: segments.filter(s => s.text && s.text.length > 0),
+            // For backward compatibility, also provide full text and blur status
+            text: segments.map(s => s.text).join(" "),
+            blurred: segments.length > 0 && segments.every(s => s.blurred)
           };
-        }).filter(bubble => bubble.text && bubble.text.length > 0);
+        }).filter(bubble => bubble.segments && bubble.segments.length > 0);
       } else {
         // Fallback: try to find spans directly in messagesWrapper
         const spans = queryAll(messagesWrapper, "span");
@@ -400,9 +411,14 @@ export function parseResultsSnapshot(html) {
           analysis.screenshots.chat = spans.map((span) => {
             const text = clean(span.textContent || "");
             const spanClass = span.className || "";
+            const isBlurred = spanClass.includes("blur") || spanClass.includes("blur-sm");
             return {
+              segments: [{
+                text: text.trim(),
+                blurred: isBlurred
+              }],
               text: text.trim(),
-              blurred: spanClass.includes("blur") || spanClass.includes("blur-sm")
+              blurred: isBlurred
             };
           }).filter(bubble => bubble.text && bubble.text.length > 0);
         }
@@ -413,29 +429,39 @@ export function parseResultsSnapshot(html) {
       if (messageBubbles.length > 0) {
         analysis.screenshots.chat = messageBubbles.map((bubble) => {
           const spans = queryAll(bubble, "span");
-          let fullText = "";
-          let hasBlur = false;
+          const segments = [];
           
-          spans.forEach(span => {
-            const text = clean(span.textContent || "");
-            if (text && text.trim()) {
-              fullText += (fullText ? " " : "") + text.trim();
-            }
-            const spanClass = span.className || "";
-            if (spanClass.includes("blur") || spanClass.includes("blur-sm")) {
-              hasBlur = true;
-            }
-          });
+          if (spans.length > 0) {
+            spans.forEach(span => {
+              const text = clean(span.textContent || "");
+              if (text && text.trim()) {
+                const spanClass = span.className || "";
+                const isBlurred = spanClass.includes("blur") || spanClass.includes("blur-sm");
+                segments.push({
+                  text: text.trim(),
+                  blurred: isBlurred
+                });
+              }
+            });
+          }
           
-          if (!fullText || !fullText.trim()) {
-            fullText = clean(bubble.textContent || "");
+          if (segments.length === 0) {
+            const fullText = clean(bubble.textContent || "");
+            if (fullText) {
+              const isBlurred = bubble.className && bubble.className.includes("blur");
+              segments.push({
+                text: fullText.trim(),
+                blurred: isBlurred
+              });
+            }
           }
           
           return {
-            text: fullText.trim(),
-            blurred: hasBlur || (bubble.className && bubble.className.includes("blur"))
+            segments: segments.filter(s => s.text && s.text.length > 0),
+            text: segments.map(s => s.text).join(" "),
+            blurred: segments.length > 0 && segments.every(s => s.blurred)
           };
-        }).filter(bubble => bubble.text && bubble.text.length > 0);
+        }).filter(bubble => bubble.segments && bubble.segments.length > 0);
       }
     }
   }
@@ -444,17 +470,22 @@ export function parseResultsSnapshot(html) {
   if (!analysis.screenshots.chat || analysis.screenshots.chat.length === 0) {
     const chatWrapper = doc.querySelector("div.space-y-\\[3px\\], div[class*='space-y-\\[3px\\]']");
     if (chatWrapper) {
-      const spans = queryAll(chatWrapper, "span");
-      if (spans.length > 0) {
-        analysis.screenshots.chat = spans.map((span) => {
-          const text = clean(span.textContent || "");
-          const spanClass = span.className || "";
-          return {
-            text: text.trim(),
-            blurred: spanClass.includes("blur") || spanClass.includes("blur-sm")
-          };
-        }).filter(bubble => bubble.text && bubble.text.length > 0);
-      }
+        const spans = queryAll(chatWrapper, "span");
+        if (spans.length > 0) {
+          analysis.screenshots.chat = spans.map((span) => {
+            const text = clean(span.textContent || "");
+            const spanClass = span.className || "";
+            const isBlurred = spanClass.includes("blur") || spanClass.includes("blur-sm");
+            return {
+              segments: [{
+                text: text.trim(),
+                blurred: isBlurred
+              }],
+              text: text.trim(),
+              blurred: isBlurred
+            };
+          }).filter(bubble => bubble.text && bubble.text.length > 0);
+        }
     }
   }
 

@@ -1507,7 +1507,19 @@ function App() {
                             width: 'fit-content'
                           }}
                         >
-                          {bubble.blurred ? (
+                          {bubble.segments ? (
+                            // Render segments with individual blur status
+                            bubble.segments.map((segment, segIndex) => (
+                              <span 
+                                key={`segment-${segIndex}`}
+                                style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                              >
+                                {segment.text}
+                                {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                              </span>
+                            ))
+                          ) : bubble.blurred ? (
+                            // Fallback for old format
                             <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
                           ) : (
                             <span>{bubble.text}</span>
@@ -1550,9 +1562,14 @@ function App() {
                       spans.forEach(span => {
                         const text = span.textContent?.trim();
                         if (text) {
+                          const isBlurred = span.className?.includes('blur') || false;
                           messages.push({
+                            segments: [{
+                              text: text,
+                              blurred: isBlurred
+                            }],
                             text: text,
-                            blurred: span.className?.includes('blur') || false
+                            blurred: isBlurred
                           });
                         }
                       });
@@ -1607,7 +1624,19 @@ function App() {
                                   width: 'fit-content'
                                 }}
                               >
-                                {bubble.blurred ? (
+                                {bubble.segments ? (
+                                  // Render segments with individual blur status
+                                  bubble.segments.map((segment, segIndex) => (
+                                    <span 
+                                      key={`segment-fallback-${segIndex}`}
+                                      style={segment.blurred ? { filter: 'blur(4px)' } : {}}
+                                    >
+                                      {segment.text}
+                                      {segIndex < bubble.segments.length - 1 ? ' ' : ''}
+                                    </span>
+                                  ))
+                                ) : bubble.blurred ? (
+                                  // Fallback for old format
                                   <span style={{ filter: 'blur(4px)' }}>{bubble.text}</span>
                                 ) : (
                                   <span>{bubble.text}</span>
