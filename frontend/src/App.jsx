@@ -1033,6 +1033,7 @@ function App() {
 
     setFullReportLoading(true);
     setScreen(SCREEN.FULL_REPORT);
+    setPaymentCountdown(900); // Reset to 15 minutes when entering full report
 
     try {
       const url = buildSnapshotUrl(fullReportStep.htmlPath);
@@ -2219,7 +2220,7 @@ function App() {
             <div className="full-report-countdown">
               <span>
                 Limited time offer:{" "}
-                <span className="countdown-timer">14:57</span>
+                <span className="countdown-timer">{formatCountdown(paymentCountdown)}</span>
               </span>
             </div>
             <div className="full-report-warning">
@@ -2318,9 +2319,9 @@ function App() {
     );
   };
 
-  // Countdown timer effect for payment page
+  // Countdown timer effect for payment and full report pages
   useEffect(() => {
-    if (screen === SCREEN.PAYMENT && paymentCountdown > 0) {
+    if ((screen === SCREEN.PAYMENT || screen === SCREEN.FULL_REPORT) && paymentCountdown > 0) {
       const timer = setInterval(() => {
         setPaymentCountdown((prev) => {
           if (prev <= 1) return 0;
