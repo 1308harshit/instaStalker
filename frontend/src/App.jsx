@@ -1453,8 +1453,9 @@ function App() {
                   alt="Chat background"
                   style={{
                     width: '100%',
-                    height: 'auto',
-                    display: 'block'
+                    height: '230px',
+                    display: 'block',
+                    
                   }}
                 />
                 <div 
@@ -1532,8 +1533,8 @@ function App() {
                   alt="Chat background"
                   style={{
                     width: '100%',
-                    height: 'auto',
-                    display: 'block'
+                    height: '230px',
+                    display: 'block',
                   }}
                 />
                 {/* Fallback: Try to extract messages from chatHtml if chat array is empty */}
