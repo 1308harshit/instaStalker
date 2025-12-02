@@ -1488,12 +1488,52 @@ function App() {
             </h3>
             {(() => {
               const allCards = slider.cards.length ? slider.cards : cards;
+              
+              // Check if we already have a blurred/locked card
+              const hasBlurredCard = allCards.some(card => 
+                card?.blurImage || (!card?.username && card?.image)
+              );
+              
+              // If no blurred card exists, inject one at a random position
+              let cardsToRender = [...allCards];
+              if (!hasBlurredCard && allCards.length > 0) {
+                // Filter out locked cards and cards without images
+                const availableCards = allCards.filter(card => 
+                  !card?.isLocked && 
+                  !card?.blurImage && 
+                  card?.image && 
+                  card?.username // Must have a username (not already locked/blurred)
+                );
+                
+                if (availableCards.length > 0) {
+                  const randomIndex = Math.floor(Math.random() * (allCards.length + 1));
+                  // Pick a random card from available (non-locked) cards
+                  const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+                  const blurredCard = {
+                    ...randomCard,
+                    blurImage: true,
+                    username: null, // Remove username to trigger blur
+                    image: randomCard.image, // Use the actual image from fetched data
+                  };
+                  cardsToRender.splice(randomIndex, 0, blurredCard);
+                }
+              }
+              
+              // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
+              // to prevent duplicates, while keeping track of original indices
+              const filteredCardsWithIndex = cardsToRender
+                .map((card, originalIndex) => ({ card, originalIndex }))
+                .filter(({ originalIndex }) => {
+                  const isAfterBlurredCard = (originalIndex - 1) > 0 && (originalIndex - 1) % 5 === 0;
+                  return !isAfterBlurredCard;
+                });
+              
               const currentIndex = Math.min(
                 carouselIndex,
-                Math.max(0, allCards.length - 1)
+                Math.max(0, filteredCardsWithIndex.length - 1)
               );
 
-              return allCards.length > 0 ? (
+              return filteredCardsWithIndex.length > 0 ? (
                 <div className="carousel-container">
                   <div className="carousel-wrapper">
                     <div
@@ -1504,9 +1544,35 @@ function App() {
                         }px))`,
                       }}
                     >
-                      {allCards.map((card, index) => {
+                      {filteredCardsWithIndex.map(({ card, originalIndex }, index) => {
                         const imageUrl =
                           card.image || hero.profileImage || profile.avatar;
+                        
+                        // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
+                        // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
+                        const isMultipleOf5 = originalIndex > 0 && originalIndex % 5 === 0;
+                        
+                        if (isMultipleOf5 && imageUrl) {
+                          return (
+                            <article
+                              className={`slider-card slider-card--blurred ${
+                                index === currentIndex ? "active" : ""
+                              }`}
+                              key={`blurred-multiple-5-${index}`}
+                            >
+                              <div
+                                className="slider-image blurred-image"
+                                style={{ backgroundImage: `url(${imageUrl})` }}
+                              />
+                              <div className="blurred-lock">
+                                <span role="img" aria-label="locked">
+                                  🔒
+                                </span>
+                              </div>
+                            </article>
+                          );
+                        }
+                        
                         const isLocked = Boolean(
                           card?.isLocked || card?.title?.includes("🔒")
                         );
