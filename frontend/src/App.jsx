@@ -719,7 +719,15 @@ function App() {
   const buildSnapshotUrl = (htmlPath = "") => {
     if (!htmlPath) return null;
     const normalized = htmlPath.startsWith("/") ? htmlPath : `/${htmlPath}`;
-    return `${SNAPSHOT_BASE}${normalized}`;
+    
+    // If htmlPath already starts with /api/, use it as-is (relative to current domain)
+    // This handles snapshot URLs from backend like /api/snapshots/${id}/${name}
+    if (normalized.startsWith("/api/")) {
+      return normalized;
+    }
+    
+    // Otherwise, prepend SNAPSHOT_BASE (for legacy file-based snapshots)
+    return `${SNAPSHOT_BASE || ""}${normalized}`;
   };
 
   const profileStatsFromState = () => [
