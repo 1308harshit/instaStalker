@@ -1906,14 +1906,12 @@ body {
   list-style: none;
   padding: 0;
   margin: 32px 0 0;
-  text-align: left;
+  text-align: center;
 }
 
 .processing-card ul.processing-list li {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  /* margin-bottom: 18px; */
+  display: block;
+  margin-bottom: 18px;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -1926,9 +1924,17 @@ body {
   transform: translateY(0);
 }
 
-.processing-card ul.processing-list li span {
-  color: #f43f3f;
-  font-weight: 700;
+.processing-card ul.processing-list li p {
+  display: inline;
+  margin: 0;
+}
+
+.processing-card ul.processing-list li .processing-check-icon {
+  display: inline-block;
+  vertical-align: middle;
+  color: #F4364C;
+  margin-right: 8px;
+  margin-bottom: 2px;
 }
 
 .snapshot-content {
