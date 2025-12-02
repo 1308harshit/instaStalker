@@ -627,8 +627,20 @@ function App() {
       : cards;
     if (allCards.length <= 1) return;
 
+    // Calculate filtered cards length (same logic as in render)
+    // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
+    const filteredCards = allCards.filter((card, index) => {
+      const isAfterBlurredCard = (index - 1) > 0 && (index - 1) % 5 === 0;
+      return !isAfterBlurredCard;
+    });
+    
+    if (filteredCards.length <= 1) return;
+
     const interval = setInterval(() => {
-      setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+      setCarouselIndex((prev) => {
+        // Loop: if at last card, jump to first (0)
+        return prev < filteredCards.length - 1 ? prev + 1 : 0;
+      });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);

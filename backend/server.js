@@ -303,30 +303,31 @@ app.get("/api/stalkers", async (req, res) => {
     return res.json({ error: "username required" });
   }
 
+  // Cache check disabled - always start a new scrape for fresh data
   // Check for recent cached snapshot (within last hour)
-  try {
-    const recentSnapshot = await getRecentSnapshot(username, 60); // 60 minutes cache
-    if (recentSnapshot) {
-      log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
-      
-      const cachedSteps = recentSnapshot.steps.map(step => ({
-        name: step.name,
-        htmlPath: `/api/snapshots/${recentSnapshot._id}/${step.name}`,
-        meta: step.meta
-      }));
-      
-      return res.json({
-        cards: recentSnapshot.cards || [],
-        steps: cachedSteps,
-        snapshotId: recentSnapshot._id.toString(),
-        runId: recentSnapshot.runId,
-        cached: true
-      });
-    }
-  } catch (cacheErr) {
-    log(`⚠️  Error checking cache: ${cacheErr.message}`);
-    // Continue with scraping if cache check fails
-  }
+  // try {
+  //   const recentSnapshot = await getRecentSnapshot(username, 60); // 60 minutes cache
+  //   if (recentSnapshot) {
+  //     log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
+  //     
+  //     const cachedSteps = recentSnapshot.steps.map(step => ({
+  //       name: step.name,
+  //       htmlPath: `/api/snapshots/${recentSnapshot._id}/${step.name}`,
+  //       meta: step.meta
+  //     }));
+  //     
+  //     return res.json({
+  //       cards: recentSnapshot.cards || [],
+  //       steps: cachedSteps,
+  //       snapshotId: recentSnapshot._id.toString(),
+  //       runId: recentSnapshot.runId,
+  //       cached: true
+  //     });
+  //   }
+  // } catch (cacheErr) {
+  //   log(`⚠️  Error checking cache: ${cacheErr.message}`);
+  //   // Continue with scraping if cache check fails
+  // }
 
   // Check if client wants SSE streaming (EventSource)
   const acceptHeader = req.headers.accept || '';

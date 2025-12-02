@@ -1745,15 +1745,7 @@ body {
 }
 
 .grid-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
-  background-size: 10px 10px;
+  display: none; /* Hide grid lines, only show scanning animation */
 }
 
 .scan-grid-line {
@@ -1776,16 +1768,7 @@ body {
 
 /* This creates the grid reveal effect */
 .scan-grid-line::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(99, 102, 241, 0.8) 2px, transparent 2px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.8) 2px, transparent 2px);
-  background-size: 12px 12px;
+  display: none; /* Hide grid lines, only show scanning animation */
 }
 
 /* Bright scan line in the middle */
