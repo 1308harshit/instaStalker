@@ -720,10 +720,17 @@ function App() {
     if (!htmlPath) return null;
     const normalized = htmlPath.startsWith("/") ? htmlPath : `/${htmlPath}`;
     
-    // If htmlPath already starts with /api/, use it as-is (relative to current domain)
-    // This handles snapshot URLs from backend like /api/snapshots/${id}/${name}
+    // If htmlPath starts with /api/, check if we should use relative or absolute URL
     if (normalized.startsWith("/api/")) {
-      return normalized;
+      // If SNAPSHOT_BASE is explicitly empty string (production with Nginx), use relative path
+      // Otherwise use SNAPSHOT_BASE (which defaults to API_BASE for local dev)
+      const envSnapshotBase = import.meta.env.VITE_SNAPSHOT_BASE?.trim();
+      if (envSnapshotBase === "") {
+        // Explicitly empty in .env (production) - use relative path
+        return normalized;
+      }
+      // Has value or undefined (local dev) - prepend SNAPSHOT_BASE
+      return `${SNAPSHOT_BASE}${normalized}`;
     }
     
     // Otherwise, prepend SNAPSHOT_BASE (for legacy file-based snapshots)
