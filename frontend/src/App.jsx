@@ -656,7 +656,6 @@ function App() {
       return;
     }
     let index = 0;
-    let toggle = 0;
 
     const schedule = (wait) => {
       notificationTimerRef.current = setTimeout(() => {
@@ -672,16 +671,36 @@ function App() {
         }
 
         if (item) {
-          pushToast(`${item.username} visited your profile`, item.image);
+          // Array of 4 different notification message templates
+          const messageTemplates = [
+            () => `${item.username} visited your profile`,
+            () => `${item.username} took a screenshot of your profile`,
+            () => {
+              const messageCount = randBetween(1, 5);
+              return `${item.username} mentioned you in ${messageCount} message${messageCount > 1 ? 's' : ''}`;
+            },
+            () => {
+              const visitCount = randBetween(5, 10);
+              const dayCount = randBetween(2, 5);
+              return `${item.username} visited your profile ${visitCount} times in the last ${dayCount} days`;
+            }
+          ];
+          
+          // Randomly select one of the message templates
+          const randomTemplate = messageTemplates[randBetween(0, messageTemplates.length - 1)];
+          const message = randomTemplate();
+          
+          pushToast(message, item.image);
         }
 
-        toggle = toggle === 0 ? 1 : 0;
-        const nextDelay = toggle === 0 ? 7000 : 10000;
+        // Random interval between 15-20 seconds
+        const nextDelay = randBetween(15000, 20000);
         schedule(nextDelay);
       }, wait);
     };
 
-    schedule(100000);
+    // Start with a random delay between 15-20 seconds
+    schedule(randBetween(15000, 20000));
     return () => clearTimeout(notificationTimerRef.current);
   }, [screen, notifications]);
 
@@ -705,7 +724,7 @@ function App() {
     toastTimers.current[id] = setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
       delete toastTimers.current[id];
-    }, 7000);
+    }, 5000);
   };
 
   const checkSnapshotExists = async (username, timestamp, fileName) => {
