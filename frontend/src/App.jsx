@@ -627,8 +627,20 @@ function App() {
       : cards;
     if (allCards.length <= 1) return;
 
+    // Calculate filtered cards length (same logic as in render)
+    // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
+    const filteredCards = allCards.filter((card, index) => {
+      const isAfterBlurredCard = (index - 1) > 0 && (index - 1) % 5 === 0;
+      return !isAfterBlurredCard;
+    });
+    
+    if (filteredCards.length <= 1) return;
+
     const interval = setInterval(() => {
-      setCarouselIndex((prev) => (prev < allCards.length - 1 ? prev + 1 : 0));
+      setCarouselIndex((prev) => {
+        // Loop: if at last card, jump to first (0)
+        return prev < filteredCards.length - 1 ? prev + 1 : 0;
+      });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
@@ -656,7 +668,6 @@ function App() {
       return;
     }
     let index = 0;
-    let toggle = 0;
 
     const schedule = (wait) => {
       notificationTimerRef.current = setTimeout(() => {
@@ -672,16 +683,36 @@ function App() {
         }
 
         if (item) {
-          pushToast(`${item.username} visited your profile`, item.image);
+          // Array of 4 different notification message templates
+          const messageTemplates = [
+            () => `${item.username} visited your profile`,
+            () => `${item.username} took a screenshot of your profile`,
+            () => {
+              const messageCount = randBetween(1, 5);
+              return `${item.username} mentioned you in ${messageCount} message${messageCount > 1 ? 's' : ''}`;
+            },
+            () => {
+              const visitCount = randBetween(5, 10);
+              const dayCount = randBetween(2, 5);
+              return `${item.username} visited your profile ${visitCount} times in the last ${dayCount} days`;
+            }
+          ];
+          
+          // Randomly select one of the message templates
+          const randomTemplate = messageTemplates[randBetween(0, messageTemplates.length - 1)];
+          const message = randomTemplate();
+          
+          pushToast(message, item.image);
         }
 
-        toggle = toggle === 0 ? 1 : 0;
-        const nextDelay = toggle === 0 ? 7000 : 10000;
+        // Random interval between 15-20 seconds
+        const nextDelay = randBetween(15000, 20000);
         schedule(nextDelay);
       }, wait);
     };
 
-    schedule(100000);
+    // Start with a random delay between 15-20 seconds
+    schedule(randBetween(15000, 20000));
     return () => clearTimeout(notificationTimerRef.current);
   }, [screen, notifications]);
 
@@ -705,7 +736,7 @@ function App() {
     toastTimers.current[id] = setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
       delete toastTimers.current[id];
-    }, 7000);
+    }, 5000);
   };
 
   const checkSnapshotExists = async (username, timestamp, fileName) => {
@@ -1355,15 +1386,14 @@ function App() {
             {hero.visitors?.length > 0 && (
               <div className="hero-visitors">
                 <div className="visitor-stack">
-                  {hero.visitors.slice(0, 6).map((visitor, index) => (
-                    <div className="visitor-item" key={index}>
-                      {index % 2 !== 0 ? (
+                  {hero.visitors.map((visitor, index) => (
+                    <div className="visitor-item" key={`visitor-${index}-${visitor.isLocked ? 'locked' : 'visible'}`}>
+                      {visitor.isLocked ? (
                         <div className="locked-circle">
                           <span className="visitor-stack-lock-icon">🔒</span>
                         </div>
                       ) : (
                         <img
-                          key={`${visitor.alt}-${index}`}
                           src={visitor.image}
                           alt={visitor.alt || `visitor-${index + 1}`}
                         />
@@ -1372,7 +1402,7 @@ function App() {
                   ))}
                 </div>
                 <small className="hero-visitors-views">
-                  <strong>8 people&nbsp;</strong>visited your profile this week
+                  <strong>{hero.visitors.length} people&nbsp;</strong>visited your profile this week
                 </small>
               </div>
             )}
@@ -1470,12 +1500,52 @@ function App() {
             </h3>
             {(() => {
               const allCards = slider.cards.length ? slider.cards : cards;
+              
+              // Check if we already have a blurred/locked card
+              const hasBlurredCard = allCards.some(card => 
+                card?.blurImage || (!card?.username && card?.image)
+              );
+              
+              // If no blurred card exists, inject one at a random position
+              let cardsToRender = [...allCards];
+              if (!hasBlurredCard && allCards.length > 0) {
+                // Filter out locked cards and cards without images
+                const availableCards = allCards.filter(card => 
+                  !card?.isLocked && 
+                  !card?.blurImage && 
+                  card?.image && 
+                  card?.username // Must have a username (not already locked/blurred)
+                );
+                
+                if (availableCards.length > 0) {
+                  const randomIndex = Math.floor(Math.random() * (allCards.length + 1));
+                  // Pick a random card from available (non-locked) cards
+                  const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+                  const blurredCard = {
+                    ...randomCard,
+                    blurImage: true,
+                    username: null, // Remove username to trigger blur
+                    image: randomCard.image, // Use the actual image from fetched data
+                  };
+                  cardsToRender.splice(randomIndex, 0, blurredCard);
+                }
+              }
+              
+              // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
+              // to prevent duplicates, while keeping track of original indices
+              const filteredCardsWithIndex = cardsToRender
+                .map((card, originalIndex) => ({ card, originalIndex }))
+                .filter(({ originalIndex }) => {
+                  const isAfterBlurredCard = (originalIndex - 1) > 0 && (originalIndex - 1) % 5 === 0;
+                  return !isAfterBlurredCard;
+                });
+              
               const currentIndex = Math.min(
                 carouselIndex,
-                Math.max(0, allCards.length - 1)
+                Math.max(0, filteredCardsWithIndex.length - 1)
               );
 
-              return allCards.length > 0 ? (
+              return filteredCardsWithIndex.length > 0 ? (
                 <div className="carousel-container">
                   <div className="carousel-wrapper">
                     <div
@@ -1486,9 +1556,35 @@ function App() {
                         }px))`,
                       }}
                     >
-                      {allCards.map((card, index) => {
+                      {filteredCardsWithIndex.map(({ card, originalIndex }, index) => {
                         const imageUrl =
                           card.image || hero.profileImage || profile.avatar;
+                        
+                        // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
+                        // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
+                        const isMultipleOf5 = originalIndex > 0 && originalIndex % 5 === 0;
+                        
+                        if (isMultipleOf5 && imageUrl) {
+                          return (
+                            <article
+                              className={`slider-card slider-card--blurred ${
+                                index === currentIndex ? "active" : ""
+                              }`}
+                              key={`blurred-multiple-5-${index}`}
+                            >
+                              <div
+                                className="slider-image blurred-image"
+                                style={{ backgroundImage: `url(${imageUrl})` }}
+                              />
+                              <div className="blurred-lock">
+                                <span role="img" aria-label="locked">
+                                  🔒
+                                </span>
+                              </div>
+                            </article>
+                          );
+                        }
+                        
                         const isLocked = Boolean(
                           card?.isLocked || card?.title?.includes("🔒")
                         );

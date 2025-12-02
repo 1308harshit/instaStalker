@@ -119,12 +119,190 @@ export function parseResultsSnapshot(html) {
       heroWrapper.querySelector("p")?.textContent || ""
     );
 
-    analysis.hero.visitors = queryAll(heroWrapper, 'img[alt^="Visitor"]').map(
-      (img) => ({
-        alt: img.alt,
-        image: img.getAttribute("src") || "",
-      })
+    // Parse visitor stack - find the container that holds all visitor circles
+    // Strategy: Find the text "visited your profile" and look for the visitor stack nearby
+    const visitors = [];
+    
+    // First, try to find visitor stack by looking for the text "visited your profile"
+    const visitorText = findByText(heroWrapper, "small, p, span", (text) => 
+      /visited.*profile/i.test(text)
     );
+    
+    let visitorStack = null;
+    if (visitorText) {
+      // Look for a flex container near this text (usually a sibling or parent)
+      let parent = visitorText.parentElement;
+      while (parent && parent !== heroWrapper) {
+        const flexContainer = parent.querySelector('div[class*="flex"]:not([class*="grid"])');
+        if (flexContainer) {
+          // Check if this container has multiple children that look like visitors
+          const children = Array.from(flexContainer.children);
+          const hasVisitorElements = children.some(child => 
+            child.tagName === 'IMG' || 
+            (child.tagName === 'DIV' && (
+              child.textContent?.includes("🔒") ||
+              child.querySelector('img') ||
+              child.className?.includes("circle") ||
+              child.className?.includes("visitor")
+            ))
+          );
+          if (hasVisitorElements) {
+            visitorStack = flexContainer;
+            break;
+          }
+        }
+        parent = parent.parentElement;
+      }
+    }
+    
+    // Fallback: look for visitor-stack class or flex containers with visitor items
+    if (!visitorStack) {
+      visitorStack = heroWrapper.querySelector(
+        'div[class*="visitor-stack"], div[class*="stack"][class*="flex"]'
+      ) || heroWrapper.querySelector('div.flex');
+    }
+    
+    if (visitorStack) {
+      // Get all direct children of the visitor stack to maintain order
+      const visitorElements = Array.from(visitorStack.children);
+      
+      visitorElements.forEach((element) => {
+        // Check if it's an image (visible visitor)
+        if (element.tagName === 'IMG') {
+          const src = element.getAttribute("src") || "";
+          const alt = element.getAttribute("alt") || "";
+          if (src) {
+            visitors.push({
+              alt: alt || `Visitor ${visitors.length + 1}`,
+              image: src,
+              isLocked: false,
+            });
+          }
+        }
+        // Check if it's a div (could be locked visitor or container)
+        else if (element.tagName === 'DIV') {
+          // Check if this div contains a lock icon
+          const lockSpan = element.querySelector('span');
+          const hasLockIcon = element.textContent?.includes("🔒") || 
+                             (lockSpan && lockSpan.textContent?.includes("🔒")) ||
+                             element.querySelector('svg[class*="lock"]') ||
+                             element.querySelector('[class*="lock-icon"]');
+          
+          // Check for locked circle styling (black background, circular)
+          const style = element.getAttribute("style") || "";
+          const className = element.className || "";
+          const hasBlackBg = style.includes("background") && 
+                            (style.includes("black") || style.includes("#000") || style.includes("rgb(0,0,0)"));
+          const isCircular = className.includes("circle") || 
+                            className.includes("rounded-full") ||
+                            style.includes("border-radius: 50%") ||
+                            style.includes("border-radius:50%");
+          
+          // If it has lock icon or looks like a locked circle, it's a locked visitor
+          if (hasLockIcon || (hasBlackBg && isCircular)) {
+            visitors.push({
+              alt: `Locked Visitor ${visitors.length + 1}`,
+              image: null,
+              isLocked: true,
+            });
+          }
+          // Otherwise, check if it contains an image (nested structure like visitor-item)
+          else {
+            const nestedImg = element.querySelector("img");
+            if (nestedImg) {
+              const src = nestedImg.getAttribute("src") || "";
+              const alt = nestedImg.getAttribute("alt") || "";
+              if (src) {
+                visitors.push({
+                  alt: alt || `Visitor ${visitors.length + 1}`,
+                  image: src,
+                  isLocked: false,
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+    
+    // Fallback: if no visitor stack found, try to find visitors by searching the entire hero section
+    if (visitors.length === 0) {
+      // Find all potential visitor elements in order
+      const heroProfileImage = analysis.hero.profileImage || "";
+      
+      // Look for a container that might hold visitors (usually before or after the visitor summary text)
+      const potentialContainers = queryAll(heroWrapper, 'div.flex, div[class*="flex"]');
+      
+      for (const container of potentialContainers) {
+        const children = Array.from(container.children);
+        // If this container has multiple circular elements (images or divs), it might be the visitor stack
+        const circularElements = children.filter(child => {
+          const isImg = child.tagName === 'IMG';
+          const isDiv = child.tagName === 'DIV';
+          if (isImg) return true;
+          if (isDiv) {
+            const style = child.getAttribute("style") || "";
+            const className = child.className || "";
+            return className.includes("circle") || 
+                   className.includes("rounded-full") ||
+                   style.includes("border-radius: 50%");
+          }
+          return false;
+        });
+        
+        // If we found a container with multiple circular elements, parse it
+        if (circularElements.length >= 3) {
+          children.forEach((element) => {
+            if (element.tagName === 'IMG') {
+              const src = element.getAttribute("src") || "";
+              if (src && src !== heroProfileImage) {
+                visitors.push({
+                  alt: element.getAttribute("alt") || `Visitor ${visitors.length + 1}`,
+                  image: src,
+                  isLocked: false,
+                });
+              }
+            } else if (element.tagName === 'DIV') {
+              const hasLock = element.textContent?.includes("🔒") || 
+                             element.querySelector('span')?.textContent?.includes("🔒");
+              const style = element.getAttribute("style") || "";
+              const className = element.className || "";
+              const isCircular = className.includes("circle") || 
+                                className.includes("rounded-full") ||
+                                style.includes("border-radius: 50%");
+              const hasBlackBg = style.includes("background") && 
+                                (style.includes("black") || style.includes("#000"));
+              
+              if (hasLock && isCircular && hasBlackBg) {
+                visitors.push({
+                  alt: `Locked Visitor ${visitors.length + 1}`,
+                  image: null,
+                  isLocked: true,
+                });
+              } else {
+                // Check for nested image
+                const nestedImg = element.querySelector("img");
+                if (nestedImg) {
+                  const src = nestedImg.getAttribute("src") || "";
+                  if (src && src !== heroProfileImage) {
+                    visitors.push({
+                      alt: nestedImg.getAttribute("alt") || `Visitor ${visitors.length + 1}`,
+                      image: src,
+                      isLocked: false,
+                    });
+                  }
+                }
+              }
+            }
+          });
+          
+          // If we found visitors in this container, stop searching
+          if (visitors.length > 0) break;
+        }
+      }
+    }
+    
+    analysis.hero.visitors = visitors;
   }
 
   const warningBanner = findByText(
