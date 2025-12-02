@@ -7,6 +7,7 @@ import g1Image from "./assets/g1.jpg";
 import g2Image from "./assets/g2.jpg";
 import printMessageBg from "./assets/print-message-new.png";
 import profileNewPng from "./assets/profile-new.png";
+import instaLogo from "./assets/insta-logo.jpeg";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
@@ -630,10 +631,10 @@ function App() {
     // Calculate filtered cards length (same logic as in render)
     // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
     const filteredCards = allCards.filter((card, index) => {
-      const isAfterBlurredCard = (index - 1) > 0 && (index - 1) % 5 === 0;
+      const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
       return !isAfterBlurredCard;
     });
-    
+
     if (filteredCards.length <= 1) return;
 
     const interval = setInterval(() => {
@@ -689,19 +690,24 @@ function App() {
             () => `${item.username} took a screenshot of your profile`,
             () => {
               const messageCount = randBetween(1, 5);
-              return `${item.username} mentioned you in ${messageCount} message${messageCount > 1 ? 's' : ''}`;
+              return `${
+                item.username
+              } mentioned you in ${messageCount} message${
+                messageCount > 1 ? "s" : ""
+              }`;
             },
             () => {
               const visitCount = randBetween(5, 10);
               const dayCount = randBetween(2, 5);
               return `${item.username} visited your profile ${visitCount} times in the last ${dayCount} days`;
-            }
+            },
           ];
-          
+
           // Randomly select one of the message templates
-          const randomTemplate = messageTemplates[randBetween(0, messageTemplates.length - 1)];
+          const randomTemplate =
+            messageTemplates[randBetween(0, messageTemplates.length - 1)];
           const message = randomTemplate();
-          
+
           pushToast(message, item.image);
         }
 
@@ -1283,14 +1289,35 @@ function App() {
           </div>
         </div>
         <h1>{processingStage.title}</h1>
-        <p className="stage-subtitle">{processingStage.subtitle}</p>
+        <p className="stage-subtitle-analysis">
+          Our robots are analyzing{" "}
+          <strong className="strong-red">the behavior of your followers</strong>
+          {/* {processingStage.subtitle} */}
+        </p>
         <ul className="processing-list">
           {processingStage.bullets.map((message, index) => (
             <li
               key={`${message}-${index}`}
               className={index <= processingMessageIndex ? "visible" : ""}
             >
-              <span>✔</span>
+              <span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-circle-check-big inline-flex text-[#F4364C] mr-2 mb-[2px]"
+                  aria-hidden="true"
+                >
+                  <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
+                  <path d="m9 11 3 3L22 4"></path>
+                </svg>
+              </span>
               <p>{message}</p>
             </li>
           ))}
@@ -1387,7 +1414,12 @@ function App() {
               <div className="hero-visitors">
                 <div className="visitor-stack">
                   {hero.visitors.map((visitor, index) => (
-                    <div className="visitor-item" key={`visitor-${index}-${visitor.isLocked ? 'locked' : 'visible'}`}>
+                    <div
+                      className="visitor-item"
+                      key={`visitor-${index}-${
+                        visitor.isLocked ? "locked" : "visible"
+                      }`}
+                    >
                       {visitor.isLocked ? (
                         <div className="locked-circle">
                           <span className="visitor-stack-lock-icon">🔒</span>
@@ -1402,7 +1434,8 @@ function App() {
                   ))}
                 </div>
                 <small className="hero-visitors-views">
-                  <strong>{hero.visitors.length} people&nbsp;</strong>visited your profile this week
+                  <strong>{hero.visitors.length} people&nbsp;</strong>visited
+                  your profile this week
                 </small>
               </div>
             )}
@@ -1500,27 +1533,33 @@ function App() {
             </h3>
             {(() => {
               const allCards = slider.cards.length ? slider.cards : cards;
-              
+
               // Check if we already have a blurred/locked card
-              const hasBlurredCard = allCards.some(card => 
-                card?.blurImage || (!card?.username && card?.image)
+              const hasBlurredCard = allCards.some(
+                (card) => card?.blurImage || (!card?.username && card?.image)
               );
-              
+
               // If no blurred card exists, inject one at a random position
               let cardsToRender = [...allCards];
               if (!hasBlurredCard && allCards.length > 0) {
                 // Filter out locked cards and cards without images
-                const availableCards = allCards.filter(card => 
-                  !card?.isLocked && 
-                  !card?.blurImage && 
-                  card?.image && 
-                  card?.username // Must have a username (not already locked/blurred)
+                const availableCards = allCards.filter(
+                  (card) =>
+                    !card?.isLocked &&
+                    !card?.blurImage &&
+                    card?.image &&
+                    card?.username // Must have a username (not already locked/blurred)
                 );
-                
+
                 if (availableCards.length > 0) {
-                  const randomIndex = Math.floor(Math.random() * (allCards.length + 1));
+                  const randomIndex = Math.floor(
+                    Math.random() * (allCards.length + 1)
+                  );
                   // Pick a random card from available (non-locked) cards
-                  const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+                  const randomCard =
+                    availableCards[
+                      Math.floor(Math.random() * availableCards.length)
+                    ];
                   const blurredCard = {
                     ...randomCard,
                     blurImage: true,
@@ -1530,16 +1569,17 @@ function App() {
                   cardsToRender.splice(randomIndex, 0, blurredCard);
                 }
               }
-              
+
               // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
               // to prevent duplicates, while keeping track of original indices
               const filteredCardsWithIndex = cardsToRender
                 .map((card, originalIndex) => ({ card, originalIndex }))
                 .filter(({ originalIndex }) => {
-                  const isAfterBlurredCard = (originalIndex - 1) > 0 && (originalIndex - 1) % 5 === 0;
+                  const isAfterBlurredCard =
+                    originalIndex - 1 > 0 && (originalIndex - 1) % 5 === 0;
                   return !isAfterBlurredCard;
                 });
-              
+
               const currentIndex = Math.min(
                 carouselIndex,
                 Math.max(0, filteredCardsWithIndex.length - 1)
@@ -1556,139 +1596,146 @@ function App() {
                         }px))`,
                       }}
                     >
-                      {filteredCardsWithIndex.map(({ card, originalIndex }, index) => {
-                        const imageUrl =
-                          card.image || hero.profileImage || profile.avatar;
-                        
-                        // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
-                        // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
-                        const isMultipleOf5 = originalIndex > 0 && originalIndex % 5 === 0;
-                        
-                        if (isMultipleOf5 && imageUrl) {
-                          return (
-                            <article
-                              className={`slider-card slider-card--blurred ${
-                                index === currentIndex ? "active" : ""
-                              }`}
-                              key={`blurred-multiple-5-${index}`}
-                            >
-                              <div
-                                className="slider-image blurred-image"
-                                style={{ backgroundImage: `url(${imageUrl})` }}
-                              />
-                              <div className="blurred-lock">
-                                <span role="img" aria-label="locked">
-                                  🔒
-                                </span>
-                              </div>
-                            </article>
-                          );
-                        }
-                        
-                        const isLocked = Boolean(
-                          card?.isLocked || card?.title?.includes("🔒")
-                        );
-                        const shouldBlurImage = Boolean(
-                          card?.blurImage || (!card?.username && imageUrl)
-                        );
-                        const lockText =
-                          card?.lockText ||
-                          card?.lines?.[0]?.text ||
-                          card?.title ||
-                          "Profile locked";
-                        const showLines =
-                          !isLocked &&
-                          !shouldBlurImage &&
-                          Array.isArray(card?.lines) &&
-                          card.lines.length > 0;
+                      {filteredCardsWithIndex.map(
+                        ({ card, originalIndex }, index) => {
+                          const imageUrl =
+                            card.image || hero.profileImage || profile.avatar;
 
-                        if (isLocked) {
-                          return (
-                            <article
-                              className={`slider-card slider-card--locked ${
-                                index === currentIndex ? "active" : ""
-                              }`}
-                              key={`locked-${card?.username || index}`}
-                            >
-                              <div className="lock-overlay">
-                                <span className="lock-icon">🔒</span>
-                                <p className="lock-text">
-                                  {renderSensitiveText(
-                                    lockText,
-                                    card.lockTextBlurred
-                                  )}
-                                </p>
-                              </div>
-                            </article>
-                          );
-                        }
+                          // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
+                          // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
+                          const isMultipleOf5 =
+                            originalIndex > 0 && originalIndex % 5 === 0;
 
-                        if (shouldBlurImage && imageUrl) {
-                          return (
-                            <article
-                              className={`slider-card slider-card--blurred ${
-                                index === currentIndex ? "active" : ""
-                              }`}
-                              key={`blurred-${card?.username || index}`}
-                            >
-                              <div
-                                className="slider-image blurred-image"
-                                style={{ backgroundImage: `url(${imageUrl})` }}
-                              />
-                              <div className="blurred-lock">
-                                <span role="img" aria-label="locked">
-                                  🔒
-                                </span>
-                              </div>
-                            </article>
-                          );
-                        }
+                          if (isMultipleOf5 && imageUrl) {
+                            return (
+                              <article
+                                className={`slider-card slider-card--blurred ${
+                                  index === currentIndex ? "active" : ""
+                                }`}
+                                key={`blurred-multiple-5-${index}`}
+                              >
+                                <div
+                                  className="slider-image blurred-image"
+                                  style={{
+                                    backgroundImage: `url(${imageUrl})`,
+                                  }}
+                                />
+                                <div className="blurred-lock">
+                                  <span role="img" aria-label="locked">
+                                    🔒
+                                  </span>
+                                </div>
+                              </article>
+                            );
+                          }
 
-                        return (
-                          <article
-                            className={`slider-card ${
-                              index === currentIndex ? "active" : ""
-                            }`}
-                            key={`${card.title}-${index}`}
-                          >
-                            <div
-                              className="slider-image"
-                              style={{
-                                backgroundImage: imageUrl
-                                  ? `url(${imageUrl})`
-                                  : "none",
-                                backgroundColor: imageUrl
-                                  ? "transparent"
-                                  : "#f5f5f5",
-                              }}
-                            />
-                            <div className="slider-card-content">
-                              {card?.username && (
-                                <h4 className="username">{card.username}</h4>
-                              )}
-                              {showLines &&
-                                card.lines.map((line, idx) => (
-                                  <p
-                                    key={`${line.text}-${idx}`}
-                                    className={
-                                      line.blurred ? "blurred-text" : ""
-                                    }
-                                  >
+                          const isLocked = Boolean(
+                            card?.isLocked || card?.title?.includes("🔒")
+                          );
+                          const shouldBlurImage = Boolean(
+                            card?.blurImage || (!card?.username && imageUrl)
+                          );
+                          const lockText =
+                            card?.lockText ||
+                            card?.lines?.[0]?.text ||
+                            card?.title ||
+                            "Profile locked";
+                          const showLines =
+                            !isLocked &&
+                            !shouldBlurImage &&
+                            Array.isArray(card?.lines) &&
+                            card.lines.length > 0;
+
+                          if (isLocked) {
+                            return (
+                              <article
+                                className={`slider-card slider-card--locked ${
+                                  index === currentIndex ? "active" : ""
+                                }`}
+                                key={`locked-${card?.username || index}`}
+                              >
+                                <div className="lock-overlay">
+                                  <span className="lock-icon">🔒</span>
+                                  <p className="lock-text">
                                     {renderSensitiveText(
-                                      line.text,
-                                      line.blurred
+                                      lockText,
+                                      card.lockTextBlurred
                                     )}
                                   </p>
-                                ))}
-                              {card?.badge && (
-                                <span className="slider-badge">
-                                  {card.badge}
-                                </span>
-                              )}
-                            </div>
-                          </article>
-                        );
-                      })}
+                                </div>
+                              </article>
+                            );
+                          }
+
+                          if (shouldBlurImage && imageUrl) {
+                            return (
+                              <article
+                                className={`slider-card slider-card--blurred ${
+                                  index === currentIndex ? "active" : ""
+                                }`}
+                                key={`blurred-${card?.username || index}`}
+                              >
+                                <div
+                                  className="slider-image blurred-image"
+                                  style={{
+                                    backgroundImage: `url(${imageUrl})`,
+                                  }}
+                                />
+                                <div className="blurred-lock">
+                                  <span role="img" aria-label="locked">
+                                    🔒
+                                  </span>
+                                </div>
+                              </article>
+                            );
+                          }
+
+                          return (
+                            <article
+                              className={`slider-card ${
+                                index === currentIndex ? "active" : ""
+                              }`}
+                              key={`${card.title}-${index}`}
+                            >
+                              <div
+                                className="slider-image"
+                                style={{
+                                  backgroundImage: imageUrl
+                                    ? `url(${imageUrl})`
+                                    : "none",
+                                  backgroundColor: imageUrl
+                                    ? "transparent"
+                                    : "#f5f5f5",
+                                }}
+                              />
+                              <div className="slider-card-content">
+                                {card?.username && (
+                                  <h4 className="username">{card.username}</h4>
+                                )}
+                                {showLines &&
+                                  card.lines.map((line, idx) => (
+                                    <p
+                                      key={`${line.text}-${idx}`}
+                                      className={
+                                        line.blurred ? "blurred-text" : ""
+                                      }
+                                    >
+                                      {renderSensitiveText(
+                                        line.text,
+                                        line.blurred
+                                      )}
+                                    </p>
+                                  ))}
+                                {card?.badge && (
+                                  <span className="slider-badge">
+                                    {card.badge}
+                                  </span>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        }
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2167,7 +2214,10 @@ function App() {
                 <p className="cta-banner">{addicted.footer}</p>
               )}
               {ctas.tertiary && (
-                <button className="primary-btn cta-eye-btn" onClick={handleViewFullReport}>
+                <button
+                  className="primary-btn cta-eye-btn"
+                  onClick={handleViewFullReport}
+                >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -2187,7 +2237,11 @@ function App() {
                   {ctas.tertiary}
                 </button>
               )}
-              {addicted.subfooter && <small className="small-text-footer-sub">{addicted.subfooter}</small>}
+              {addicted.subfooter && (
+                <small className="small-text-footer-sub">
+                  {addicted.subfooter}
+                </small>
+              )}
             </section>
           )}
 
@@ -2257,25 +2311,29 @@ function App() {
           <div className="full-report-features">
             <div className="full-report-feature-card">
               <div className="full-report-feature-icon">
-              <h3>🔍Story Repeats</h3></div>
+                <h3>🔍Story Repeats</h3>
+              </div>
               <p>People who viewed and re-viewed your stories</p>
             </div>
 
             <div className="full-report-feature-card">
               <div className="full-report-feature-icon">
-              <h3>🔍Visit Tracking</h3></div>
+                <h3>🔍Visit Tracking</h3>
+              </div>
               <p>Discover who is visiting your profile</p>
             </div>
 
             <div className="full-report-feature-card">
               <div className="full-report-feature-icon">
-              <h3>🔍Mention Tracking</h3></div>
+                <h3>🔍Mention Tracking</h3>
+              </div>
               <p>Find out which followers talk about you the most</p>
             </div>
 
             <div className="full-report-feature-card">
               <div className="full-report-feature-icon">
-              <h3>🔍Who's Watching You</h3></div>
+                <h3>🔍Who's Watching You</h3>
+              </div>
               <p>See who took SCREENSHOTS of your profile and stories</p>
             </div>
           </div>
@@ -2316,7 +2374,9 @@ function App() {
             <div className="full-report-countdown">
               <span>
                 Limited time offer:{" "}
-                <span className="countdown-timer">{formatCountdown(paymentCountdown)}</span>
+                <span className="countdown-timer">
+                  {formatCountdown(paymentCountdown)}
+                </span>
               </span>
             </div>
             <div className="full-report-warning">
@@ -2343,26 +2403,26 @@ function App() {
                 80% OFF PROMOTION
               </span>
               <div className="full-report-pricing-block">
-              <div className="full-report-pricing-header">
-                <div className="full-report-pricing-left">
-                  <span className="full-report-lock-icon">🔓</span>
-                  <h3>
-                    Complete
-                    <br />
-                    Report
-                  </h3>
+                <div className="full-report-pricing-header">
+                  <div className="full-report-pricing-left">
+                    <span className="full-report-lock-icon">🔓</span>
+                    <h3>
+                      Complete
+                      <br />
+                      Report
+                    </h3>
+                  </div>
                 </div>
-              </div>
-              <div className="full-report-pricing-details">
-                <p className="full-report-original-price">
-                  from <span className="strikethrough">1299₹</span> for:
-                </p>
-                <p className="full-report-current-price">
-                  <span className="price-number">199</span>{" "}
-                  <span className="price-currency">₹</span>
-                </p>
-                <p className="full-report-payment-type">one-time payment</p>
-              </div>
+                <div className="full-report-pricing-details">
+                  <p className="full-report-original-price">
+                    from <span className="strikethrough">₹1299</span> for:
+                  </p>
+                  <p className="full-report-current-price">
+                    <span className="price-currency">₹</span>{" "}
+                    <span className="price-number">199</span>
+                  </p>
+                  <p className="full-report-payment-type">one-time payment</p>
+                </div>
               </div>
             </div>
 
@@ -2390,7 +2450,7 @@ function App() {
               onClick={() => {
                 setScreen(SCREEN.PAYMENT);
                 // Scroll to top of page
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             >
               I want the complete report
@@ -2424,13 +2484,16 @@ function App() {
   // Scroll to top when navigating to payment page
   useEffect(() => {
     if (screen === SCREEN.PAYMENT) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [screen]);
 
   // Countdown timer effect for payment and full report pages
   useEffect(() => {
-    if ((screen === SCREEN.PAYMENT || screen === SCREEN.FULL_REPORT) && paymentCountdown > 0) {
+    if (
+      (screen === SCREEN.PAYMENT || screen === SCREEN.FULL_REPORT) &&
+      paymentCountdown > 0
+    ) {
       const timer = setInterval(() => {
         setPaymentCountdown((prev) => {
           if (prev <= 1) return 0;
@@ -2572,21 +2635,21 @@ function App() {
     // Indian reviews/testimonials
     const reviews = [
       {
-        name: "Priya Sharma",
+        name: "Anya Aggarwal",
         rating: 5,
-        text: "I discovered I had 3 secret admirers lol, I loved it!",
+        text: "Bechara! It showed my ex is taking screenshots of my story every time I post, and I even discovered the name of his fake account lol,",
         avatar: g1Image,
       },
       {
-        name: "Rahul Patel",
+        name: "Aditya Reddy",
         rating: 5,
-        text: "Worse still, it's true lol, it showed that my ex is looking at my profile every day, and I even discovered the name of his fake account lol, whoever created this app is brilliant",
+        text: "Bruh 😭 I literally found out my ex's cousin was watching all my stories secretly. This app exposed everyone 😂🔥",
         avatar: b1Image,
       },
       {
-        name: "Anjali Mehta",
+        name: "Suhani Kedia",
         rating: 5,
-        text: "This app is amazing! Found out who's been stalking my profile. Worth every rupee!",
+        text: "I discovered my ex's 3 best friends were stalking my profile daily",
         avatar: g2Image,
       },
     ];
@@ -2680,7 +2743,7 @@ function App() {
 
               {/* Guarantee Section */}
               <div className="payment-guarantee">
-                <div className="guarantee-icon">✓</div>
+                <div>✅</div>
                 <div className="guarantee-content">
                   <h4>14-Day Money-Back Guarantee</h4>
                   <p>
@@ -2693,12 +2756,8 @@ function App() {
               {/* Urgency Countdown */}
               <div className="payment-urgency">
                 <div className="urgency-icon">⚠️</div>
-                <div className="urgency-content">
-                  <p>Your report expires in</p>
-                  <div className="urgency-timer">
-                    {formatCountdown(paymentCountdown)}
-                  </div>
-                </div>
+                  <p>Your report expires in &nbsp;
+                    {formatCountdown(paymentCountdown)}</p>
               </div>
 
               {/* Reviews */}
@@ -2731,7 +2790,7 @@ function App() {
 
                 {/* Product Item */}
                 <div className="order-item">
-                  <div className="order-item-icon">📱</div>
+                  <div className="order-item-icon"><img src={instaLogo} alt="Instagram" height="80px" width="70px" /></div>
                   <div className="order-item-details">
                     <div className="order-item-name">
                       Unlock Insta Full Report
@@ -2762,7 +2821,7 @@ function App() {
                 {/* Price Breakdown */}
                 <div className="order-breakdown">
                   <div className="breakdown-row">
-                    <span>Retail price</span>
+                    <span className="breakdown-row-text">Retail price</span>
                     <span className="strikethrough">
                       ₹{(originalPrice * quantity).toLocaleString("en-IN")}
                     </span>
