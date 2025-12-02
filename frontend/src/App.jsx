@@ -1355,15 +1355,14 @@ function App() {
             {hero.visitors?.length > 0 && (
               <div className="hero-visitors">
                 <div className="visitor-stack">
-                  {hero.visitors.slice(0, 6).map((visitor, index) => (
-                    <div className="visitor-item" key={index}>
-                      {index % 2 !== 0 ? (
+                  {hero.visitors.map((visitor, index) => (
+                    <div className="visitor-item" key={`visitor-${index}-${visitor.isLocked ? 'locked' : 'visible'}`}>
+                      {visitor.isLocked ? (
                         <div className="locked-circle">
                           <span className="visitor-stack-lock-icon">🔒</span>
                         </div>
                       ) : (
                         <img
-                          key={`${visitor.alt}-${index}`}
                           src={visitor.image}
                           alt={visitor.alt || `visitor-${index + 1}`}
                         />
@@ -1372,7 +1371,7 @@ function App() {
                   ))}
                 </div>
                 <small className="hero-visitors-views">
-                  <strong>8 people&nbsp;</strong>visited your profile this week
+                  <strong>{hero.visitors.length} people&nbsp;</strong>visited your profile this week
                 </small>
               </div>
             )}
