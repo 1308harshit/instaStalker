@@ -2387,7 +2387,11 @@ function App() {
           <div className="full-report-cta">
             <button
               className="full-report-cta-button"
-              onClick={() => setScreen(SCREEN.PAYMENT)}
+              onClick={() => {
+                setScreen(SCREEN.PAYMENT);
+                // Scroll to top of page
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
               I want the complete report
             </button>
@@ -2416,6 +2420,13 @@ function App() {
       </section>
     );
   };
+
+  // Scroll to top when navigating to payment page
+  useEffect(() => {
+    if (screen === SCREEN.PAYMENT) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [screen]);
 
   // Countdown timer effect for payment and full report pages
   useEffect(() => {

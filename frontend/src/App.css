@@ -2865,19 +2865,47 @@ body {
     grid-template-columns: 1fr;
     gap: 30px;
     padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .payment-left {
+    display: contents; /* Allows children to be ordered with payment-right */
+  }
+
+  .payment-marketing {
+    order: 1; /* Marketing text appears first */
+  }
+
+  .payment-discount-badge {
+    order: 2; /* 80% OFF badge appears second */
+    font-size: 20px;
+    padding: 14px;
+  }
+
+  .payment-guarantee {
+    order: 3; /* 14-Day Money-Back Guarantee appears third */
+  }
+
+  .payment-urgency {
+    order: 4; /* Timer appears fourth */
+  }
+
+  .payment-form-section {
+    order: 5; /* Contact form appears fifth */
   }
 
   .payment-right {
     position: static;
+    order: 6; /* Order Summary appears sixth */
+  }
+
+  .payment-reviews {
+    order: 7; /* Reviews appear last */
   }
 
   .payment-marketing h2 {
     font-size: 24px;
-  }
-
-  .payment-discount-badge {
-    font-size: 20px;
-    padding: 14px;
   }
 }
 
