@@ -8,6 +8,7 @@ import g2Image from "./assets/g2.jpg";
 import printMessageBg from "./assets/print-message-new.png";
 import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
+import paymentHeader from "./assets/payment-header.jpeg";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
@@ -1300,7 +1301,7 @@ function App() {
               key={`${message}-${index}`}
               className={index <= processingMessageIndex ? "visible" : ""}
             >
-              <span>
+              <p>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="15"
@@ -1308,17 +1309,17 @@ function App() {
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  class="lucide lucide-circle-check-big inline-flex text-[#F4364C] mr-2 mb-[2px]"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="processing-check-icon"
                   aria-hidden="true"
                 >
                   <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
                   <path d="m9 11 3 3L22 4"></path>
                 </svg>
-              </span>
-              <p>{message}</p>
+                {message}
+              </p>
             </li>
           ))}
         </ul>
@@ -2668,6 +2669,11 @@ function App() {
           <div className="payment-content">
             {/* Left Column */}
             <div className="payment-left">
+              {/* Payment Header Image */}
+              <div className="payment-header-image">
+                <img src={paymentHeader} alt="Payment Header" />
+              </div>
+
               {/* Marketing Text */}
               <div className="payment-marketing">
                 <h2>Discover the truth.</h2>
