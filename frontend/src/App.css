@@ -2542,6 +2542,19 @@ body {
   gap: 30px;
 }
 
+/* Payment Header Image */
+.payment-header-image {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.payment-header-image img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  display: block;
+}
+
 /* Marketing Text */
 .payment-marketing {
   text-align: center;
