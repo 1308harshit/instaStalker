@@ -8,6 +8,7 @@ import g2Image from "./assets/g2.jpg";
 import printMessageBg from "./assets/print-message-new.png";
 import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
+import paymentHeader from "./assets/payment-header.jpeg";
 
 const API_URL =
   import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
@@ -2676,6 +2677,11 @@ function App() {
           <div className="payment-content">
             {/* Left Column */}
             <div className="payment-left">
+              {/* Payment Header Image */}
+              <div className="payment-header-image">
+                <img src={paymentHeader} alt="Payment Header" />
+              </div>
+
               {/* Marketing Text */}
               <div className="payment-marketing">
                 <h2>Discover the truth.</h2>
