@@ -1197,7 +1197,7 @@ function App() {
           <p>Our AI searches conversations talking about you.</p>
         </div>
         <div className="inline-card">
-          <h3>Who wants you 🔥</h3>
+          <h3>Who wants you ❤️‍🔥</h3>
           <p>Visits daily, screenshots stories and shares your profile.</p>
         </div>
       </div>
@@ -2187,7 +2187,12 @@ function App() {
 
           {addicted.tiles.length > 0 && (
             <section className="addicted-panel">
-              <h3 dangerouslySetInnerHTML={{ __html: addicted.title }} />
+              <h3 className="addicted-title">
+                <span className="addicted-title-line1">
+                  The <span className="addicted-red">addicted</span> to
+                </span>
+                <span className="addicted-title-line2">you:</span>
+              </h3>
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => (
                   <article key={`${tile.body}-${index}`}>

@@ -1195,7 +1195,7 @@ body {
 
 .blurred-image,
 .slider-card--blurred .slider-image {
-  filter: blur(5px) saturate(0);
+  filter: blur(4px) saturate(0);
   height: 100%;
   min-height: 300px;
   width: 100%;
@@ -1531,6 +1531,37 @@ body {
 
 .addicted-panel {
   margin-top: 40px;
+}
+
+.addicted-title {
+  font-family: sans-serif;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  font-size: 2rem;
+}
+
+.addicted-title-line1 {
+  color: #000;
+  font-weight: bold;
+  display: block;
+}
+
+.addicted-title-line2 {
+  color: #000;
+  font-weight: bold;
+  display: block;
+  text-align: center;
+}
+
+.addicted-red {
+  color: #f43f3f;
+  font-weight: bold;
 }
 
 .addicted-grid {
