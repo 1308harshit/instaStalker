@@ -290,6 +290,8 @@ function App() {
   const analyzingTimerRef = useRef(null);
   const analyzingStartRef = useRef(null);
   const notificationTimerRef = useRef(null);
+  const carouselLoopingRef = useRef(false);
+  const storiesCarouselLoopingRef = useRef(false);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -616,11 +618,12 @@ function App() {
 
   useEffect(() => {
     // Reset carousel when cards or analysis changes
-    setCarouselIndex(0);
-    setStoriesCarouselIndex(0);
+    // Both carousels start at offset 3 (after duplicated items at start)
+    setCarouselIndex(3);
+    setStoriesCarouselIndex(3);
   }, [cards, analysis]);
 
-  // Auto-scroll carousel
+  // Auto-scroll carousel - Infinite loop with duplicates
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
 
@@ -638,27 +641,58 @@ function App() {
 
     if (filteredCards.length <= 1) return;
 
+    // Initialize carousel at offset (after duplicated items at start)
+    const offset = 3;
+    if (carouselIndex < offset && filteredCards.length > 0) {
+      setCarouselIndex(offset);
+    }
+
     const interval = setInterval(() => {
       setCarouselIndex((prev) => {
-        // Loop: if at last card, jump to first (0)
-        return prev < filteredCards.length - 1 ? prev + 1 : 0;
+        const nextIndex = prev + 1;
+        // When we reach duplicated end items, jump to real first items
+        if (nextIndex >= offset + filteredCards.length) {
+          carouselLoopingRef.current = true;
+          setTimeout(() => {
+            carouselLoopingRef.current = false;
+          }, 50);
+          return offset; // Jump to start of second copy
+        }
+        carouselLoopingRef.current = false;
+        return nextIndex;
       });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
   }, [screen, cards, analysis]);
 
-  // Auto-scroll stories carousel
+  // Auto-scroll stories carousel - Infinite loop with duplicates
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
 
     const storiesSlides = analysis?.stories?.slides || [];
     if (storiesSlides.length <= 1) return;
 
+    // Initialize stories carousel at offset 3 (after duplicated items at start)
+    const offset = 3;
+    if (storiesCarouselIndex < offset && storiesSlides.length > 0) {
+      setStoriesCarouselIndex(offset);
+    }
+
     const interval = setInterval(() => {
-      setStoriesCarouselIndex((prev) =>
-        prev < storiesSlides.length - 1 ? prev + 1 : 0
-      );
+      setStoriesCarouselIndex((prev) => {
+        const nextIndex = prev + 1;
+        // When we reach 2x the length, reset to length (seamless jump to second copy)
+        if (nextIndex >= offset + storiesSlides.length) {
+          storiesCarouselLoopingRef.current = true;
+          setTimeout(() => {
+            storiesCarouselLoopingRef.current = false;
+          }, 50);
+          return offset; // Jump to start of second copy
+        }
+        storiesCarouselLoopingRef.current = false;
+        return nextIndex;
+      });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
@@ -1205,7 +1239,7 @@ function App() {
           <p>Our AI searches conversations talking about you.</p>
         </div>
         <div className="inline-card">
-          <h3>Who wants you 🔥</h3>
+          <h3>Who wants you ❤️‍🔥</h3>
           <p>Visits daily, screenshots stories and shares your profile.</p>
         </div>
       </div>
@@ -1589,24 +1623,46 @@ function App() {
                   return !isAfterBlurredCard;
                 });
 
-              const currentIndex = Math.min(
-                carouselIndex,
-                Math.max(0, filteredCardsWithIndex.length - 1)
-              );
+              if (filteredCardsWithIndex.length === 0) return null;
 
-              return filteredCardsWithIndex.length > 0 ? (
+              // Create duplicated array for infinite loop
+              // Last 3 items at start + all original items + first 3 items at end
+              const offset = 3;
+              const duplicatedCards = [
+                ...filteredCardsWithIndex.slice(-offset).map((item, idx) => ({
+                  ...item,
+                  duplicateKey: `start-${idx}`,
+                })),
+                ...filteredCardsWithIndex.map((item, idx) => ({
+                  ...item,
+                  duplicateKey: `original-${idx}`,
+                })),
+                ...filteredCardsWithIndex.slice(0, offset).map((item, idx) => ({
+                  ...item,
+                  duplicateKey: `end-${idx}`,
+                })),
+              ];
+
+              // Use carouselIndex directly (it already includes offset)
+              const displayIndex = carouselIndex;
+
+              return (
                 <div className="carousel-container">
                   <div className="carousel-wrapper">
                     <div
                       className="carousel-track"
                       style={{
                         transform: `translateX(calc(-${
-                          currentIndex * (220 + 16)
+                          displayIndex * (220 + 16)
                         }px))`,
+                        transition: carouselLoopingRef.current
+                          ? 'none'
+                          : 'transform 0.4s ease-in-out',
                       }}
                     >
-                      {filteredCardsWithIndex.map(
-                        ({ card, originalIndex }, index) => {
+                      {duplicatedCards.map(
+                        ({ card, originalIndex, duplicateKey }, index) => {
+                          const isActive = index === displayIndex;
                           const imageUrl =
                             card.image || hero.profileImage || profile.avatar;
 
@@ -1619,9 +1675,9 @@ function App() {
                             return (
                               <article
                                 className={`slider-card slider-card--blurred ${
-                                  index === currentIndex ? "active" : ""
+                                  isActive ? "active" : ""
                                 }`}
-                                key={`blurred-multiple-5-${index}`}
+                                key={`blurred-multiple-5-${duplicateKey}-${index}`}
                               >
                                 <div
                                   className="slider-image blurred-image"
@@ -1659,9 +1715,9 @@ function App() {
                             return (
                               <article
                                 className={`slider-card slider-card--locked ${
-                                  index === currentIndex ? "active" : ""
+                                  isActive ? "active" : ""
                                 }`}
-                                key={`locked-${card?.username || index}`}
+                                key={`locked-${duplicateKey}-${index}`}
                               >
                                 <div className="lock-overlay">
                                   <span className="lock-icon">🔒</span>
@@ -1680,9 +1736,9 @@ function App() {
                             return (
                               <article
                                 className={`slider-card slider-card--blurred ${
-                                  index === currentIndex ? "active" : ""
+                                  isActive ? "active" : ""
                                 }`}
-                                key={`blurred-${card?.username || index}`}
+                                key={`blurred-${duplicateKey}-${index}`}
                               >
                                 <div
                                   className="slider-image blurred-image"
@@ -1702,9 +1758,9 @@ function App() {
                           return (
                             <article
                               className={`slider-card ${
-                                index === currentIndex ? "active" : ""
+                                isActive ? "active" : ""
                               }`}
-                              key={`${card.title}-${index}`}
+                              key={`${card.title}-${duplicateKey}-${index}`}
                             >
                               <div
                                 className="slider-image"
@@ -1743,12 +1799,11 @@ function App() {
                               </div>
                             </article>
                           );
-                        }
-                      )}
+                        })}
                     </div>
                   </div>
                 </div>
-              ) : null;
+              );
             })()}
           </section>
 
@@ -1765,27 +1820,51 @@ function App() {
               <h3>{stories.heading || "Stories activity"}</h3>
               {(() => {
                 const storiesSlides = stories.slides || [];
-                const currentStoriesIndex = Math.min(
-                  storiesCarouselIndex,
-                  Math.max(0, storiesSlides.length - 1)
-                );
+                
+                if (storiesSlides.length === 0) return null;
 
-                return storiesSlides.length > 0 ? (
+                // Create duplicated array for infinite loop
+                // Last 3 items at start + all original items + first 3 items at end
+                const offset = 3;
+                const duplicatedStories = [
+                  ...storiesSlides.slice(-offset).map((story, idx) => ({
+                    ...story,
+                    duplicateKey: `start-${idx}`,
+                  })),
+                  ...storiesSlides.map((story, idx) => ({
+                    ...story,
+                    duplicateKey: `original-${idx}`,
+                  })),
+                  ...storiesSlides.slice(0, offset).map((story, idx) => ({
+                    ...story,
+                    duplicateKey: `end-${idx}`,
+                  })),
+                ];
+
+                // Use storiesCarouselIndex directly (it already includes offset)
+                const displayStoriesIndex = storiesCarouselIndex;
+
+                return (
                   <div className="carousel-container">
                     <div className="carousel-wrapper">
                       <div
                         className="carousel-track"
                         style={{
                           transform: `translateX(calc(-${
-                            currentStoriesIndex * (220 + 16)
+                            displayStoriesIndex * (220 + 16)
                           }px))`,
+                          transition: storiesCarouselLoopingRef.current
+                            ? 'none'
+                            : 'transform 0.4s ease-in-out',
                         }}
                       >
-                        {storiesSlides.map((story, index) => (
+                        {duplicatedStories.map((story, index) => {
+                          const isActive = index === displayStoriesIndex;
+                          return (
                           <article
-                            key={`${story.caption}-${index}`}
+                            key={`${story.caption}-${story.duplicateKey}-${index}`}
                             className={`story-card ${
-                              index === currentStoriesIndex ? "active" : ""
+                              isActive ? "active" : ""
                             }`}
                           >
                             <div
@@ -1884,11 +1963,12 @@ function App() {
                               )}
                             </div>
                           </article>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
-                ) : null;
+                );
               })()}
             </section>
           )}
