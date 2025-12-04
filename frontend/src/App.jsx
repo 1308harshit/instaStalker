@@ -1369,6 +1369,18 @@ function App() {
     </section>
   );
 
+  // Helper function to format addicted title with red "addicted" word
+  const formatAddictedTitle = (title) => {
+    if (!title) return null;
+    const parts = title.split(/(addicted)/i);
+    return parts.map((part, index) => {
+      if (part.toLowerCase() === 'addicted') {
+        return <span key={index} className="addicted-red">{part}</span>;
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   const renderPreview = () => {
     if (analysisLoading && !analysis) {
       return (
@@ -2275,7 +2287,7 @@ function App() {
 
           {addicted.tiles.length > 0 && (
             <section className="addicted-panel">
-              <h3 dangerouslySetInnerHTML={{ __html: addicted.title }} />
+              <h3>{formatAddictedTitle(addicted.title)}</h3>
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => (
                   <article key={`${tile.body}-${index}`}>
