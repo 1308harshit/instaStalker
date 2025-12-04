@@ -1,4 +1,4 @@
-import { launchBrowser } from "./browser.js";
+import { browserPool } from "./browserPool.js";
 import { elements } from "./selectors.js";
 import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
 import { writeFile } from "fs/promises";
@@ -14,11 +14,9 @@ export async function scrape(username, onStep = null) {
   const startTime = Date.now();
   log(`🚀 Starting scrape for username: ${username}`);
   
-  const browser = await launchBrowser();
-  log('✅ Browser launched');
-  
-  const page = await browser.newPage();
-  log('✅ New page created');
+  // Use shared browser pool - creates new page from existing browser instance
+  const page = await browserPool.createPage();
+  log('✅ New page created from shared browser');
 
   const runId = `${Date.now()}`;
   const steps = [];
@@ -360,8 +358,8 @@ export async function scrape(username, onStep = null) {
       log('📝 Debug HTML saved to debug-latest.html');
     }
 
-    await browser.close();
-    log('✅ Browser closed');
+    await page.close();
+    log('✅ Page closed (browser instance kept alive)');
     
     // Save final result to MongoDB with cards
     await saveSnapshotResult(username, runId, data, steps);
@@ -398,7 +396,7 @@ export async function scrape(username, onStep = null) {
       log('⚠️  Could not take screenshot:', screenshotErr.message);
     }
     
-    await browser.close();
+    await page.close();
     throw error;
   }
 }
