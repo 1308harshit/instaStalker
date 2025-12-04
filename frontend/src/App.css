@@ -1540,7 +1540,7 @@ body {
   margin: 0;
   padding: 0;
   color: #000;
-  font-size: 2rem;
+  font-size: 3.5rem;
   line-height: 1.2;
 }
 
@@ -1573,6 +1573,39 @@ body {
 .addicted-red {
   color: #f43f3f;
   font-weight: bold;
+}
+
+/* Mobile responsive styles for addicted title */
+@media (max-width: 640px) {
+  .addicted-panel h3 {
+    font-size: 3rem;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: center;
+    color: #000;
+    line-height: 1.2;
+  }
+  
+  .addicted-panel h3 .addicted-red {
+    color: #f43f3f;
+    font-weight: bold;
+  }
+}
+
+@media (max-width: 480px) {
+  .addicted-panel h3 {
+    font-size: 2.25rem;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: center;
+    color: #000;
+    line-height: 1.2;
+  }
+  
+  .addicted-panel h3 .addicted-red {
+    color: #f43f3f;
+    font-weight: bold;
+  }
 }
 
 .addicted-grid {
