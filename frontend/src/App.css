@@ -1533,6 +1533,17 @@ body {
   margin-top: 40px;
 }
 
+.addicted-panel h3 {
+  font-family: sans-serif;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  color: #000;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
 .addicted-title {
   font-family: sans-serif;
   font-weight: bold;
@@ -2984,7 +2995,7 @@ body {
   .payment-reviews {
     order: 7; /* Reviews appear last */
   }
-
+ 
   .payment-marketing h2 {
     font-size: 24px;
   }
