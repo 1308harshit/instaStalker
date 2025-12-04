@@ -1195,7 +1195,7 @@ body {
 
 .blurred-image,
 .slider-card--blurred .slider-image {
-  filter: blur(5px) saturate(0);
+  filter: blur(4px) saturate(0);
   height: 100%;
   min-height: 300px;
   width: 100%;
@@ -1531,6 +1531,81 @@ body {
 
 .addicted-panel {
   margin-top: 40px;
+}
+
+.addicted-panel h3 {
+  font-family: sans-serif;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  color: #000;
+  font-size: 3.5rem;
+  line-height: 1.2;
+}
+
+.addicted-title {
+  font-family: sans-serif;
+  font-weight: bold;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  font-size: 2rem;
+}
+
+.addicted-title-line1 {
+  color: #000;
+  font-weight: bold;
+  display: block;
+}
+
+.addicted-title-line2 {
+  color: #000;
+  font-weight: bold;
+  display: block;
+  text-align: center;
+}
+
+.addicted-red {
+  color: #f43f3f;
+  font-weight: bold;
+}
+
+/* Mobile responsive styles for addicted title */
+@media (max-width: 640px) {
+  .addicted-panel h3 {
+    font-size: 3rem;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: center;
+    color: #000;
+    line-height: 1.2;
+  }
+  
+  .addicted-panel h3 .addicted-red {
+    color: #f43f3f;
+    font-weight: bold;
+  }
+}
+
+@media (max-width: 480px) {
+  .addicted-panel h3 {
+    font-size: 2.25rem;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: center;
+    color: #000;
+    line-height: 1.2;
+  }
+  
+  .addicted-panel h3 .addicted-red {
+    color: #f43f3f;
+    font-weight: bold;
+  }
 }
 
 .addicted-grid {
@@ -1910,10 +1985,8 @@ body {
 }
 
 .processing-card ul.processing-list li {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  /* margin-bottom: 18px; */
+  display: block;
+  margin-bottom: 18px;
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.4s ease, transform 0.4s ease;
@@ -1926,9 +1999,17 @@ body {
   transform: translateY(0);
 }
 
-.processing-card ul.processing-list li span {
-  color: #f43f3f;
-  font-weight: 700;
+.processing-card ul.processing-list li p {
+  display: inline;
+  margin: 0;
+}
+
+.processing-card ul.processing-list li .processing-check-icon {
+  display: inline-block;
+  vertical-align: middle;
+  color: #F4364C;
+  margin-right: 8px;
+  margin-bottom: 2px;
 }
 
 .snapshot-content {
@@ -2536,6 +2617,19 @@ body {
   gap: 30px;
 }
 
+/* Payment Header Image */
+.payment-header-image {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.payment-header-image img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  display: block;
+}
+
 /* Marketing Text */
 .payment-marketing {
   text-align: center;
@@ -2934,7 +3028,7 @@ body {
   .payment-reviews {
     order: 7; /* Reviews appear last */
   }
-
+ 
   .payment-marketing h2 {
     font-size: 24px;
   }

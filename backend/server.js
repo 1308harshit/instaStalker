@@ -22,6 +22,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
+import { browserPool } from "./scraper/browserPool.js";
 import { 
   connectDB, 
   getSnapshotStep, 
@@ -411,12 +412,14 @@ connectDB().catch((err) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   log('🛑 SIGTERM received, closing connections...');
+  await browserPool.close();
   await closeDB();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   log('🛑 SIGINT received, closing connections...');
+  await browserPool.close();
   await closeDB();
   process.exit(0);
 });
