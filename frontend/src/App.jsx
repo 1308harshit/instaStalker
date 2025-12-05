@@ -10,17 +10,24 @@ import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
 
-const API_URL =
-  import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
-const API_BASE = (() => {
-  try {
-    const url = new URL(API_URL);
-    return `${url.protocol}//${url.host}`;
-  } catch (err) {
-    return "http://localhost:3000";
-  }
-})();
-const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
+const RAW_API_URL = import.meta.env.VITE_API_URL?.trim() || "/api/stalkers";
+
+// FIX for relative URLs
+const API_URL = RAW_API_URL.startsWith("/")
+  ? window.location.origin + RAW_API_URL
+  : RAW_API_URL;
+
+// Extract domain
+let API_BASE = "";
+try {
+  API_BASE = new URL(API_URL).origin;
+} catch {
+  API_BASE = window.location.origin;
+}
+
+// Snapshot base
+const SNAPSHOT_BASE =
+  import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
 const SCREEN = {
   LANDING: "landing",
