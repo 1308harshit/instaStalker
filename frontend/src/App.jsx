@@ -2721,13 +2721,13 @@ function App() {
 
     try {
       // Save user data to MongoDB
-      const saveResponse = await fetch(`${API_BASE}/api/payment/save-user`, {
+      const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
       }).catch((fetchErr) => {
         console.error("Network error saving user:", fetchErr);
-        throw new Error(`Cannot connect to server. Please check if backend is running at ${API_BASE}`);
+        throw new Error(`Cannot connect to server. Please check if backend is running.`);
       });
 
       if (!saveResponse.ok) {
@@ -2740,7 +2740,7 @@ function App() {
       // Create Razorpay order
       const amount = 199 * quantity; // 199₹ per item
       const orderResponse = await fetch(
-        `${API_BASE}/api/payment/create-session`,
+        `/api/payment/create-session`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2748,7 +2748,7 @@ function App() {
         }
       ).catch((fetchErr) => {
         console.error("Network error creating payment:", fetchErr);
-        throw new Error(`Cannot connect to payment server. Please check if backend is running at ${API_BASE}`);
+        throw new Error(`Cannot connect to payment server. Please check if backend is running.`);
       });
 
       if (!orderResponse.ok) {
