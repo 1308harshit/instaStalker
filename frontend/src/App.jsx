@@ -14,22 +14,13 @@ const API_URL =
   import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
 const API_BASE = (() => {
   try {
-    // If it's a relative path (starts with /), use current origin
-    if (API_URL.startsWith('/')) {
-      return typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000";
-    }
-    // If it's a full URL, extract the base
     const url = new URL(API_URL);
     return `${url.protocol}//${url.host}`;
   } catch (err) {
-    // Fallback: use current origin or localhost
-    return typeof window !== 'undefined' ? window.location.origin : "http://localhost:3000";
+    return "http://localhost:3000";
   }
 })();
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
-
-// Razorpay Key ID (hardcoded)
-const RAZORPAY_KEY_ID = "rzp_live_Rnyz8VDrPoPqal";
 
 const SCREEN = {
   LANDING: "landing",
@@ -2788,8 +2779,9 @@ function App() {
         throw new Error("Razorpay order ID not received from server");
       }
 
-      // Use hardcoded key ID (fallback to order.keyId if provided)
-      const razorpayKeyId = order.keyId || RAZORPAY_KEY_ID;
+      if (!order.keyId) {
+        throw new Error("Razorpay key ID not received from server");
+      }
 
       // Wait a bit for Razorpay SDK to load if not already loaded
       let retries = 0;
@@ -2803,7 +2795,7 @@ function App() {
       if (window.Razorpay) {
         try {
           const options = {
-            key: razorpayKeyId, // Razorpay key ID (hardcoded fallback)
+            key: order.keyId, // Razorpay key ID from backend
             amount: order.amount, // Amount in paise
             currency: order.currency || "INR",
             name: "Who Viewed My Profile",
