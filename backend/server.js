@@ -179,8 +179,21 @@ app.post("/api/payment/create-session", async (req, res) => {
     });
   } catch (err) {
     log('❌ Error creating Razorpay order:', err.message);
-    console.error(err);
-    res.status(500).json({ error: "Failed to create Razorpay order", details: err.message });
+    console.error('Full Razorpay error:', err);
+    
+    // Check if it's an authentication error
+    if (err.statusCode === 401 || err.error?.code === 'BAD_REQUEST_ERROR') {
+      log('⚠️ Razorpay authentication failed. Please check your API keys.');
+      log(`🔑 Key ID present: ${RAZORPAY_KEY_ID ? 'Yes (starts with ' + RAZORPAY_KEY_ID.substring(0, 8) + '...)' : 'No'}`);
+      log(`🔑 Key Secret present: ${RAZORPAY_KEY_SECRET ? 'Yes (length: ' + RAZORPAY_KEY_SECRET.length + ')' : 'No'}`);
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to create Razorpay order", 
+      details: err.message,
+      statusCode: err.statusCode || err.status,
+      razorpayError: err.error || null
+    });
   }
 });
 
