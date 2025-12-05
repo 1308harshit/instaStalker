@@ -30,6 +30,7 @@ const SCREEN = {
   PREVIEW: "preview",
   FULL_REPORT: "full-report",
   PAYMENT: "payment",
+  PAYMENT_SUCCESS: "payment-success",
   CONTACT_US: "contact-us",
   ERROR: "error",
 };
@@ -2705,6 +2706,17 @@ function App() {
     }
   }, [screen]);
 
+  // Handle payment return URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('order_id');
+    if (orderId && window.location.pathname.includes('/payment/return')) {
+      setScreen(SCREEN.PAYMENT_SUCCESS);
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -3370,6 +3382,220 @@ function App() {
     );
   };
 
+  const renderPaymentSuccess = () => {
+    // Static usernames matching current style
+    const staticUsernames = [
+      { username: "@priya_sharma", name: "Priya Sharma", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&w=400&h=400" },
+      { username: "@rahul_kumar", name: "Rahul Kumar", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&w=400&h=400" },
+      { username: "@ananya_patel", name: "Ananya Patel", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=facearea&w=400&h=400" },
+      { username: "@vikram_singh", name: "Vikram Singh", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&w=400&h=400" }
+    ];
+
+    const handleDownloadPDF = () => {
+      const link = document.createElement('a');
+      link.href = '/Dont_Look_Back_Full.pdf';
+      link.download = 'Dont_Look_Back_Full.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    return (
+      <section className="screen payment-success-screen" style={{
+        maxWidth: '100%',
+        padding: '20px',
+        background: '#fff',
+        minHeight: '100vh'
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '20px'
+        }}>
+          {/* Success Header */}
+          <div style={{
+            textAlign: 'center',
+            marginBottom: '40px',
+            paddingTop: '20px'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '20px'
+            }}>✅</div>
+            <h1 style={{
+              fontSize: 'clamp(28px, 5vw, 36px)',
+              fontWeight: '700',
+              color: '#1a1a1a',
+              marginBottom: '12px'
+            }}>
+              Payment Successful!
+            </h1>
+            <p style={{
+              fontSize: 'clamp(16px, 3vw, 18px)',
+              color: '#666',
+              margin: 0
+            }}>
+              Your report is ready. Here are your stalkers:
+            </p>
+          </div>
+
+          {/* Username Cards Grid - Responsive */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '20px',
+            marginBottom: '40px',
+            padding: '0 10px'
+          }}>
+            {staticUsernames.map((user, index) => (
+              <div
+                key={index}
+                className="slider-card"
+                style={{
+                  borderRadius: '18px',
+                  overflow: 'hidden',
+                  background: '#fff',
+                  border: '1px solid rgba(0, 0, 0, 0.08)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <div style={{
+                  width: '100%',
+                  height: '200px',
+                  background: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative'
+                }}>
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    style={{
+                      width: '120px',
+                      height: '120px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: '4px solid #fff',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+                    }}
+                  />
+                </div>
+                <div className="slider-card-content" style={{
+                  padding: '20px',
+                  textAlign: 'center'
+                }}>
+                  <h4 className="username" style={{
+                    fontSize: 'clamp(16px, 3vw, 18px)',
+                    fontWeight: '600',
+                    color: '#1a1a1a',
+                    margin: '0 0 8px 0'
+                  }}>
+                    {user.username}
+                  </h4>
+                  <p style={{
+                    fontSize: 'clamp(14px, 2.5vw, 16px)',
+                    color: '#666',
+                    margin: 0,
+                    fontWeight: '500'
+                  }}>
+                    {user.name}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* PDF Download Section */}
+          <div style={{
+            background: '#f9f9f9',
+            borderRadius: '16px',
+            padding: '30px 20px',
+            textAlign: 'center',
+            marginBottom: '30px',
+            border: '1px solid #e0e0e0'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '20px'
+            }}>📄</div>
+            <h2 style={{
+              fontSize: 'clamp(22px, 4vw, 28px)',
+              fontWeight: '700',
+              color: '#1a1a1a',
+              marginBottom: '12px'
+            }}>
+              Download Your Full Report
+            </h2>
+            <p style={{
+              fontSize: 'clamp(14px, 2.5vw, 16px)',
+              color: '#666',
+              marginBottom: '24px',
+              lineHeight: '1.6'
+            }}>
+              Get the complete detailed report in PDF format
+            </p>
+            <button
+              onClick={handleDownloadPDF}
+              className="primary-btn"
+              style={{
+                background: '#f43f3f',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '999px',
+                padding: '16px 32px',
+                fontSize: 'clamp(16px, 3vw, 18px)',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                minWidth: '200px'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 20px 50px rgba(244, 63, 63, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
+              }}
+            >
+              📥 Download PDF
+            </button>
+          </div>
+
+          {/* Back to Home Button */}
+          <div style={{ textAlign: 'center' }}>
+            <button
+              onClick={() => setScreen(SCREEN.LANDING)}
+              style={{
+                background: 'transparent',
+                color: '#f43f3f',
+                border: '2px solid #f43f3f',
+                borderRadius: '999px',
+                padding: '12px 24px',
+                fontSize: 'clamp(14px, 2.5vw, 16px)',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = '#f43f3f';
+                e.target.style.color = '#fff';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.color = '#f43f3f';
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   const renderError = () => (
     <section className="screen hero">
       <h1>Something went wrong</h1>
@@ -3396,6 +3622,8 @@ function App() {
         return renderFullReport();
       case SCREEN.PAYMENT:
         return renderPayment();
+      case SCREEN.PAYMENT_SUCCESS:
+        return renderPaymentSuccess();
       case SCREEN.CONTACT_US:
         return renderContactUs();
       case SCREEN.ERROR:
