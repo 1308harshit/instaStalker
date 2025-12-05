@@ -156,14 +156,14 @@ class BrowserPool {
    */
   async keepAlive() {
     const timeSinceLastActivity = Date.now() - this.lastActivityTime;
-    const fifteenMinutes = 15 * 60 * 1000; // 15 minutes in milliseconds
+    const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-    // Only keep-alive if no activity in last 15 minutes
-    if (timeSinceLastActivity < fifteenMinutes) {
+    // Only keep-alive if no activity in last 5 minutes
+    if (timeSinceLastActivity < fiveMinutes) {
       return; // Server is active, no need to keep-alive
     }
 
-    log("🔥 Keep-alive: Warming up browser (15 min idle detected)");
+    log("🔥 Keep-alive: Warming up browser (5 min idle detected)");
 
     try {
       if (!this.browser || !this.browser.isConnected()) {
@@ -204,7 +204,7 @@ class BrowserPool {
   }
 
   /**
-   * Start keep-alive timer (runs every 15 minutes)
+   * Start keep-alive timer (runs every 5 minutes)
    */
   startKeepAlive() {
     if (this.keepAliveInterval) {
@@ -213,9 +213,9 @@ class BrowserPool {
 
     this.keepAliveInterval = setInterval(() => {
       this.keepAlive();
-    }, 15 * 60 * 1000); // Every 15 minutes
+    }, 5 * 60 * 1000); // Every 5 minutes
 
-    log("🔥 Keep-alive started (runs every 15 minutes when idle)");
+    log("🔥 Keep-alive started (runs every 5 minutes when idle)");
   }
 
   /**
