@@ -2734,9 +2734,39 @@ function App() {
   // Meta Pixel: Track PageView on screen changes (for SPA navigation)
   useEffect(() => {
     if (window.fbq && typeof window.fbq === 'function') {
-      window.fbq('track', 'PageView');
+      console.log('🎯 Firing PageView event for screen:', screen);
+      try {
+        window.fbq('track', 'PageView');
+        console.log('✅ PageView event sent successfully');
+      } catch (error) {
+        console.error('❌ Error sending PageView event:', error);
+      }
+    } else {
+      console.warn('⚠️ Meta Pixel (fbq) not available for PageView');
+      console.warn('⚠️ This usually means Meta Pixel script was blocked by ad blocker');
+      console.warn('💡 Check browser console for "ERR_BLOCKED_BY_CLIENT" errors');
     }
   }, [screen]);
+
+  // Check Meta Pixel status on component mount
+  useEffect(() => {
+    const checkMetaPixel = setTimeout(() => {
+      if (typeof window.fbq === 'undefined' || !window.fbq) {
+        console.error('❌ CRITICAL: Meta Pixel (fbq) is not available!');
+        console.error('⚠️ Possible causes:');
+        console.error('   1. Ad blocker is blocking connect.facebook.net');
+        console.error('   2. Privacy extension is blocking Facebook scripts');
+        console.error('   3. Browser privacy settings blocking third-party scripts');
+        console.error('   4. Corporate firewall blocking Facebook domains');
+        console.error('💡 Solution: Disable ad blockers or whitelist this site');
+        console.error('💡 Check Network tab for: ERR_BLOCKED_BY_CLIENT on fbevents.js');
+      } else {
+        console.log('✅ Meta Pixel (fbq) is available and ready');
+      }
+    }, 3000); // Check after 3 seconds to allow script to load
+
+    return () => clearTimeout(checkMetaPixel);
+  }, []);
 
   // Handle payment return URL
   useEffect(() => {
