@@ -2664,12 +2664,23 @@ function App() {
     );
   };
 
-  // Scroll to top when navigating to payment page
+  // Scroll to top when navigating to payment page + Track InitiateCheckout
   useEffect(() => {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
+      
+      // Meta Pixel: Track InitiateCheckout with currency
+      if (window.fbq && typeof window.fbq === 'function') {
+        const amount = 199 * quantity;
+        window.fbq('track', 'InitiateCheckout', {
+          currency: 'INR',
+          value: amount,
+          content_name: 'Instagram Stalker Report',
+          content_type: 'product'
+        });
+      }
     }
-  }, [screen]);
+  }, [screen, quantity]);
 
   // Countdown timer effect for payment and full report pages
   useEffect(() => {
@@ -2686,6 +2697,13 @@ function App() {
       return () => clearInterval(timer);
     }
   }, [screen, paymentCountdown]);
+
+  // Meta Pixel: Track PageView on screen changes (for SPA navigation)
+  useEffect(() => {
+    if (window.fbq && typeof window.fbq === 'function') {
+      window.fbq('track', 'PageView');
+    }
+  }, [screen]);
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -2740,6 +2758,16 @@ function App() {
 
       const sessionData = await sessionResponse.json();
       console.log("Payment session created:", sessionData);
+
+      // Meta Pixel: Track Purchase event with currency
+      if (window.fbq && typeof window.fbq === 'function') {
+        window.fbq('track', 'Purchase', {
+          currency: 'INR',
+          value: amount, // This is 199 * quantity
+          content_name: 'Instagram Stalker Report',
+          content_type: 'product'
+        });
+      }
 
       // Check if payment session ID exists
       if (!sessionData.paymentSessionId) {
