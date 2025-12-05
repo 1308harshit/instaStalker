@@ -1287,61 +1287,6 @@ function App() {
         </small>
       </form>
       
-      {/* Contact Links - Same as Payment Page */}
-      <div style={{ 
-        marginTop: '30px', 
-        paddingTop: '20px', 
-        borderTop: '1px solid #e0e0e0',
-        textAlign: 'center'
-      }}>
-        <a 
-          href="/contact.html"
-          style={{
-            color: '#f43f3f',
-            textDecoration: 'underline',
-            fontSize: '13px',
-            fontWeight: '500'
-          }}
-        >
-          Contact Us
-        </a>
-        {' | '}
-        <a 
-          href="/terms-and-conditions.html"
-          style={{
-            color: '#f43f3f',
-            textDecoration: 'underline',
-            fontSize: '13px',
-            fontWeight: '500'
-          }}
-        >
-          Terms & Conditions
-        </a>
-        {' | '}
-        <a 
-          href="/shipping.html"
-          style={{
-            color: '#f43f3f',
-            textDecoration: 'underline',
-            fontSize: '13px',
-            fontWeight: '500'
-          }}
-        >
-          Shipping
-        </a>
-        {' | '}
-        <a 
-          href="/privacy-policy.html"
-          style={{
-            color: '#f43f3f',
-            textDecoration: 'underline',
-            fontSize: '13px',
-            fontWeight: '500'
-          }}
-        >
-          Privacy Policy
-        </a>
-      </div>
     </section>
   );
 
@@ -3128,79 +3073,6 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
-                {/* Business Address & Links - Required for Cashfree Compliance */}
-                <div className="business-address" style={{
-                  marginTop: '20px',
-                  paddingTop: '20px',
-                  borderTop: '1px solid #e0e0e0',
-                  fontSize: '12px',
-                  color: '#666',
-                  lineHeight: '1.6'
-                }}>
-                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>
-                    Business Address:
-                  </div>
-                  <div style={{ marginBottom: '15px' }}>
-                    #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
-                  </div>
-                  <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
-                    <a 
-                      href="#" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setScreen(SCREEN.CONTACT_US);
-                      }}
-                      style={{
-                        color: '#f43f3f',
-                        textDecoration: 'underline',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      Contact Us
-                    </a>
-                    {' | '}
-                    <a 
-                      href="#" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setScreen(SCREEN.CONTACT_US);
-                        // Scroll to T&C section
-                        setTimeout(() => {
-                          window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight / 2, behavior: 'smooth' });
-                        }, 100);
-                      }}
-                      style={{
-                        color: '#f43f3f',
-                        textDecoration: 'underline',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      Terms & Conditions
-                    </a>
-                    {' | '}
-                    <a 
-                      href="#" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setScreen(SCREEN.CONTACT_US);
-                        // Scroll to refund section
-                        setTimeout(() => {
-                          window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight * 0.7, behavior: 'smooth' });
-                        }, 100);
-                      }}
-                      style={{
-                        color: '#f43f3f',
-                        textDecoration: 'underline',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      Refunds & Cancellations
-                    </a>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -3248,24 +3120,9 @@ function App() {
           marginBottom: '30px'
         }}>
           <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
-            Business Information
+            Contact Information
           </h2>
           
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Business Owner:</div>
-            <div style={{ color: '#666', fontSize: '16px' }}>Shalit Bhandari</div>
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Business Address:</div>
-            <div style={{ color: '#666', fontSize: '16px', lineHeight: '1.6' }}>
-              #22-8-73/1/125, New Shoe Market,<br />
-              Yousuf Bazar, Chatta Bazaar,<br />
-              Hyderabad, Telangana - 500002<br />
-              India
-            </div>
-          </div>
-
           <div style={{ marginBottom: '20px' }}>
             <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Email:</div>
             <div style={{ color: '#666', fontSize: '16px' }}>
