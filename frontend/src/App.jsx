@@ -1295,11 +1295,7 @@ function App() {
         textAlign: 'center'
       }}>
         <a 
-          href="#" 
-          onClick={(e) => {
-            e.preventDefault();
-            setScreen(SCREEN.CONTACT_US);
-          }}
+          href="/contact.html"
           style={{
             color: '#f43f3f',
             textDecoration: 'underline',
@@ -1311,15 +1307,7 @@ function App() {
         </a>
         {' | '}
         <a 
-          href="#" 
-          onClick={(e) => {
-            e.preventDefault();
-            setScreen(SCREEN.CONTACT_US);
-            // Scroll to T&C section
-            setTimeout(() => {
-              window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight / 2, behavior: 'smooth' });
-            }, 100);
-          }}
+          href="/terms-and-conditions.html"
           style={{
             color: '#f43f3f',
             textDecoration: 'underline',
@@ -1331,15 +1319,7 @@ function App() {
         </a>
         {' | '}
         <a 
-          href="#" 
-          onClick={(e) => {
-            e.preventDefault();
-            setScreen(SCREEN.CONTACT_US);
-            // Scroll to refund section
-            setTimeout(() => {
-              window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight * 0.7, behavior: 'smooth' });
-            }, 100);
-          }}
+          href="/shipping.html"
           style={{
             color: '#f43f3f',
             textDecoration: 'underline',
@@ -1347,7 +1327,19 @@ function App() {
             fontWeight: '500'
           }}
         >
-          Refunds & Cancellations
+          Shipping
+        </a>
+        {' | '}
+        <a 
+          href="/privacy-policy.html"
+          style={{
+            color: '#f43f3f',
+            textDecoration: 'underline',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+        >
+          Privacy Policy
         </a>
       </div>
     </section>
