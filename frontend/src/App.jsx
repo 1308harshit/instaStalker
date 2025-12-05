@@ -10,14 +10,18 @@ import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
 
-const API_URL =
-  import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
+const API_URL = import.meta.env.VITE_API_URL?.trim() || "/api/stalkers";
+
 const API_BASE = (() => {
   try {
     const url = new URL(API_URL);
     return `${url.protocol}//${url.host}`;
   } catch (err) {
-    return "http://localhost:3000";
+    // If API_URL is relative like "/api/stalkers"
+    if (typeof window !== "undefined") {
+      return window.location.origin; // <-- THIS FIXES YOUR LIVE SITE
+    }
+    return "http://localhost:3000"; // fallback
   }
 })();
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
