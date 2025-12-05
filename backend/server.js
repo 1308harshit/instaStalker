@@ -1,19 +1,24 @@
 // Load environment variables FIRST (before any other imports that need them)
 // Use dynamic import to load dotenv synchronously
-if (process.env.NODE_ENV !== 'production') {
-  try {
-    // Use import() with await at top level (ES modules support this)
-    const dotenvModule = await import('dotenv');
-    const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    // Explicitly specify .env file path
-    dotenvModule.default.config({ path: path.join(__dirname, '.env') });
-  } catch (e) {
-    // dotenv not installed, continue without it
-    console.warn('⚠️  dotenv not available, using environment variables from system');
+// Always load .env file, regardless of NODE_ENV (needed for PM2 production)
+try {
+  // Use import() with await at top level (ES modules support this)
+  const dotenvModule = await import('dotenv');
+  const path = await import('path');
+  const { fileURLToPath } = await import('url');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  // Explicitly specify .env file path
+  const envPath = path.join(__dirname, '.env');
+  const result = dotenvModule.default.config({ path: envPath });
+  if (result.error) {
+    console.warn('⚠️  Error loading .env file:', result.error.message);
+  } else {
+    console.log('✅ Loaded .env file from:', envPath);
   }
+} catch (e) {
+  // dotenv not installed, continue without it
+  console.warn('⚠️  dotenv not available, using environment variables from system:', e.message);
 }
 
 import express from "express";
@@ -48,7 +53,7 @@ const COLLECTION_NAME = "user_orders";
 // Cashfree configuration
 const CASHFREE_API_KEY = process.env.CASHFREE_API_KEY;
 const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
-// Cashfree API base URL - sandbox for testing (default is acceptable)
+// Cashfree API base URL - required for payment gateway
 const CASHFREE_API_URL = process.env.CASHFREE_API_URL;
 
 // Validate required environment variables
@@ -58,6 +63,10 @@ if (!CASHFREE_API_KEY) {
 
 if (!CASHFREE_SECRET_KEY) {
   throw new Error("❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
+}
+
+if (!CASHFREE_API_URL) {
+  throw new Error("❌ CASHFREE_API_URL environment variable is required. Please set it in .env file. Use 'https://api.cashfree.com/pg' for production or 'https://sandbox.cashfree.com/pg' for testing.");
 } 
 // Try different API versions - Cashfree supports multiple versions
 const CASHFREE_API_VERSIONS = ["2023-08-01", "2022-09-01", "2021-05-21"];
