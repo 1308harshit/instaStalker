@@ -30,6 +30,7 @@ const SCREEN = {
   PREVIEW: "preview",
   FULL_REPORT: "full-report",
   PAYMENT: "payment",
+  CONTACT_US: "contact-us",
   ERROR: "error",
 };
 
@@ -2969,7 +2970,7 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
-                {/* Business Address - Required for Cashfree Compliance */}
+                {/* Business Address & Links - Required for Cashfree Compliance */}
                 <div className="business-address" style={{
                   marginTop: '20px',
                   paddingTop: '20px',
@@ -2981,13 +2982,297 @@ function App() {
                   <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>
                     Business Address:
                   </div>
-                  <div>
+                  <div style={{ marginBottom: '15px' }}>
                     #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
+                  </div>
+                  <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                    <a 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setScreen(SCREEN.CONTACT_US);
+                      }}
+                      style={{
+                        color: '#f43f3f',
+                        textDecoration: 'underline',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Contact Us
+                    </a>
+                    {' | '}
+                    <a 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setScreen(SCREEN.CONTACT_US);
+                        // Scroll to T&C section
+                        setTimeout(() => {
+                          window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight / 2, behavior: 'smooth' });
+                        }, 100);
+                      }}
+                      style={{
+                        color: '#f43f3f',
+                        textDecoration: 'underline',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Terms & Conditions
+                    </a>
+                    {' | '}
+                    <a 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setScreen(SCREEN.CONTACT_US);
+                        // Scroll to refund section
+                        setTimeout(() => {
+                          window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight * 0.7, behavior: 'smooth' });
+                        }, 100);
+                      }}
+                      style={{
+                        color: '#f43f3f',
+                        textDecoration: 'underline',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Refunds & Cancellations
+                    </a>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+      </section>
+    );
+  };
+
+  const renderContactUs = () => {
+    return (
+      <section className="screen contact-us-screen" style={{
+        maxWidth: '900px',
+        margin: '0 auto',
+        padding: '40px 20px',
+        background: '#fff',
+      }}>
+        <div style={{ marginBottom: '30px' }}>
+          <button 
+            onClick={() => setScreen(SCREEN.PAYMENT)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#f43f3f',
+              cursor: 'pointer',
+              fontSize: '16px',
+              marginBottom: '20px',
+              textDecoration: 'underline'
+            }}
+          >
+            ← Back to Payment
+          </button>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '10px', color: '#1a1a1a' }}>
+            Contact Us
+          </h1>
+          <p style={{ fontSize: '16px', color: '#666', marginBottom: '30px' }}>
+            Get in touch with us for any queries or support
+          </p>
+        </div>
+
+        {/* Business Information */}
+        <div style={{
+          background: '#f9f9f9',
+          padding: '30px',
+          borderRadius: '12px',
+          marginBottom: '30px'
+        }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+            Business Information
+          </h2>
+          
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Business Owner:</div>
+            <div style={{ color: '#666', fontSize: '16px' }}>Shalit Bhandari</div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Business Address:</div>
+            <div style={{ color: '#666', fontSize: '16px', lineHeight: '1.6' }}>
+              #22-8-73/1/125, New Shoe Market,<br />
+              Yousuf Bazar, Chatta Bazaar,<br />
+              Hyderabad, Telangana - 500002<br />
+              India
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Email:</div>
+            <div style={{ color: '#666', fontSize: '16px' }}>
+              <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', textDecoration: 'none' }}>
+                support@whoviewedmyprofile.in
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Terms and Conditions */}
+        <div style={{
+          background: '#fff',
+          border: '1px solid #e0e0e0',
+          padding: '30px',
+          borderRadius: '12px',
+          marginBottom: '30px'
+        }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+            Terms & Conditions
+          </h2>
+          
+          <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                1. Service Description
+              </h3>
+              <p>
+                Our service provides Instagram profile analysis and visitor insights. By using our service, 
+                you agree to these terms and conditions.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                2. Payment Terms
+              </h3>
+              <p>
+                All payments are processed securely through Cashfree payment gateway. Payment is required 
+                before accessing the full report. All prices are in Indian Rupees (INR).
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                3. Refund Policy
+              </h3>
+              <p>
+                We offer a 14-day money-back guarantee. If you're not satisfied with our service within 
+                14 days of purchase, contact us for a full refund - no questions asked.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                4. Privacy Policy
+              </h3>
+              <p>
+                We respect your privacy. All personal information provided during payment is securely 
+                stored and used only for processing your order and providing customer support.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                5. Service Availability
+              </h3>
+              <p>
+                Our service availability depends on Instagram's API and website structure. We strive to 
+                maintain 99% uptime but cannot guarantee uninterrupted service.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                6. Limitation of Liability
+              </h3>
+              <p>
+                Our service is provided "as is" without warranties. We are not liable for any indirect, 
+                incidental, or consequential damages arising from the use of our service.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                7. Contact Information
+              </h3>
+              <p>
+                For any queries, complaints, or support, please contact us at:
+                <br />
+                Email: <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f' }}>support@whoviewedmyprofile.in</a>
+                <br />
+                Address: #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
+              </p>
+            </div>
+
+            <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #e0e0e0', fontSize: '12px', color: '#999' }}>
+              Last updated: December 5, 2024
+            </div>
+          </div>
+        </div>
+
+        {/* Refund & Cancellation Policy */}
+        <div style={{
+          background: '#fff',
+          border: '1px solid #e0e0e0',
+          padding: '30px',
+          borderRadius: '12px',
+          marginBottom: '30px'
+        }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+            Refunds & Cancellations
+          </h2>
+          
+          <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
+            <div style={{ marginBottom: '15px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                Refund Policy
+              </h3>
+              <p>
+                We offer a 14-day money-back guarantee on all purchases. If you're not satisfied with 
+                our service for any reason, contact us within 14 days of your purchase date for a full refund.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                Cancellation Policy
+              </h3>
+              <p>
+                You may cancel your order before payment is processed. Once payment is completed, 
+                you can request a refund within 14 days as per our refund policy.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+                Processing Time
+              </h3>
+              <p>
+                Refunds will be processed within 5-7 business days to your original payment method 
+                after approval.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Contact Form */}
+        <div style={{
+          background: '#f9f9f9',
+          padding: '30px',
+          borderRadius: '12px'
+        }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+            Send us a Message
+          </h2>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
+            Have a question or need support? Send us an email at{' '}
+            <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', fontWeight: '600' }}>
+              support@whoviewedmyprofile.in
+            </a>
+          </p>
+          <p style={{ fontSize: '14px', color: '#666' }}>
+            We typically respond within 24-48 hours during business days.
+          </p>
         </div>
       </section>
     );
@@ -3019,6 +3304,8 @@ function App() {
         return renderFullReport();
       case SCREEN.PAYMENT:
         return renderPayment();
+      case SCREEN.CONTACT_US:
+        return renderContactUs();
       case SCREEN.ERROR:
         return renderError();
       default:
