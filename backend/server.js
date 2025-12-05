@@ -50,27 +50,18 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Cashfree configuration
-const CASHFREE_API_KEY = process.env.CASHFREE_API_KEY;
-const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
-// Cashfree API base URL - required for payment gateway
-const CASHFREE_API_URL = process.env.CASHFREE_API_URL;
+// Razorpay configuration
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 // Validate required environment variables
-if (!CASHFREE_API_KEY) {
-  throw new Error("❌ CASHFREE_API_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
+if (!RAZORPAY_KEY_ID) {
+  throw new Error("❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables.");
 }
 
-if (!CASHFREE_SECRET_KEY) {
-  throw new Error("❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
+if (!RAZORPAY_KEY_SECRET) {
+  throw new Error("❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables.");
 }
-
-if (!CASHFREE_API_URL) {
-  throw new Error("❌ CASHFREE_API_URL environment variable is required. Please set it in .env file. Use 'https://api.cashfree.com/pg' for production or 'https://sandbox.cashfree.com/pg' for testing.");
-} 
-// Try different API versions - Cashfree supports multiple versions
-const CASHFREE_API_VERSIONS = ["2023-08-01", "2022-09-01", "2021-05-21"];
-const CASHFREE_API_VERSION = CASHFREE_API_VERSIONS[0]; // Start with latest
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -124,7 +115,7 @@ app.post("/api/payment/save-user", async (req, res) => {
   }
 });
 
-// Create Cashfree payment session
+// Create Razorpay order
 app.post("/api/payment/create-session", async (req, res) => {
   try {
     const { email, fullName, phoneNumber, amount } = req.body;
@@ -134,106 +125,61 @@ app.post("/api/payment/create-session", async (req, res) => {
     }
 
     const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const orderAmount = amount || 199; // Default to 199₹
+    const orderAmount = Math.round((amount || 199) * 100); // Convert to paise (multiply by 100)
     
-    // Create payment session with Cashfree
-    // Format phone number (ensure it's 10 digits for India)
+    // Format phone number for Razorpay (10 digits, no country code needed)
     let phone = phoneNumber.replace(/[^0-9]/g, '');
-    if (phone.length === 10) {
-      phone = `91${phone}`; // Add country code for India
-    } else if (!phone.startsWith('91')) {
-      phone = `91${phone}`;
+    if (phone.length > 10) {
+      phone = phone.slice(-10); // Take last 10 digits
     }
 
-    // Generate valid customer_id (alphanumeric with underscores/hyphens only)
-    // Cashfree requires customer_id to be alphanumeric and may contain underscore or hyphens
-    const customerId = email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `customer_${Date.now()}`;
-
-    const paymentData = {
-      order_id: orderId,
-      order_amount: orderAmount,
-      order_currency: "INR",
-      customer_details: {
-        customer_id: customerId,
-        customer_name: fullName,
-        customer_email: email,
-        customer_phone: phone,
-      },
-      order_meta: {
-        return_url: `${req.protocol}://${req.get('host')}/payment/return?order_id={order_id}`,
-        // Business address - Required for Cashfree compliance
-        business_address: "#22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana",
-        business_pincode: "500002",
+    // Create Razorpay order
+    const razorpayOrderData = {
+      amount: orderAmount, // Amount in paise
+      currency: "INR",
+      receipt: orderId,
+      notes: {
+        email: email,
+        fullName: fullName,
+        phoneNumber: phone,
       }
     };
 
-    // Call Cashfree API to create payment session
-    // Cashfree PG API endpoint: /pg/orders
-    const cashfreeEndpoint = `${CASHFREE_API_URL}/orders`;
-    log(`📡 Calling Cashfree API: ${cashfreeEndpoint}`);
-    log(`📡 Using API Key: ${CASHFREE_API_KEY.substring(0, 10)}...`);
-    log(`📡 Using API Version: ${CASHFREE_API_VERSION}`);
-    log(`📡 Secret Key length: ${CASHFREE_SECRET_KEY.length} chars`);
-    log(`📡 Request payload:`, JSON.stringify(paymentData, null, 2));
+    log(`📡 Creating Razorpay order: ${orderId}`);
+    log(`📡 Amount: ${orderAmount} paise (₹${amount || 199})`);
+    log(`📡 Request payload:`, JSON.stringify(razorpayOrderData, null, 2));
     
-    // Try with different API versions if first attempt fails
-    let cashfreeResponse;
-    let lastError;
+    // Call Razorpay API to create order
+    const razorpayEndpoint = "https://api.razorpay.com/v1/orders";
+    const authString = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
     
-    for (const apiVersion of CASHFREE_API_VERSIONS) {
-      try {
-        log(`🔄 Trying API version: ${apiVersion}`);
-        cashfreeResponse = await fetch(cashfreeEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-version": apiVersion,
-            "x-client-id": CASHFREE_API_KEY,
-            "x-client-secret": CASHFREE_SECRET_KEY,
-          },
-          body: JSON.stringify(paymentData),
-        });
-        
-        if (cashfreeResponse.ok) {
-          log(`✅ Success with API version: ${apiVersion}`);
-          break;
-        } else if (cashfreeResponse.status !== 401) {
-          // If not authentication error, break and use this response
-          break;
-        }
-        // If 401, try next version
-        const errorText = await cashfreeResponse.text();
-        log(`⚠️ API version ${apiVersion} failed: ${errorText.substring(0, 200)}`);
-        lastError = errorText;
-      } catch (err) {
-        log(`❌ Error with API version ${apiVersion}:`, err.message);
-        lastError = err.message;
-      }
-    }
-    
-    if (!cashfreeResponse) {
-      throw new Error("All API version attempts failed");
-    }
+    const razorpayResponse = await fetch(razorpayEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${authString}`,
+      },
+      body: JSON.stringify(razorpayOrderData),
+    });
 
-    const responseText = await cashfreeResponse.text();
-    log(`📡 Cashfree API response status: ${cashfreeResponse.status}`);
-    log(`📡 Cashfree API response: ${responseText.substring(0, 500)}`);
+    const responseText = await razorpayResponse.text();
+    log(`📡 Razorpay API response status: ${razorpayResponse.status}`);
+    log(`📡 Razorpay API response: ${responseText.substring(0, 500)}`);
 
-    if (!cashfreeResponse.ok) {
-      log('❌ Cashfree API error:', responseText);
-      // Return more detailed error to frontend
-      return res.status(cashfreeResponse.status).json({ 
-        error: "Failed to create payment session",
+    if (!razorpayResponse.ok) {
+      log('❌ Razorpay API error:', responseText);
+      return res.status(razorpayResponse.status).json({ 
+        error: "Failed to create payment order",
         details: responseText,
         message: "Payment gateway error. Please check backend logs for details."
       });
     }
 
-    let sessionData;
+    let orderData;
     try {
-      sessionData = JSON.parse(responseText);
+      orderData = JSON.parse(responseText);
     } catch (parseErr) {
-      log('❌ Failed to parse Cashfree response:', parseErr);
+      log('❌ Failed to parse Razorpay response:', parseErr);
       return res.status(500).json({ 
         error: "Invalid response from payment gateway",
         details: responseText
@@ -246,43 +192,44 @@ app.post("/api/payment/create-session", async (req, res) => {
       if (database) {
         const collection = database.collection(COLLECTION_NAME);
         await collection.insertOne({
-          orderId,
+          orderId: orderData.id,
+          receipt: orderId,
           email,
           fullName,
-          phoneNumber,
-          amount: orderAmount,
-          paymentSessionId: sessionData.payment_session_id,
+          phoneNumber: phone,
+          amount: amount || 199,
+          amountPaise: orderAmount,
           status: "created",
           createdAt: new Date(),
         });
-        log(`✅ Order saved to MongoDB: ${orderId}`);
+        log(`✅ Order saved to MongoDB: ${orderData.id}`);
       }
     } catch (dbErr) {
       log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
     }
 
-    // Cashfree returns payment_session_id in the response
-    const paymentSessionId = sessionData.payment_session_id || sessionData.paymentSessionId || sessionData.session_id;
-    
-    if (!paymentSessionId) {
-      log('❌ No payment session ID in response:', JSON.stringify(sessionData));
+    if (!orderData.id) {
+      log('❌ No order ID in response:', JSON.stringify(orderData));
       return res.status(500).json({ 
-        error: "Payment session ID not found in response",
-        details: sessionData
+        error: "Order ID not found in response",
+        details: orderData
       });
     }
 
-    log(`✅ Payment session created: ${orderId}, Session ID: ${paymentSessionId}`);
+    log(`✅ Razorpay order created: ${orderData.id}`);
     
     res.json({
       success: true,
-      orderId,
-      paymentSessionId: paymentSessionId,
-      paymentData: sessionData,
+      orderId: orderData.id,
+      razorpayOrderId: orderData.id,
+      amount: orderAmount,
+      currency: "INR",
+      keyId: RAZORPAY_KEY_ID,
+      orderData: orderData,
     });
   } catch (err) {
-    log('❌ Error creating payment session:', err.message);
-    res.status(500).json({ error: "Failed to create payment session" });
+    log('❌ Error creating Razorpay order:', err.message);
+    res.status(500).json({ error: "Failed to create payment order", details: err.message });
   }
 });
 

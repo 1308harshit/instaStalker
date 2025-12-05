@@ -2761,7 +2761,7 @@ function App() {
       }
 
       const sessionData = await sessionResponse.json();
-      console.log("Payment session created:", sessionData);
+      console.log("Razorpay order created:", sessionData);
 
       // Meta Pixel: Track Purchase event with currency
       if (window.fbq && typeof window.fbq === 'function') {
@@ -2773,47 +2773,55 @@ function App() {
         });
       }
 
-      // Check if payment session ID exists
-      if (!sessionData.paymentSessionId) {
-        throw new Error("Payment session ID not received from server");
+      // Check if Razorpay order ID exists
+      if (!sessionData.razorpayOrderId) {
+        throw new Error("Razorpay order ID not received from server");
       }
 
-      // Wait a bit for Cashfree SDK to load if not already loaded
+      // Wait a bit for Razorpay SDK to load if not already loaded
       let retries = 0;
       const maxRetries = 10;
-      while (!window.Cashfree && retries < maxRetries) {
+      while (!window.Razorpay && retries < maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, 100));
         retries++;
       }
 
-      // Initialize Cashfree payment
-      if (window.Cashfree) {
+      // Initialize Razorpay payment
+      if (window.Razorpay) {
         try {
-          const cashfree = new window.Cashfree({
-            mode: "sandbox", // Test mode
-          });
+          const options = {
+            key: sessionData.keyId, // Razorpay key ID from backend
+            amount: sessionData.amount, // Amount in paise
+            currency: sessionData.currency || "INR",
+            name: "Who Viewed My Profile",
+            description: "Instagram Stalker Report",
+            order_id: sessionData.razorpayOrderId,
+            handler: function (response) {
+              console.log("Payment successful:", response);
+              // Redirect to success page
+              window.location.href = `/payment/return?order_id=${response.razorpay_order_id}&payment_id=${response.razorpay_payment_id}`;
+            },
+            prefill: {
+              name: paymentForm.fullName,
+              email: paymentForm.email,
+              contact: paymentForm.phoneNumber,
+            },
+            theme: {
+              color: "#f43f3f",
+            },
+            modal: {
+              ondismiss: function() {
+                setPaymentLoading(false);
+              }
+            }
+          };
 
-          console.log(
-            "Initializing Cashfree checkout with session:",
-            sessionData.paymentSessionId
-          );
+          console.log("Initializing Razorpay checkout with order:", sessionData.razorpayOrderId);
 
-          cashfree
-            .checkout({
-              paymentSessionId: sessionData.paymentSessionId,
-              redirectTarget: "_self",
-            })
-            .catch((err) => {
-              console.error("Cashfree checkout error:", err);
-              alert(
-                `Payment initialization failed: ${
-                  err.message || "Unknown error"
-                }`
-              );
-              setPaymentLoading(false);
-            });
+          const razorpay = new window.Razorpay(options);
+          razorpay.open();
         } catch (initErr) {
-          console.error("Cashfree initialization error:", initErr);
+          console.error("Razorpay initialization error:", initErr);
           alert(
             `Failed to initialize payment gateway: ${
               initErr.message || "Unknown error"
@@ -2822,8 +2830,8 @@ function App() {
           setPaymentLoading(false);
         }
       } else {
-        console.error("Cashfree SDK not loaded after waiting");
-        console.log("Window.Cashfree:", window.Cashfree);
+        console.error("Razorpay SDK not loaded after waiting");
+        console.log("Window.Razorpay:", window.Razorpay);
         alert(
           "Payment gateway SDK not loaded. Please refresh the page and try again."
         );
