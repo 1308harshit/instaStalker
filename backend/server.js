@@ -25,6 +25,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import Razorpay from "razorpay";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
@@ -36,7 +37,10 @@ import {
 } from "./utils/mongodb.js";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ["https://whoviewedmyprofile.in", "http://localhost:5173", "http://localhost:3000"],
+  credentials: true
+}));
 app.use(express.json()); // For parsing JSON request bodies
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +66,12 @@ if (!RAZORPAY_KEY_ID) {
 if (!RAZORPAY_KEY_SECRET) {
   throw new Error("❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables.");
 }
+
+// Initialize Razorpay instance
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
+});
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -118,118 +128,59 @@ app.post("/api/payment/save-user", async (req, res) => {
 // Create Razorpay order
 app.post("/api/payment/create-session", async (req, res) => {
   try {
-    const { email, fullName, phoneNumber, amount } = req.body;
+    const { amount, email, fullName, phoneNumber } = req.body;
     
-    if (!email || !fullName || !phoneNumber) {
-      return res.status(400).json({ error: "Email, full name, and phone number are required" });
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: "Amount is required and must be greater than 0" });
     }
 
-    const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const orderAmount = Math.round((amount || 199) * 100); // Convert to paise (multiply by 100)
-    
-    // Format phone number for Razorpay (10 digits, no country code needed)
-    let phone = phoneNumber.replace(/[^0-9]/g, '');
-    if (phone.length > 10) {
-      phone = phone.slice(-10); // Take last 10 digits
-    }
-
-    // Create Razorpay order
-    const razorpayOrderData = {
-      amount: orderAmount, // Amount in paise
+    // Create Razorpay order using SDK
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100), // Convert to paise (199 → 19900)
       currency: "INR",
-      receipt: orderId,
-      notes: {
-        email: email,
-        fullName: fullName,
-        phoneNumber: phone,
-      }
-    };
-
-    log(`📡 Creating Razorpay order: ${orderId}`);
-    log(`📡 Amount: ${orderAmount} paise (₹${amount || 199})`);
-    log(`📡 Request payload:`, JSON.stringify(razorpayOrderData, null, 2));
-    
-    // Call Razorpay API to create order
-    const razorpayEndpoint = "https://api.razorpay.com/v1/orders";
-    const authString = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
-    
-    const razorpayResponse = await fetch(razorpayEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Basic ${authString}`,
-      },
-      body: JSON.stringify(razorpayOrderData),
     });
 
-    const responseText = await razorpayResponse.text();
-    log(`📡 Razorpay API response status: ${razorpayResponse.status}`);
-    log(`📡 Razorpay API response: ${responseText.substring(0, 500)}`);
-
-    if (!razorpayResponse.ok) {
-      log('❌ Razorpay API error:', responseText);
-      return res.status(razorpayResponse.status).json({ 
-        error: "Failed to create payment order",
-        details: responseText,
-        message: "Payment gateway error. Please check backend logs for details."
-      });
-    }
-
-    let orderData;
-    try {
-      orderData = JSON.parse(responseText);
-    } catch (parseErr) {
-      log('❌ Failed to parse Razorpay response:', parseErr);
-      return res.status(500).json({ 
-        error: "Invalid response from payment gateway",
-        details: responseText
-      });
-    }
+    log(`✅ Razorpay order created: ${order.id}`);
+    log(`📡 Amount: ${order.amount} paise (₹${amount})`);
     
     // Save order to MongoDB (optional, don't fail if DB is unavailable)
-    try {
-      const database = await connectDB();
-      if (database) {
-        const collection = database.collection(COLLECTION_NAME);
-        await collection.insertOne({
-          orderId: orderData.id,
-          receipt: orderId,
-          email,
-          fullName,
-          phoneNumber: phone,
-          amount: amount || 199,
-          amountPaise: orderAmount,
-          status: "created",
-          createdAt: new Date(),
-        });
-        log(`✅ Order saved to MongoDB: ${orderData.id}`);
+    if (email && fullName && phoneNumber) {
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          // Format phone number
+          let phone = phoneNumber.replace(/[^0-9]/g, '');
+          if (phone.length > 10) {
+            phone = phone.slice(-10);
+          }
+          
+          await collection.insertOne({
+            orderId: order.id,
+            email,
+            fullName,
+            phoneNumber: phone,
+            amount: amount,
+            amountPaise: order.amount,
+            status: "created",
+            createdAt: new Date(),
+          });
+          log(`✅ Order saved to MongoDB: ${order.id}`);
+        }
+      } catch (dbErr) {
+        log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
       }
-    } catch (dbErr) {
-      log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
     }
-
-    if (!orderData.id) {
-      log('❌ No order ID in response:', JSON.stringify(orderData));
-      return res.status(500).json({ 
-        error: "Order ID not found in response",
-        details: orderData
-      });
-    }
-
-    log(`✅ Razorpay order created: ${orderData.id}`);
     
+    // Return order with keyId for frontend
     res.json({
-      success: true,
-      orderId: orderData.id,
-      razorpayOrderId: orderData.id,
-      amount: orderAmount,
-      currency: "INR",
-      keyId: RAZORPAY_KEY_ID,
-      orderData: orderData,
+      ...order,
+      keyId: RAZORPAY_KEY_ID, // Include keyId for frontend
     });
   } catch (err) {
     log('❌ Error creating Razorpay order:', err.message);
-    res.status(500).json({ error: "Failed to create payment order", details: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Failed to create Razorpay order", details: err.message });
   }
 });
 

@@ -2725,6 +2725,9 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
+      }).catch((fetchErr) => {
+        console.error("Network error saving user:", fetchErr);
+        throw new Error(`Cannot connect to server. Please check if backend is running at ${API_BASE}`);
       });
 
       if (!saveResponse.ok) {
@@ -2734,34 +2737,32 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      // Create payment session
+      // Create Razorpay order
       const amount = 199 * quantity; // 199₹ per item
-      const sessionResponse = await fetch(
+      const orderResponse = await fetch(
         `${API_BASE}/api/payment/create-session`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...paymentForm,
-            amount,
-          }),
+          body: JSON.stringify({ amount }),
         }
-      );
+      ).catch((fetchErr) => {
+        console.error("Network error creating payment:", fetchErr);
+        throw new Error(`Cannot connect to payment server. Please check if backend is running at ${API_BASE}`);
+      });
 
-      if (!sessionResponse.ok) {
-        const errorData = await sessionResponse
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Payment session error:", errorData);
+        console.error("Payment order error:", errorData);
         throw new Error(
-          errorData.message ||
-            errorData.error ||
-            "Failed to create payment session"
+          errorData.error || errorData.message || "Failed to create payment order"
         );
       }
 
-      const sessionData = await sessionResponse.json();
-      console.log("Razorpay order created:", sessionData);
+      const order = await orderResponse.json();
+      console.log("Razorpay order created:", order);
 
       // Meta Pixel: Track Purchase event with currency
       if (window.fbq && typeof window.fbq === 'function') {
@@ -2774,8 +2775,12 @@ function App() {
       }
 
       // Check if Razorpay order ID exists
-      if (!sessionData.razorpayOrderId) {
+      if (!order.id) {
         throw new Error("Razorpay order ID not received from server");
+      }
+
+      if (!order.keyId) {
+        throw new Error("Razorpay key ID not received from server");
       }
 
       // Wait a bit for Razorpay SDK to load if not already loaded
@@ -2790,12 +2795,12 @@ function App() {
       if (window.Razorpay) {
         try {
           const options = {
-            key: sessionData.keyId, // Razorpay key ID from backend
-            amount: sessionData.amount, // Amount in paise
-            currency: sessionData.currency || "INR",
+            key: order.keyId, // Razorpay key ID from backend
+            amount: order.amount, // Amount in paise
+            currency: order.currency || "INR",
             name: "Who Viewed My Profile",
             description: "Instagram Stalker Report",
-            order_id: sessionData.razorpayOrderId,
+            order_id: order.id,
             handler: function (response) {
               console.log("Payment successful:", response);
               // Redirect to success page
@@ -2816,10 +2821,10 @@ function App() {
             }
           };
 
-          console.log("Initializing Razorpay checkout with order:", sessionData.razorpayOrderId);
+          console.log("Initializing Razorpay checkout with order:", order.id);
 
-          const razorpay = new window.Razorpay(options);
-          razorpay.open();
+          const razor = new window.Razorpay(options);
+          razor.open();
         } catch (initErr) {
           console.error("Razorpay initialization error:", initErr);
           alert(
