@@ -1285,6 +1285,70 @@ function App() {
           Additionally, This site is NOT endorsed by Google or Meta in any way.
         </small>
       </form>
+      
+      {/* Contact Links - Same as Payment Page */}
+      <div style={{ 
+        marginTop: '30px', 
+        paddingTop: '20px', 
+        borderTop: '1px solid #e0e0e0',
+        textAlign: 'center'
+      }}>
+        <a 
+          href="#" 
+          onClick={(e) => {
+            e.preventDefault();
+            setScreen(SCREEN.CONTACT_US);
+          }}
+          style={{
+            color: '#f43f3f',
+            textDecoration: 'underline',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+        >
+          Contact Us
+        </a>
+        {' | '}
+        <a 
+          href="#" 
+          onClick={(e) => {
+            e.preventDefault();
+            setScreen(SCREEN.CONTACT_US);
+            // Scroll to T&C section
+            setTimeout(() => {
+              window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight / 2, behavior: 'smooth' });
+            }, 100);
+          }}
+          style={{
+            color: '#f43f3f',
+            textDecoration: 'underline',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+        >
+          Terms & Conditions
+        </a>
+        {' | '}
+        <a 
+          href="#" 
+          onClick={(e) => {
+            e.preventDefault();
+            setScreen(SCREEN.CONTACT_US);
+            // Scroll to refund section
+            setTimeout(() => {
+              window.scrollTo({ top: document.querySelector('.contact-us-screen').offsetHeight * 0.7, behavior: 'smooth' });
+            }, 100);
+          }}
+          style={{
+            color: '#f43f3f',
+            textDecoration: 'underline',
+            fontSize: '13px',
+            fontWeight: '500'
+          }}
+        >
+          Refunds & Cancellations
+        </a>
+      </div>
     </section>
   );
 
