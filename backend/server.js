@@ -130,14 +130,29 @@ app.post("/api/payment/create-session", async (req, res) => {
   try {
     const { amount, email, fullName, phoneNumber } = req.body;
     
+    log(`📥 Create session request: amount=${amount}, email=${email}`);
+    
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Amount is required and must be greater than 0" });
     }
 
+    // Verify Razorpay instance is initialized correctly
+    if (!razorpay) {
+      throw new Error("Razorpay instance not initialized");
+    }
+    
+    const amountInPaise = Math.round(amount * 100);
+    log(`💰 Creating order: ${amountInPaise} paise (₹${amount})`);
+    log(`🔑 Using Key ID: ${RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + '...' : 'MISSING'}`);
+
     // Create Razorpay order using SDK
+    // Generate a unique receipt ID
+    const receiptId = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
     const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // Convert to paise (199 → 19900)
+      amount: amountInPaise, // Convert to paise (199 → 19900)
       currency: "INR",
+      receipt: receiptId, // Add receipt ID (sometimes required)
     });
 
     log(`✅ Razorpay order created: ${order.id}`);
