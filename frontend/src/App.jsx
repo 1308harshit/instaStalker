@@ -2720,16 +2720,44 @@ function App() {
     }
   }, [screen]);
 
-  // Handle payment return URL
+  // Handle payment return URL and fire Purchase event
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('order_id');
+    const paymentId = urlParams.get('payment_id');
+    
     if (orderId && window.location.pathname.includes('/payment/return')) {
       setScreen(SCREEN.PAYMENT_SUCCESS);
+      
+      // Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
+      // This fires AFTER redirect, so Meta Pixel can track it
+      const amount = 199 * quantity;
+      console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
+      
+      if (window.dataLayer) {
+        window.dataLayer.push({
+          event: 'purchase',
+          ecommerce: {
+            transaction_id: orderId,
+            value: amount,
+            currency: 'INR',
+            items: [{
+              item_name: 'Instagram Stalker Report',
+              item_category: 'product',
+              quantity: quantity,
+              price: 199
+            }]
+          }
+        });
+        console.log('✅ Purchase event pushed to dataLayer successfully (on success page)');
+      } else {
+        console.warn('⚠️ dataLayer not available for Purchase event (on success page)');
+      }
+      
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
+  }, [quantity]);
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -2786,29 +2814,9 @@ function App() {
       const order = await orderResponse.json();
       console.log("Razorpay order created:", order);
 
-      // Google Tag Manager: Push Purchase event to dataLayer (fires when order is created)
-      // NOTE: This fires on order creation. The main Purchase event should fire after payment success (see handler below)
-      console.log('🎯 Pushing Purchase event to dataLayer (order created):', { amount, currency: 'INR', orderId: order.id });
-      
-      if (window.dataLayer) {
-        window.dataLayer.push({
-          event: 'purchase',
-          ecommerce: {
-            transaction_id: order.id,
-            value: amount,
-            currency: 'INR',
-            items: [{
-              item_name: 'Instagram Stalker Report',
-              item_category: 'product',
-              quantity: quantity,
-              price: 199
-            }]
-          }
-        });
-        console.log('✅ Purchase event pushed to dataLayer successfully (order created)');
-      } else {
-        console.warn('⚠️ dataLayer not available for Purchase event (order created)');
-      }
+      // ❌ Purchase event removed from here - it will fire on success page instead
+      // Purchase should only fire AFTER payment is confirmed, not when order is created
+      // This prevents duplicate events and ensures tracking happens outside Razorpay iframe
 
       // Check if Razorpay order ID exists
       if (!order.id) {
@@ -2840,29 +2848,9 @@ function App() {
             handler: function (response) {
               console.log("Payment successful:", response);
               
-              // Google Tag Manager: Push Purchase event to dataLayer AFTER payment success
-              const amount = 199 * quantity;
-              console.log('🎯 Pushing Purchase event to dataLayer (payment successful):', { amount, currency: 'INR', orderId: response.razorpay_order_id });
-              
-              if (window.dataLayer) {
-                window.dataLayer.push({
-                  event: 'purchase',
-                  ecommerce: {
-                    transaction_id: response.razorpay_order_id,
-                    value: amount,
-                    currency: 'INR',
-                    items: [{
-                      item_name: 'Instagram Stalker Report',
-                      item_category: 'product',
-                      quantity: quantity,
-                      price: 199
-                    }]
-                  }
-                });
-                console.log('✅ Purchase event pushed to dataLayer successfully (payment success)');
-              } else {
-                console.warn('⚠️ dataLayer not available for Purchase event (payment success)');
-              }
+              // ❌ DO NOT fire Purchase event here - Razorpay opens in iframe/popup
+              // Meta Pixel cannot track events inside iframes
+              // Purchase event will fire on success page instead (after redirect)
               
               // Redirect to success page
               window.location.href = `/payment/return?order_id=${response.razorpay_order_id}&payment_id=${response.razorpay_payment_id}`;
