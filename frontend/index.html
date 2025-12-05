@@ -5,41 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Instagram Stalker Analyzer</title>
     
-    <!-- Meta Pixel Code -->
-    <script>
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      
-      // Initialize IMMEDIATELY (events are queued if script not loaded yet)
-      fbq('init', '1752528628790870');
-      fbq('track', 'PageView');
-      
-      // Check if Meta Pixel script loaded successfully (for debugging only)
-      setTimeout(function() {
-        if (typeof fbq === 'undefined' || !fbq) {
-          console.error('❌ CRITICAL: Meta Pixel script blocked or failed to load!');
-          console.error('⚠️ This is usually caused by ad blockers or privacy extensions.');
-          console.error('⚠️ Meta Pixel events will NOT work until this is resolved.');
-          console.error('💡 Solution: Disable ad blockers for this site or whitelist connect.facebook.net');
-        } else {
-          console.log('✅ Meta Pixel loaded successfully');
-        }
-      }, 2000); // Check after 2 seconds (for debugging)
-    </script>
-    <!-- End Meta Pixel Code -->
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-PMRFSQJ9');</script>
+    <!-- End Google Tag Manager -->
   </head>
   <body>
-    <!-- Meta Pixel Noscript (must be in body, not head) -->
-    <noscript>
-      <img height="1" width="1" style="display:none"
-      src="https://www.facebook.com/tr?id=1752528628790870&ev=PageView&noscript=1"/>
-    </noscript>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PMRFSQJ9"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <!-- Razorpay Payment Gateway SDK -->

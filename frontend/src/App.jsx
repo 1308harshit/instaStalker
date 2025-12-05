@@ -2662,56 +2662,28 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       
-      // Meta Pixel: Track InitiateCheckout with currency
-      // Add a small delay to ensure Meta Pixel is fully loaded
-      const trackInitiateCheckout = () => {
-        if (window.fbq && typeof window.fbq === 'function') {
-          const amount = 199 * quantity;
-          console.log('🎯 Firing InitiateCheckout event:', { amount, currency: 'INR', quantity });
-          
-          try {
-            window.fbq('track', 'InitiateCheckout', {
-              currency: 'INR',
-              value: amount,
-              content_name: 'Instagram Stalker Report',
-              content_type: 'product'
-            });
-            console.log('✅ InitiateCheckout event sent successfully');
-          } catch (error) {
-            console.error('❌ Error sending InitiateCheckout:', error);
-          }
-        } else {
-          console.warn('⚠️ Meta Pixel (fbq) not available yet, retrying...');
-          // Retry after a short delay (max 3 retries)
-          let retryCount = 0;
-          const maxRetries = 3;
-          const retryInterval = setInterval(() => {
-            retryCount++;
-            if (window.fbq && typeof window.fbq === 'function') {
-              clearInterval(retryInterval);
-              const amount = 199 * quantity;
-              console.log('🎯 Firing InitiateCheckout event (retry):', { amount, currency: 'INR' });
-              try {
-                window.fbq('track', 'InitiateCheckout', {
-                  currency: 'INR',
-                  value: amount,
-                  content_name: 'Instagram Stalker Report',
-                  content_type: 'product'
-                });
-                console.log('✅ InitiateCheckout event sent successfully (retry)');
-              } catch (error) {
-                console.error('❌ Error sending InitiateCheckout (retry):', error);
-              }
-            } else if (retryCount >= maxRetries) {
-              clearInterval(retryInterval);
-              console.error('❌ Meta Pixel not loaded after retries. InitiateCheckout not sent.');
-            }
-          }, 500);
-        }
-      };
+      // Google Tag Manager: Push InitiateCheckout event to dataLayer
+      const amount = 199 * quantity;
+      console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
       
-      // Wait a bit to ensure Meta Pixel is loaded
-      setTimeout(trackInitiateCheckout, 100);
+      if (window.dataLayer) {
+        window.dataLayer.push({
+          event: 'InitiateCheckout',
+          ecommerce: {
+            currency: 'INR',
+            value: amount,
+            items: [{
+              item_name: 'Instagram Stalker Report',
+              item_category: 'product',
+              quantity: quantity,
+              price: 199
+            }]
+          }
+        });
+        console.log('✅ InitiateCheckout event pushed to dataLayer successfully');
+      } else {
+        console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
+      }
     }
   }, [screen, quantity]);
 
@@ -2731,42 +2703,22 @@ function App() {
     }
   }, [screen, paymentCountdown]);
 
-  // Meta Pixel: Track PageView on screen changes (for SPA navigation)
+  // Google Tag Manager: Track PageView on screen changes (for SPA navigation)
   useEffect(() => {
-    if (window.fbq && typeof window.fbq === 'function') {
-      console.log('🎯 Firing PageView event for screen:', screen);
-      try {
-        window.fbq('track', 'PageView');
-        console.log('✅ PageView event sent successfully');
-      } catch (error) {
-        console.error('❌ Error sending PageView event:', error);
-      }
+    console.log('🎯 Pushing PageView event to dataLayer for screen:', screen);
+    
+    if (window.dataLayer) {
+      window.dataLayer.push({
+        event: 'page_view',
+        page_path: window.location.pathname,
+        page_title: `Instagram Stalker - ${screen}`,
+        screen: screen
+      });
+      console.log('✅ PageView event pushed to dataLayer successfully');
     } else {
-      console.warn('⚠️ Meta Pixel (fbq) not available for PageView');
-      console.warn('⚠️ This usually means Meta Pixel script was blocked by ad blocker');
-      console.warn('💡 Check browser console for "ERR_BLOCKED_BY_CLIENT" errors');
+      console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
     }
   }, [screen]);
-
-  // Check Meta Pixel status on component mount
-  useEffect(() => {
-    const checkMetaPixel = setTimeout(() => {
-      if (typeof window.fbq === 'undefined' || !window.fbq) {
-        console.error('❌ CRITICAL: Meta Pixel (fbq) is not available!');
-        console.error('⚠️ Possible causes:');
-        console.error('   1. Ad blocker is blocking connect.facebook.net');
-        console.error('   2. Privacy extension is blocking Facebook scripts');
-        console.error('   3. Browser privacy settings blocking third-party scripts');
-        console.error('   4. Corporate firewall blocking Facebook domains');
-        console.error('💡 Solution: Disable ad blockers or whitelist this site');
-        console.error('💡 Check Network tab for: ERR_BLOCKED_BY_CLIENT on fbevents.js');
-      } else {
-        console.log('✅ Meta Pixel (fbq) is available and ready');
-      }
-    }, 3000); // Check after 3 seconds to allow script to load
-
-    return () => clearTimeout(checkMetaPixel);
-  }, []);
 
   // Handle payment return URL
   useEffect(() => {
@@ -2834,25 +2786,28 @@ function App() {
       const order = await orderResponse.json();
       console.log("Razorpay order created:", order);
 
-      // Meta Pixel: Track Purchase event with currency (fires when order is created)
+      // Google Tag Manager: Push Purchase event to dataLayer (fires when order is created)
       // NOTE: This fires on order creation. The main Purchase event should fire after payment success (see handler below)
-      if (window.fbq && typeof window.fbq === 'function') {
-        console.log('🎯 Firing Purchase event (order created):', { amount, currency: 'INR', orderId: order.id });
-        try {
-          window.fbq('track', 'Purchase', {
+      console.log('🎯 Pushing Purchase event to dataLayer (order created):', { amount, currency: 'INR', orderId: order.id });
+      
+      if (window.dataLayer) {
+        window.dataLayer.push({
+          event: 'purchase',
+          ecommerce: {
+            transaction_id: order.id,
+            value: amount,
             currency: 'INR',
-            value: amount, // This is 199 * quantity
-            content_name: 'Instagram Stalker Report',
-            content_type: 'product',
-            content_ids: [order.id],
-            order_id: order.id
-          });
-          console.log('✅ Purchase event sent successfully (order created)');
-        } catch (error) {
-          console.error('❌ Error sending Purchase event (order created):', error);
-        }
+            items: [{
+              item_name: 'Instagram Stalker Report',
+              item_category: 'product',
+              quantity: quantity,
+              price: 199
+            }]
+          }
+        });
+        console.log('✅ Purchase event pushed to dataLayer successfully (order created)');
       } else {
-        console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event (order created)');
+        console.warn('⚠️ dataLayer not available for Purchase event (order created)');
       }
 
       // Check if Razorpay order ID exists
@@ -2885,23 +2840,28 @@ function App() {
             handler: function (response) {
               console.log("Payment successful:", response);
               
-              // Meta Pixel: Track Purchase event AFTER payment success
-              if (window.fbq && typeof window.fbq === 'function') {
-                const amount = 199 * quantity;
-                console.log('🎯 Firing Purchase event (payment successful):', { amount, currency: 'INR', orderId: response.razorpay_order_id });
-                try {
-                  window.fbq('track', 'Purchase', {
-                    currency: 'INR',
+              // Google Tag Manager: Push Purchase event to dataLayer AFTER payment success
+              const amount = 199 * quantity;
+              console.log('🎯 Pushing Purchase event to dataLayer (payment successful):', { amount, currency: 'INR', orderId: response.razorpay_order_id });
+              
+              if (window.dataLayer) {
+                window.dataLayer.push({
+                  event: 'purchase',
+                  ecommerce: {
+                    transaction_id: response.razorpay_order_id,
                     value: amount,
-                    content_name: 'Instagram Stalker Report',
-                    content_type: 'product',
-                    content_ids: [response.razorpay_order_id],
-                    order_id: response.razorpay_order_id
-                  });
-                  console.log('✅ Purchase event sent successfully (payment success)');
-                } catch (error) {
-                  console.error('❌ Error sending Purchase event (payment success):', error);
-                }
+                    currency: 'INR',
+                    items: [{
+                      item_name: 'Instagram Stalker Report',
+                      item_category: 'product',
+                      quantity: quantity,
+                      price: 199
+                    }]
+                  }
+                });
+                console.log('✅ Purchase event pushed to dataLayer successfully (payment success)');
+              } else {
+                console.warn('⚠️ dataLayer not available for Purchase event (payment success)');
               }
               
               // Redirect to success page
