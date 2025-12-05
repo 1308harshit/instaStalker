@@ -161,6 +161,9 @@ app.post("/api/payment/create-session", async (req, res) => {
       },
       order_meta: {
         return_url: `${req.protocol}://${req.get('host')}/payment/return?order_id={order_id}`,
+        // Business address - Required for Cashfree compliance
+        business_address: "#22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana",
+        business_pincode: "500002",
       }
     };
 
@@ -353,12 +356,26 @@ app.get("/api/stalkers", async (req, res) => {
       "Connection": "keep-alive",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Cache-Control",
+      "X-Accel-Buffering": "no", // Disable NGINX buffering
     });
+
+    // Send initial connection message
+    res.write(`: connected\n\n`);
+    
+    // Flush headers immediately
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
 
     const send = (event, data) => {
       try {
-        res.write(`event: ${event}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        res.write(message);
+        // Force flush to ensure real-time delivery
+        if (typeof res.flush === 'function') {
+          res.flush();
+        }
+        log(`📤 SSE event sent: ${event} (${event === 'snapshot' ? data.name : 'final'})`);
       } catch (err) {
         log(`⚠️ Error sending SSE event: ${err.message}`);
       }

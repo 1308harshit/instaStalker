@@ -1020,19 +1020,27 @@ function App() {
   const fetchCards = async (usernameValue) => {
     // Use Server-Sent Events for real-time snapshot streaming
     return new Promise((resolve, reject) => {
-      const eventSource = new EventSource(
-        `${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`
-      );
+      const eventSourceUrl = `${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`;
+      console.log(`🔌 Connecting to SSE: ${eventSourceUrl}`);
+      
+      const eventSource = new EventSource(eventSourceUrl);
+
+      // Log connection state changes
+      eventSource.onopen = () => {
+        console.log(`✅ SSE connection opened`);
+      };
 
       eventSource.addEventListener("snapshot", (e) => {
         try {
           const step = JSON.parse(e.data);
-          console.log(`📥 Received snapshot via SSE: ${step.name}`);
+          console.log(`📥 Received snapshot via SSE: ${step.name}`, step);
 
           // Register snapshot immediately as it arrives
           setSnapshots((prev) => {
             const filtered = prev.filter((s) => s.name !== step.name);
-            return [...filtered, step];
+            const updated = [...filtered, step];
+            console.log(`📝 Updated snapshots list:`, updated.map(s => s.name));
+            return updated;
           });
 
           // If this is profile-confirm, trigger immediate UI update
@@ -1040,9 +1048,11 @@ function App() {
             console.log(
               `✅ Profile-confirm snapshot received - UI will update immediately`
             );
+            console.log(`   htmlPath: ${step.htmlPath}`);
           }
         } catch (err) {
-          console.error("Error parsing snapshot data:", err);
+          console.error("❌ Error parsing snapshot data:", err);
+          console.error("   Raw data:", e.data);
         }
       });
 
@@ -1087,9 +1097,16 @@ function App() {
 
       // Handle connection errors
       eventSource.onerror = (err) => {
-        console.error("EventSource error:", err);
-        eventSource.close();
-        reject(new Error("Connection error"));
+        console.error("❌ EventSource error:", err);
+        console.error(`   ReadyState: ${eventSource.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSED)`);
+        console.error(`   URL: ${eventSourceUrl}`);
+        
+        // Only reject if connection is closed (readyState === 2)
+        // If it's still connecting (0) or open (1), it might recover
+        if (eventSource.readyState === EventSource.CLOSED) {
+          eventSource.close();
+          reject(new Error("SSE connection closed"));
+        }
       };
     });
   };
@@ -2951,6 +2968,23 @@ function App() {
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
+
+                {/* Business Address - Required for Cashfree Compliance */}
+                <div className="business-address" style={{
+                  marginTop: '20px',
+                  paddingTop: '20px',
+                  borderTop: '1px solid #e0e0e0',
+                  fontSize: '12px',
+                  color: '#666',
+                  lineHeight: '1.6'
+                }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+                    Business Address:
+                  </div>
+                  <div>
+                    #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
+                  </div>
+                </div>
               </div>
             </div>
           </div>
