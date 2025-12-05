@@ -144,10 +144,21 @@ app.post("/api/payment/create-session", async (req, res) => {
     const amountInPaise = Math.round(amount * 100);
     log(`💰 Creating order: ${amountInPaise} paise (₹${amount})`);
     log(`🔑 Using Key ID: ${RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + '...' : 'MISSING'}`);
+    log(`🔑 Key ID full length: ${RAZORPAY_KEY_ID?.length || 0}`);
+    log(`🔑 Key Secret length: ${RAZORPAY_KEY_SECRET?.length || 0}`);
+    log(`🔑 Key Secret first 8 chars: ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.substring(0, 8) + '...' : 'MISSING'}`);
+    
+    // Log Razorpay instance details
+    log(`🔍 Razorpay instance check: ${razorpay ? 'Initialized' : 'NOT INITIALIZED'}`);
+    if (razorpay && razorpay.key_id) {
+      log(`🔍 Razorpay SDK Key ID: ${razorpay.key_id.substring(0, 12)}...`);
+    }
 
     // Create Razorpay order using SDK
     // Generate a unique receipt ID
     const receiptId = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
+    log(`📤 Calling Razorpay API: orders.create({ amount: ${amountInPaise}, currency: INR, receipt: ${receiptId} })`);
     
     const order = await razorpay.orders.create({
       amount: amountInPaise, // Convert to paise (199 → 19900)
@@ -208,6 +219,40 @@ app.post("/api/payment/create-session", async (req, res) => {
       details: err.message,
       statusCode: err.statusCode || err.status,
       razorpayError: err.error || null
+    });
+  }
+});
+
+// Test Razorpay credentials endpoint (for debugging)
+app.get("/api/payment/test-credentials", async (req, res) => {
+  try {
+    log('🧪 Testing Razorpay credentials...');
+    
+    // Try to create a minimal test order
+    const testOrder = await razorpay.orders.create({
+      amount: 100, // 1 rupee in paise
+      currency: "INR",
+      receipt: `test_${Date.now()}`,
+    });
+    
+    log(`✅ Test order created successfully: ${testOrder.id}`);
+    
+    res.json({
+      success: true,
+      message: "Razorpay credentials are valid",
+      testOrderId: testOrder.id,
+      keyIdLength: RAZORPAY_KEY_ID?.length || 0,
+      keySecretLength: RAZORPAY_KEY_SECRET?.length || 0,
+    });
+  } catch (err) {
+    log('❌ Test order failed:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      statusCode: err.statusCode,
+      razorpayError: err.error,
+      keyIdLength: RAZORPAY_KEY_ID?.length || 0,
+      keySecretLength: RAZORPAY_KEY_SECRET?.length || 0,
     });
   }
 });
