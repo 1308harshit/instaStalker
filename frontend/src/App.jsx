@@ -51,6 +51,7 @@ const INVALID_USERNAME_REGEX = /unknown/i;
 const NON_EN_SUMMARY_REGEX =
   /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
+const QUEUE_MESSAGE = "You are in the queue";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
@@ -306,6 +307,7 @@ function App() {
   const [fullReportLoading, setFullReportLoading] = useState(false);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
+  const [isInQueue, setIsInQueue] = useState(false);
 
   // Payment page state
   const [paymentForm, setPaymentForm] = useState({
@@ -608,6 +610,7 @@ function App() {
       canAdvanceFromProcessing &&
       allBulletsShown
     ) {
+      setIsInQueue(false); // No longer in queue, results are ready
       setScreen(SCREEN.PREVIEW);
     }
   }, [
@@ -991,6 +994,7 @@ function App() {
     setProfileConfirmParsed(false); // Reset flag for new request
     setAnalyzingProgress(0);
     setProcessingMessageIndex(0);
+    setIsInQueue(true); // User is now in queue
 
     activeRequestRef.current += 1;
     const requestId = activeRequestRef.current;
@@ -1206,6 +1210,17 @@ function App() {
     ));
   };
 
+  // Helper function to check if queue message should be shown
+  const shouldShowQueueMessage = () => {
+    if (!isInQueue) return false;
+    return (
+      screen === SCREEN.LANDING ||
+      screen === SCREEN.ANALYZING ||
+      screen === SCREEN.PROFILE ||
+      screen === SCREEN.PROCESSING
+    );
+  };
+
   const renderAnalyzingFallback = () => (
     <div className="stage-card analyzing-card">
       <div className="stage-progress-track">
@@ -1238,6 +1253,11 @@ function App() {
 
   const renderLanding = () => (
     <section className="screen hero">
+      {shouldShowQueueMessage() && (
+        <div className="queue-message">
+          {QUEUE_MESSAGE}
+        </div>
+      )}
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
       <button className="result-btn">Result in 1 minute</button>
@@ -1292,6 +1312,11 @@ function App() {
 
   const renderAnalyzing = () => (
     <section className="screen snapshot-stage">
+      {shouldShowQueueMessage() && (
+        <div className="queue-message">
+          {QUEUE_MESSAGE}
+        </div>
+      )}
       {renderAnalyzingFallback()}
     </section>
   );
@@ -1308,6 +1333,11 @@ function App() {
 
     return (
       <section className="screen snapshot-stage">
+        {shouldShowQueueMessage() && (
+          <div className="queue-message">
+            You are in the queue
+          </div>
+        )}
         <div className="stage-card profile-card profile-card--dynamic">
           <div className="stage-progress-track subtle">
             <div
@@ -1337,6 +1367,11 @@ function App() {
 
   const renderProcessing = () => (
     <section className="screen snapshot-stage">
+      {shouldShowQueueMessage() && (
+        <div className="queue-message">
+          {QUEUE_MESSAGE}
+        </div>
+      )}
       <div className="stage-card processing-card">
         <div className="stage-progress-track subtle">
           <div className="stage-progress-fill" style={{ width: "82%" }} />
