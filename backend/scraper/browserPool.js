@@ -8,13 +8,16 @@ const log = (message, data = null) => {
 
 class BrowserPool {
   constructor() {
-    this.browser = null;
-    this.isLaunching = false;
-    this.launchPromise = null;
+    // Array to hold 2 browser instances
+    this.browsers = [null, null];
+    this.isLaunching = [false, false];
+    this.launchPromises = [null, null];
     this.lastActivityTime = Date.now();
     this.watchdogInterval = null;
     this.keepAliveInterval = null;
     this.isCheckingHealth = false;
+    // Round-robin counter for alternating between browsers
+    this.currentBrowserIndex = 0;
     
     // Start watchdog and keep-alive on initialization
     this.startWatchdog();
@@ -22,65 +25,77 @@ class BrowserPool {
   }
 
   /**
-   * Get or create browser instance
+   * Get or create browser instance at specified index
    * Reuses existing browser, creates new one if needed
    */
-  async getBrowser() {
+  async getBrowser(index) {
     // Update activity time
     this.lastActivityTime = Date.now();
     
     // If browser exists and is connected, return it
-    if (this.browser && this.browser.isConnected()) {
-      return this.browser;
+    if (this.browsers[index] && this.browsers[index].isConnected()) {
+      return this.browsers[index];
     }
 
     // If browser is launching, wait for it
-    if (this.isLaunching && this.launchPromise) {
-      log("⏳ Browser is launching, waiting...");
-      return await this.launchPromise;
+    if (this.isLaunching[index] && this.launchPromises[index]) {
+      log(`⏳ Browser ${index} is launching, waiting...`);
+      return await this.launchPromises[index];
     }
 
     // Launch new browser
-    this.isLaunching = true;
-    log("🚀 Launching new browser instance...");
+    this.isLaunching[index] = true;
+    log(`🚀 Launching new browser instance ${index}...`);
     
-    this.launchPromise = launchBrowser()
+    this.launchPromises[index] = launchBrowser()
       .then((browser) => {
-        this.browser = browser;
-        this.isLaunching = false;
-        this.launchPromise = null;
+        this.browsers[index] = browser;
+        this.isLaunching[index] = false;
+        this.launchPromises[index] = null;
         this.lastActivityTime = Date.now();
         
-        log("✅ Browser instance ready and connected");
+        log(`✅ Browser instance ${index} ready and connected`);
         return browser;
       })
       .catch((err) => {
-        this.isLaunching = false;
-        this.launchPromise = null;
-        log("❌ Failed to launch browser:", err.message);
+        this.isLaunching[index] = false;
+        this.launchPromises[index] = null;
+        log(`❌ Failed to launch browser ${index}:`, err.message);
         throw err;
       });
 
-    return await this.launchPromise;
+    return await this.launchPromises[index];
+  }
+
+  /**
+   * Get next browser index using round-robin
+   */
+  getNextBrowserIndex() {
+    const index = this.currentBrowserIndex;
+    // Alternate between 0 and 1
+    this.currentBrowserIndex = (this.currentBrowserIndex + 1) % 2;
+    return index;
   }
 
   /**
    * Create a new page (context) for scraping
-   * Each request gets its own isolated page
+   * Each request gets its own isolated page from alternating browsers
    */
   async createPage() {
     this.lastActivityTime = Date.now();
-    const browser = await this.getBrowser();
+    // Get next browser index (round-robin)
+    const browserIndex = this.getNextBrowserIndex();
+    const browser = await this.getBrowser(browserIndex);
     const page = await browser.newPage();
-    log("✅ New page created from shared browser");
+    log(`✅ New page created from browser ${browserIndex} (shared browser)`);
     return page;
   }
 
   /**
    * Check if browser is healthy (not frozen)
    */
-  async checkBrowserHealth() {
-    if (!this.browser || !this.browser.isConnected()) {
+  async checkBrowserHealth(index) {
+    if (!this.browsers[index] || !this.browsers[index].isConnected()) {
       return false;
     }
 
@@ -90,12 +105,12 @@ class BrowserPool {
         setTimeout(() => reject(new Error('Browser health check timeout')), 5000)
       );
       
-      const healthCheck = this.browser.version();
+      const healthCheck = this.browsers[index].version();
       
       await Promise.race([healthCheck, timeoutPromise]);
       return true;
     } catch (err) {
-      log("⚠️ Browser health check failed:", err.message);
+      log(`⚠️ Browser ${index} health check failed:`, err.message);
       return false;
     }
   }
@@ -111,43 +126,48 @@ class BrowserPool {
     this.isCheckingHealth = true;
     
     try {
-      const isHealthy = await this.checkBrowserHealth();
-      
-      if (!isHealthy) {
-        log("🔄 Browser appears frozen, restarting...");
-        await this.forceRestart();
+      // Check both browsers
+      for (let i = 0; i < 2; i++) {
+        const isHealthy = await this.checkBrowserHealth(i);
+        
+        if (!isHealthy) {
+          log(`🔄 Browser ${i} appears frozen, restarting...`);
+          await this.forceRestart(i);
+        }
       }
     } catch (err) {
       log("❌ Error checking browser health:", err.message);
-      // If health check itself fails, restart browser
-      await this.forceRestart();
+      // If health check itself fails, restart all browsers
+      for (let i = 0; i < 2; i++) {
+        await this.forceRestart(i);
+      }
     } finally {
       this.isCheckingHealth = false;
     }
   }
 
   /**
-   * Force restart browser
+   * Force restart browser at specific index
    */
-  async forceRestart() {
+  async forceRestart(index) {
     try {
-      if (this.browser && this.browser.isConnected()) {
-        await this.browser.close();
+      if (this.browsers[index] && this.browsers[index].isConnected()) {
+        await this.browsers[index].close();
       }
     } catch (err) {
-      log("⚠️ Error closing old browser:", err.message);
+      log(`⚠️ Error closing old browser ${index}:`, err.message);
     }
     
-    this.browser = null;
-    this.isLaunching = false;
-    this.launchPromise = null;
+    this.browsers[index] = null;
+    this.isLaunching[index] = false;
+    this.launchPromises[index] = null;
     
     // Pre-warm browser for next request
-    log("🔥 Pre-warming browser after restart...");
+    log(`🔥 Pre-warming browser ${index} after restart...`);
     try {
-      await this.getBrowser();
+      await this.getBrowser(index);
     } catch (err) {
-      log("⚠️ Failed to pre-warm browser:", err.message);
+      log(`⚠️ Failed to pre-warm browser ${index}:`, err.message);
     }
   }
 
@@ -163,31 +183,34 @@ class BrowserPool {
       return; // Server is active, no need to keep-alive
     }
 
-    log("🔥 Keep-alive: Warming up browser (5 min idle detected)");
+    log("🔥 Keep-alive: Warming up browsers (5 min idle detected)");
 
     try {
-      if (!this.browser || !this.browser.isConnected()) {
-        // Browser not running, pre-warm it
-        await this.getBrowser();
-        log("✅ Browser warmed up");
-        return;
+      // Keep both browsers alive
+      for (let i = 0; i < 2; i++) {
+        if (!this.browsers[i] || !this.browsers[i].isConnected()) {
+          // Browser not running, pre-warm it
+          await this.getBrowser(i);
+          log(`✅ Browser ${i} warmed up`);
+        } else {
+          // Browser is running, test it with a simple page
+          const testPage = await this.browsers[i].newPage();
+          await testPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 });
+          await testPage.close();
+          log(`✅ Keep-alive: Browser ${i} is warm and responsive`);
+        }
       }
-
-      // Browser is running, test it with a simple page
-      const testPage = await this.browser.newPage();
-      await testPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 });
-      await testPage.close();
-      
-      log("✅ Keep-alive: Browser is warm and responsive");
       this.lastActivityTime = Date.now(); // Update activity time
     } catch (err) {
-      log("⚠️ Keep-alive failed, restarting browser:", err.message);
-      await this.forceRestart();
+      log("⚠️ Keep-alive failed, restarting browsers:", err.message);
+      for (let i = 0; i < 2; i++) {
+        await this.forceRestart(i);
+      }
     }
   }
 
   /**
-   * Start watchdog timer (checks every 1 minute)
+   * Start watchdog timer (checks every 5 minutes)
    */
   startWatchdog() {
     if (this.watchdogInterval) {
@@ -195,12 +218,15 @@ class BrowserPool {
     }
 
     this.watchdogInterval = setInterval(() => {
-      if (this.browser && this.browser.isConnected()) {
-        this.restartBrowserIfFrozen();
+      for (let i = 0; i < 2; i++) {
+        if (this.browsers[i] && this.browsers[i].isConnected()) {
+          this.restartBrowserIfFrozen();
+          break; // Check once for all browsers
+        }
       }
-    }, 60 * 1000); // Check every 1 minute
+    }, 5 * 60 * 1000); // Check every 5 minutes
 
-    log("🐕 Watchdog started (checks every 1 minute)");
+    log("🐕 Watchdog started (checks every 5 minutes)");
   }
 
   /**
@@ -219,7 +245,7 @@ class BrowserPool {
   }
 
   /**
-   * Close browser instance (for graceful shutdown)
+   * Close browser instances (for graceful shutdown)
    */
   async close() {
     // Stop intervals
@@ -233,18 +259,22 @@ class BrowserPool {
       this.keepAliveInterval = null;
     }
 
-    if (this.browser && this.browser.isConnected()) {
-      log("🛑 Closing browser instance...");
-      await this.browser.close();
-      this.browser = null;
+    // Close all browsers
+    for (let i = 0; i < 2; i++) {
+      if (this.browsers[i] && this.browsers[i].isConnected()) {
+        log(`🛑 Closing browser instance ${i}...`);
+        await this.browsers[i].close();
+        this.browsers[i] = null;
+      }
     }
   }
 
   /**
-   * Check if browser is available
+   * Check if any browser is available
    */
   isAvailable() {
-    return this.browser !== null && this.browser.isConnected();
+    return (this.browsers[0] !== null && this.browsers[0].isConnected()) ||
+           (this.browsers[1] !== null && this.browsers[1].isConnected());
   }
 }
 
