@@ -273,6 +273,7 @@ function App() {
   const [cards, setCards] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
   const [analysis, setAnalysis] = useState(null);
+  const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
   const [profileStage, setProfileStage] = useState(createProfileStageData());
@@ -3328,25 +3329,116 @@ function App() {
     );
   };
 
+  // Fetch results.html and extract cards when on payment success page
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    
+    const fetchResultsCards = async () => {
+      try {
+        const resultsStep = snapshots.find((step) => step.name === "results");
+        if (!resultsStep || !resultsStep.htmlPath) {
+          console.log("No results snapshot found, using cards from state");
+          // Fallback to cards from state
+          const cleanCards = cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+          return;
+        }
+
+        const url = buildSnapshotUrl(resultsStep.htmlPath);
+        if (!url) {
+          console.log("Could not build results URL, using cards from state");
+          const cleanCards = cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+          return;
+        }
+
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.log("Failed to fetch results.html, using cards from state");
+          const cleanCards = cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+          return;
+        }
+
+        const html = await res.text();
+        const parsed = parseResultsSnapshot(html);
+        
+        if (parsed && parsed.slider && parsed.slider.cards) {
+          // Filter clean cards (not locked, not blurred, have image and username)
+          const cleanCards = parsed.slider.cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+        } else {
+          // Fallback to cards from state
+          const cleanCards = cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+        }
+      } catch (err) {
+        console.error("Error fetching results cards:", err);
+        // Fallback to cards from state
+        const cleanCards = cards.filter(
+          (card) =>
+            !card?.isLocked &&
+            !card?.blurImage &&
+            card?.image &&
+            card?.username
+        );
+        setPaymentSuccessCards(cleanCards.slice(0, 4));
+      }
+    };
+
+    fetchResultsCards();
+  }, [screen, snapshots, cards]);
+
   const renderPaymentSuccess = () => {
-    // Get clean cards (not locked, not blurred, have image and username)
-    const cleanCards = cards.filter(
-      (card) =>
-        !card?.isLocked &&
-        !card?.blurImage &&
-        card?.image &&
-        card?.username
-    );
+    // Use cards from results.html, fallback to cards from state
+    const displayCards = paymentSuccessCards.length > 0 
+      ? paymentSuccessCards 
+      : cards.filter(
+          (card) =>
+            !card?.isLocked &&
+            !card?.blurImage &&
+            card?.image &&
+            card?.username
+        ).slice(0, 6);
     
-    // Get first 4 clean cards
-    const displayCards = cleanCards.slice(0, 4);
-    
-    // Profile action texts (one for each of the 4 profiles)
+    // Profile action texts (one for each of the 6 profiles)
     const profileActions = [
       "This user took screenshot of your profile earlier and yesterday",
       "This user shared your profile",
       "This user screenshoted your last story",
-      "This user copied your username"
+      "This user copied your username",
+      "This user viewed your profile yesterday",
+      "This user took screenshot of your profile"
     ];
 
     const handleDownloadPDF = () => {
@@ -3528,7 +3620,7 @@ function App() {
               color: '#1a1a1a',
               marginBottom: '12px'
             }}>
-              Download Your Full Report
+              Download the e-book attraction and retraction
             </h2>
             <p style={{
               fontSize: 'clamp(14px, 2.5vw, 16px)',
