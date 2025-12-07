@@ -3329,44 +3329,84 @@ function App() {
   };
 
   const renderPaymentSuccess = () => {
-    // Static usernames matching current style
-    const staticUsernames = [
-      { username: "@priya_sharma", name: "Priya Sharma", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&w=400&h=400" },
-      { username: "@rahul_kumar", name: "Rahul Kumar", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=facearea&w=400&h=400" },
-      { username: "@ananya_patel", name: "Ananya Patel", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=facearea&w=400&h=400" },
-      { username: "@vikram_singh", name: "Vikram Singh", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&w=400&h=400" }
+    // Get clean cards (not locked, not blurred, have image and username)
+    const cleanCards = cards.filter(
+      (card) =>
+        !card?.isLocked &&
+        !card?.blurImage &&
+        card?.image &&
+        card?.username
+    );
+    
+    // Get first 4 clean cards
+    const displayCards = cleanCards.slice(0, 4);
+    
+    // Profile action texts (one for each of the 4 profiles)
+    const profileActions = [
+      "This user took screenshot of your profile earlier and yesterday",
+      "This user shared your profile",
+      "This user screenshoted your last story",
+      "This user copied your username"
     ];
 
     const handleDownloadPDF = () => {
-      const link = document.createElement('a');
-      link.href = '/Dont_Look_Back_Full.pdf';
-      link.download = 'Dont_Look_Back_Full.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const link = document.createElement('a');
+        link.href = '/Dont_Look_Back_Full.pdf';
+        link.download = 'Dont_Look_Back_Full.pdf';
+        link.target = '_blank'; // Fallback: open in new tab if download fails
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error downloading PDF:', error);
+        // Fallback: open PDF in new tab
+        window.open('/Dont_Look_Back_Full.pdf', '_blank');
+      }
     };
 
     return (
       <section className="screen payment-success-screen" style={{
         maxWidth: '100%',
-        padding: '20px',
+        padding: 'clamp(10px, 3vw, 20px)',
         background: '#fff',
         minHeight: '100vh'
       }}>
         <div style={{
           maxWidth: '1200px',
           margin: '0 auto',
-          padding: '20px'
+          padding: 'clamp(15px, 3vw, 20px)'
         }}>
+          {/* Disclaimer at the top */}
+          <div style={{
+            marginBottom: 'clamp(20px, 5vw, 40px)',
+            padding: 'clamp(15px, 3vw, 20px)',
+            background: '#fff3cd',
+            border: '1px solid #ffc107',
+            borderRadius: '12px',
+            textAlign: 'center'
+          }}>
+            <p style={{
+              fontSize: 'clamp(14px, 2.5vw, 16px)',
+              color: '#856404',
+              margin: 0,
+              fontWeight: 'bold',
+              fontStyle: 'italic',
+              lineHeight: '1.6'
+            }}>
+              <strong><em>This report is created by automated AI analysis and may not always be 100% accurate. Instagram does not provide official visitor data, so results are estimates based on engagement signals only.</em></strong>
+            </p>
+          </div>
+
           {/* Success Header */}
           <div style={{
             textAlign: 'center',
-            marginBottom: '40px',
-            paddingTop: '20px'
+            marginBottom: 'clamp(20px, 5vw, 40px)',
+            paddingTop: 'clamp(10px, 3vw, 20px)'
           }}>
             <div style={{
-              fontSize: '48px',
-              marginBottom: '20px'
+              fontSize: 'clamp(32px, 6vw, 48px)',
+              marginBottom: 'clamp(12px, 3vw, 20px)'
             }}>✅</div>
             <h1 style={{
               fontSize: 'clamp(28px, 5vw, 36px)',
@@ -3385,85 +3425,102 @@ function App() {
             </p>
           </div>
 
-          {/* Username Cards Grid - Responsive */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '20px',
-            marginBottom: '40px',
-            padding: '0 10px'
-          }}>
-            {staticUsernames.map((user, index) => (
-              <div
-                key={index}
-                className="slider-card"
-                style={{
-                  borderRadius: '18px',
-                  overflow: 'hidden',
-                  background: '#fff',
-                  border: '1px solid rgba(0, 0, 0, 0.08)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                }}
-              >
-                <div style={{
-                  width: '100%',
-                  height: '200px',
-                  background: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative'
-                }}>
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    style={{
-                      width: '120px',
-                      height: '120px',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      border: '4px solid #fff',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
-                    }}
-                  />
-                </div>
-                <div className="slider-card-content" style={{
-                  padding: '20px',
-                  textAlign: 'center'
-                }}>
-                  <h4 className="username" style={{
-                    fontSize: 'clamp(16px, 3vw, 18px)',
-                    fontWeight: '600',
-                    color: '#1a1a1a',
-                    margin: '0 0 8px 0'
+          {/* Unlocked Profiles Grid - Show 4 clean cards from results */}
+          {displayCards.length > 0 ? (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: 'clamp(15px, 3vw, 20px)',
+              marginBottom: 'clamp(20px, 5vw, 40px)',
+              padding: '0 clamp(5px, 2vw, 10px)'
+            }}>
+              {displayCards.map((card, index) => (
+                <div
+                  key={index}
+                  className="slider-card"
+                  style={{
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    background: '#fff',
+                    border: '1px solid rgba(0, 0, 0, 0.08)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                  }}
+                >
+                  <div style={{
+                    width: '100%',
+                    height: 'clamp(150px, 25vw, 200px)',
+                    background: card.image 
+                      ? `url(${card.image}) center/cover` 
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative'
                   }}>
-                    {user.username}
-                  </h4>
-                  <p style={{
-                    fontSize: 'clamp(14px, 2.5vw, 16px)',
-                    color: '#666',
-                    margin: 0,
-                    fontWeight: '500'
+                    {!card.image && (
+                      <div style={{
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '50%',
+                        background: 'rgba(255, 255, 255, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '48px',
+                        color: '#fff'
+                      }}>
+                        👤
+                      </div>
+                    )}
+                  </div>
+                  <div className="slider-card-content" style={{
+                    padding: 'clamp(15px, 3vw, 20px)',
+                    textAlign: 'center'
                   }}>
-                    {user.name}
-                  </p>
+                    <h4 className="username" style={{
+                      fontSize: 'clamp(16px, 3vw, 18px)',
+                      fontWeight: '600',
+                      color: '#1a1a1a',
+                      margin: '0 0 8px 0'
+                    }}>
+                      {card.username}
+                    </h4>
+                    <p style={{
+                      fontSize: 'clamp(13px, 2.5vw, 15px)',
+                      color: '#666',
+                      margin: '8px 0 0 0',
+                      fontWeight: '500',
+                      lineHeight: '1.5'
+                    }}>
+                      {profileActions[index] || profileActions[0]}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              textAlign: 'center',
+              padding: '40px 20px',
+              color: '#666',
+              marginBottom: '40px'
+            }}>
+              <p>Loading profiles...</p>
+            </div>
+          )}
 
           {/* PDF Download Section */}
           <div style={{
             background: '#f9f9f9',
             borderRadius: '16px',
-            padding: '30px 20px',
+            padding: 'clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)',
             textAlign: 'center',
-            marginBottom: '30px',
+            marginBottom: 'clamp(20px, 4vw, 30px)',
             border: '1px solid #e0e0e0'
           }}>
             <div style={{
-              fontSize: '48px',
-              marginBottom: '20px'
+              fontSize: 'clamp(32px, 6vw, 48px)',
+              marginBottom: 'clamp(12px, 3vw, 20px)'
             }}>📄</div>
             <h2 style={{
               fontSize: 'clamp(22px, 4vw, 28px)',
@@ -3489,13 +3546,15 @@ function App() {
                 color: '#fff',
                 border: 'none',
                 borderRadius: '999px',
-                padding: '16px 32px',
-                fontSize: 'clamp(16px, 3vw, 18px)',
+                padding: 'clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)',
+                fontSize: 'clamp(14px, 2.5vw, 18px)',
                 fontWeight: '600',
                 cursor: 'pointer',
                 boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
                 transition: 'transform 0.2s, box-shadow 0.2s',
-                minWidth: '200px'
+                minWidth: 'clamp(180px, 30vw, 200px)',
+                width: '100%',
+                maxWidth: '400px'
               }}
               onMouseOver={(e) => {
                 e.target.style.transform = 'translateY(-2px)';
@@ -3506,7 +3565,7 @@ function App() {
                 e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
               }}
             >
-              📥 Download PDF
+              pdf (dont look back) [download]
             </button>
           </div>
 
@@ -3519,11 +3578,13 @@ function App() {
                 color: '#f43f3f',
                 border: '2px solid #f43f3f',
                 borderRadius: '999px',
-                padding: '12px 24px',
+                padding: 'clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)',
                 fontSize: 'clamp(14px, 2.5vw, 16px)',
                 fontWeight: '600',
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                width: '100%',
+                maxWidth: '300px'
               }}
               onMouseOver={(e) => {
                 e.target.style.background = '#f43f3f';
