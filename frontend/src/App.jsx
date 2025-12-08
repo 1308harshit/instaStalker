@@ -3109,32 +3109,6 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
-                {/* Demo Link - for testing on server */}
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setScreen(SCREEN.PAYMENT_SUCCESS);
-                  }}
-                  style={{
-                    display: "block",
-                    textAlign: "center",
-                    marginTop: "16px",
-                    fontSize: "13px",
-                    color: "#999",
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                  }}
-                  onMouseOver={(e) => {
-                    e.target.style.color = "#666";
-                  }}
-                  onMouseOut={(e) => {
-                    e.target.style.color = "#999";
-                  }}
-                >
-                  demo
-                </a>
-
               </div>
             </div>
           </div>
