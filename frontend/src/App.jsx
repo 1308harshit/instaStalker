@@ -2576,7 +2576,7 @@ function App() {
                   </p>
                   <p className="full-report-current-price">
                     <span className="price-currency">₹</span>{" "}
-                    <span className="price-number">199</span>
+                    <span className="price-number">99</span>
                   </p>
                   <p className="full-report-payment-type">one-time payment</p>
                 </div>
@@ -2644,7 +2644,7 @@ function App() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       
       // Google Tag Manager: Push InitiateCheckout event to dataLayer
-      const amount = 199 * quantity;
+      const amount = 99 * quantity;
       console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
       
       if (window.dataLayer) {
@@ -2657,7 +2657,7 @@ function App() {
               item_name: 'Instagram Stalker Report',
               item_category: 'product',
               quantity: quantity,
-              price: 199
+              price: 99
             }]
           }
         });
@@ -2712,7 +2712,7 @@ function App() {
       
       // Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
       // This fires AFTER redirect, so Meta Pixel can track it
-      const amount = 199 * quantity;
+      const amount = 99 * quantity;
       console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
       
       if (window.dataLayer) {
@@ -2726,7 +2726,7 @@ function App() {
               item_name: 'Instagram Stalker Report',
               item_category: 'product',
               quantity: quantity,
-              price: 199
+              price: 99
             }]
           }
         });
@@ -2769,7 +2769,7 @@ function App() {
       }
 
       // Create Razorpay order
-      const amount = 199 * quantity; // 199₹ per item
+      const amount = 99 * quantity; // 99₹ per item
       const orderResponse = await fetch(
         `/api/payment/create-session`,
         {
@@ -2886,7 +2886,7 @@ function App() {
 
   const renderPayment = () => {
     const originalPrice = 1299;
-    const currentPrice = 199;
+    const currentPrice = 99;
     const subtotal = currentPrice * quantity;
     const total = subtotal;
 

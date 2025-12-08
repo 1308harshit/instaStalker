@@ -161,7 +161,7 @@ app.post("/api/payment/create-session", async (req, res) => {
     log(`📤 Calling Razorpay API: orders.create({ amount: ${amountInPaise}, currency: INR, receipt: ${receiptId} })`);
     
     const order = await razorpay.orders.create({
-      amount: amountInPaise, // Convert to paise (199 → 19900)
+      amount: amountInPaise, // Convert to paise (99 → 9900)
       currency: "INR",
       receipt: receiptId, // Add receipt ID (sometimes required)
     });
