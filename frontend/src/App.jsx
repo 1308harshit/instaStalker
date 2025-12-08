@@ -3119,10 +3119,17 @@ function App() {
                   style={{
                     display: "block",
                     textAlign: "center",
-                    marginTop: "12px",
-                    fontSize: "12px",
-                    color: "#666",
-                    textDecoration: "none",
+                    marginTop: "16px",
+                    fontSize: "13px",
+                    color: "#999",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.color = "#666";
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.color = "#999";
                   }}
                 >
                   demo
