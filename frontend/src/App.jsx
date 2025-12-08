@@ -3109,6 +3109,25 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
+                {/* Demo Link - for testing on server */}
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setScreen(SCREEN.PAYMENT_SUCCESS);
+                  }}
+                  style={{
+                    display: "block",
+                    textAlign: "center",
+                    marginTop: "12px",
+                    fontSize: "12px",
+                    color: "#666",
+                    textDecoration: "none",
+                  }}
+                >
+                  demo
+                </a>
+
               </div>
             </div>
           </div>
@@ -3412,7 +3431,7 @@ function App() {
             card?.image &&
             card?.username
         );
-        setPaymentSuccessCards(cleanCards.slice(0, 4));
+        setPaymentSuccessCards(cleanCards.slice(0, 6));
       }
     };
 
@@ -3517,7 +3536,7 @@ function App() {
             </p>
           </div>
 
-          {/* Unlocked Profiles Grid - Show 4 clean cards from results */}
+          {/* Unlocked Profiles Grid - Show 6 clean cards from results */}
           {displayCards.length > 0 ? (
             <div style={{
               display: 'grid',
@@ -3540,7 +3559,7 @@ function App() {
                 >
                   <div style={{
                     width: '100%',
-                    height: 'clamp(150px, 25vw, 200px)',
+                    height: 'clamp(350px, 35vw, 320px)',
                     background: card.image 
                       ? `url(${card.image}) center/cover` 
                       : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
