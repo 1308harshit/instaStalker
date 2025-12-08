@@ -30,6 +30,7 @@ const SCREEN = {
   PREVIEW: "preview",
   FULL_REPORT: "full-report",
   PAYMENT: "payment",
+  PAYMENT_SUCCESS: "payment-success",
   ERROR: "error",
 };
 
@@ -314,6 +315,7 @@ function App() {
   const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
   const [quantity, setQuantity] = useState(1);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const snapshotLookup = useMemo(() => {
@@ -593,6 +595,165 @@ function App() {
       cancelled = true;
     };
   }, [snapshots]);
+
+  // Fetch results.html for payment success page
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+
+    const fetchResultsCards = async () => {
+      try {
+        console.log("🔄 Fetching results cards for payment success page...");
+        console.log("📋 Available snapshots:", snapshots.map(s => s.name));
+        console.log("👤 Profile username:", profile.username);
+        
+        // First, try using analysis state if available (already parsed)
+        if (analysis && analysis.slider && analysis.slider.cards && analysis.slider.cards.length > 0) {
+          console.log("📦 Using analysis.slider.cards (already parsed)");
+          const cleanCards = analysis.slider.cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username &&
+              !INVALID_USERNAME_REGEX.test(card.username)
+          );
+          console.log("✨ Clean cards from analysis:", cleanCards.length);
+          if (cleanCards.length > 0) {
+            setPaymentSuccessCards(cleanCards.slice(0, 6));
+            return;
+          }
+        }
+
+        // Find the results snapshot
+        let resultsStep = snapshots.find((step) => step.name === "results");
+        
+        // If no results snapshot found, try to construct URL from profile username
+        if (!resultsStep && profile.username) {
+          console.log("⚠️ No results snapshot found, trying to construct URL from profile username");
+          // Try to find any snapshot to get the base path structure
+          const anyStep = snapshots.find((step) => step.htmlPath);
+          if (anyStep) {
+            // Extract the base path and construct results path
+            const basePath = anyStep.htmlPath.split('/').slice(0, -1).join('/');
+            resultsStep = {
+              name: "results",
+              htmlPath: `${basePath}/06-results.html`
+            };
+            console.log("🔧 Constructed results path:", resultsStep.htmlPath);
+          }
+        }
+
+        if (!resultsStep) {
+          console.log("❌ No results snapshot found and cannot construct URL");
+          // Fallback: use cards from state if available
+          if (cards && cards.length > 0) {
+            console.log("📦 Using cards from state as fallback");
+            const cleanCards = cards.filter(
+              (card) =>
+                !card?.isLocked &&
+                !card?.blurImage &&
+                card?.image &&
+                card?.username &&
+                !INVALID_USERNAME_REGEX.test(card.username)
+            );
+            setPaymentSuccessCards(cleanCards.slice(0, 6));
+          }
+          return;
+        }
+
+        const url = buildSnapshotUrl(resultsStep.htmlPath);
+        if (!url) {
+          console.log("❌ No URL for results snapshot");
+          return;
+        }
+
+        console.log("🌐 Fetching results.html from:", url);
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error("❌ Failed to fetch results.html:", res.status, res.statusText);
+          return;
+        }
+
+        const html = await res.text();
+        console.log("✅ Fetched results.html, length:", html.length);
+        
+        // Use parseResultsSnapshot to parse the HTML
+        const parsed = parseResultsSnapshot(html);
+        console.log("📊 Parsed results:", parsed ? "success" : "failed");
+        
+        if (!parsed) {
+          console.log("❌ Failed to parse results.html");
+          return;
+        }
+
+        if (!parsed.slider || !parsed.slider.cards) {
+          console.log("❌ No slider cards found in parsed results");
+          console.log("📋 Available keys:", Object.keys(parsed));
+          if (parsed.slider) {
+            console.log("📋 Slider keys:", Object.keys(parsed.slider));
+          }
+          // Try using analysis state if available
+          if (analysis && analysis.slider && analysis.slider.cards) {
+            console.log("📦 Using analysis.slider.cards as fallback");
+            const cleanCards = analysis.slider.cards.filter(
+              (card) =>
+                !card?.isLocked &&
+                !card?.blurImage &&
+                card?.image &&
+                card?.username &&
+                !INVALID_USERNAME_REGEX.test(card.username)
+            );
+            setPaymentSuccessCards(cleanCards.slice(0, 6));
+          }
+          return;
+        }
+
+        console.log("🎴 Found", parsed.slider.cards.length, "slider cards");
+
+        // Get clean cards (not locked, not blurred, have image and username)
+        const cleanCards = parsed.slider.cards.filter(
+          (card) =>
+            !card?.isLocked &&
+            !card?.blurImage &&
+            card?.image &&
+            card?.username &&
+            !INVALID_USERNAME_REGEX.test(card.username)
+        );
+
+        console.log("✨ Clean cards found:", cleanCards.length);
+        console.log("📋 Clean cards:", cleanCards.map(c => ({ 
+          username: c.username, 
+          hasImage: !!c.image,
+          image: c.image?.substring(0, 50) + '...',
+          isLocked: c.isLocked,
+          blurImage: c.blurImage
+        })));
+
+        // Set the first 6 clean cards
+        const cardsToSet = cleanCards.slice(0, 6);
+        console.log("✅ Setting", cardsToSet.length, "cards to paymentSuccessCards");
+        setPaymentSuccessCards(cardsToSet);
+      } catch (err) {
+        console.error("❌ Failed to fetch results cards for payment success:", err);
+        console.error("Error details:", err.message, err.stack);
+        // Fallback: use cards from state if available
+        if (cards && cards.length > 0) {
+          console.log("📦 Using cards from state as fallback after error");
+          const cleanCards = cards.filter(
+            (card) =>
+              !card?.isLocked &&
+              !card?.blurImage &&
+              card?.image &&
+              card?.username &&
+              !INVALID_USERNAME_REGEX.test(card.username)
+          );
+          setPaymentSuccessCards(cleanCards.slice(0, 6));
+        }
+      }
+    };
+
+    fetchResultsCards();
+  }, [screen, snapshots, profile.username, cards, analysis]);
 
   useEffect(() => {
     // Wait until all processing bullets are shown before transitioning to preview
@@ -2931,8 +3092,348 @@ function App() {
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
+
+                {/* Demo Link */}
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setScreen(SCREEN.PAYMENT_SUCCESS);
+                  }}
+                  style={{
+                    display: "block",
+                    textAlign: "center",
+                    marginTop: "12px",
+                    fontSize: "12px",
+                    color: "#666",
+                    textDecoration: "none",
+                  }}
+                >
+                  demo
+                </a>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  const renderPaymentSuccess = () => {
+    // Get clean cards (not locked, not blurred, have image and username)
+    const cleanCards = paymentSuccessCards.filter(
+      (card) =>
+        !card?.isLocked &&
+        !card?.blurImage &&
+        card?.image &&
+        card?.username
+    );
+
+    // Get first 6 clean cards
+    const displayCards = cleanCards.slice(0, 6);
+
+    // Profile action texts (one for each of the 6 profiles)
+    const profileActions = [
+      "This user took screenshot of your profile earlier and yesterday",
+      "This user shared your profile",
+      "This user screenshoted your last story",
+      "This user copied your username",
+      "This user viewed your profile yesterday",
+      "This user took screenshot of your profile",
+    ];
+
+    const handleDownloadPDF = () => {
+      try {
+        const link = document.createElement("a");
+        link.href = "/Dont_Look_Back_Full.pdf";
+        link.download = "Dont_Look_Back_Full.pdf";
+        link.target = "_blank"; // Fallback: open in new tab if download fails
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        console.error("PDF download failed:", err);
+        // Fallback: open PDF in new tab
+        window.open("/Dont_Look_Back_Full.pdf", "_blank");
+      }
+    };
+
+    return (
+      <section
+        className="screen payment-success-screen"
+        style={{
+          maxWidth: "100%",
+          padding: "clamp(10px, 3vw, 20px)",
+          background: "#fff",
+          minHeight: "100vh",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "1200px",
+            margin: "0 auto",
+            padding: "clamp(10px, 3vw, 20px)",
+          }}
+        >
+          {/* Disclaimer at the top */}
+          <div
+            style={{
+              marginBottom: "clamp(20px, 5vw, 40px)",
+              padding: "clamp(15px, 3vw, 20px)",
+              background: "#fff3cd",
+              border: "1px solid #ffc107",
+              borderRadius: "12px",
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "clamp(14px, 2.5vw, 16px)",
+                color: "#856404",
+                margin: 0,
+                fontWeight: "bold",
+                fontStyle: "italic",
+                lineHeight: "1.6",
+              }}
+            >
+              <strong>
+                <em>
+                  This report is created by automated AI analysis and may not
+                  always be 100% accurate. Instagram does not provide official
+                  visitor data, so results are estimates based on engagement
+                  signals only.
+                </em>
+              </strong>
+            </p>
+          </div>
+
+          {/* Success Header */}
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "clamp(20px, 5vw, 40px)",
+              paddingTop: "clamp(10px, 3vw, 20px)",
+            }}
+          >
+            <div style={{ fontSize: "clamp(32px, 6vw, 48px)", marginBottom: "20px" }}>
+              ✅
+            </div>
+            <h1
+              style={{
+                fontSize: "clamp(28px, 5vw, 36px)",
+                fontWeight: "700",
+                color: "#1a1a1a",
+                marginBottom: "12px",
+              }}
+            >
+              Payment Successful!
+            </h1>
+            <p
+              style={{
+                fontSize: "clamp(16px, 3vw, 18px)",
+                color: "#666",
+                margin: 0,
+              }}
+            >
+              Your report is ready. Here are your stalkers:
+            </p>
+          </div>
+
+          {/* Unlocked Profiles Grid - Show 6 clean cards from results */}
+          {displayCards.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                gap: "clamp(15px, 3vw, 20px)",
+                marginBottom: "clamp(20px, 5vw, 40px)",
+                padding: "0 clamp(5px, 2vw, 10px)",
+              }}
+            >
+              {displayCards.map((card, index) => (
+                <div
+                  key={index}
+                  className="slider-card"
+                  style={{
+                    borderRadius: "18px",
+                    overflow: "hidden",
+                    background: "#fff",
+                    border: "1px solid rgba(0, 0, 0, 0.08)",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "clamp(350px, 35vw, 320px)",
+                      background: card.image
+                        ? `url(${card.image}) center/cover`
+                        : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      position: "relative",
+                    }}
+                  >
+                    {!card.image && (
+                      <div
+                        style={{
+                          width: "120px",
+                          height: "120px",
+                          borderRadius: "50%",
+                          background: "rgba(255, 255, 255, 0.3)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "48px",
+                          color: "#fff",
+                        }}
+                      >
+                        👤
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className="slider-card-content"
+                    style={{
+                      padding: "clamp(15px, 3vw, 20px)",
+                      textAlign: "center",
+                    }}
+                  >
+                    {card.username && (
+                      <h4
+                        className="username"
+                        style={{
+                          fontSize: "clamp(16px, 3vw, 18px)",
+                          fontWeight: "600",
+                          color: "#1a1a1a",
+                          margin: "0 0 8px 0",
+                        }}
+                      >
+                        {card.username}
+                      </h4>
+                    )}
+                    {profileActions[index] && (
+                      <p
+                        style={{
+                          fontSize: "clamp(13px, 2.5vw, 15px)",
+                          color: "#666",
+                          margin: "8px 0 0 0",
+                          fontWeight: "500",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        {profileActions[index]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px 20px",
+                color: "#666",
+                marginBottom: "clamp(20px, 5vw, 40px)",
+              }}
+            >
+              <p>Loading profiles...</p>
+            </div>
+          )}
+
+          {/* PDF Download Section */}
+          <div
+            style={{
+              background: "#f9f9f9",
+              borderRadius: "16px",
+              padding: "clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)",
+              textAlign: "center",
+              marginBottom: "clamp(20px, 4vw, 30px)",
+              border: "1px solid #e0e0e0",
+            }}
+          >
+            <div style={{ fontSize: "clamp(32px, 6vw, 48px)", marginBottom: "20px" }}>
+              📄
+            </div>
+            <h2
+              style={{
+                fontSize: "clamp(22px, 4vw, 28px)",
+                fontWeight: "700",
+                color: "#1a1a1a",
+                marginBottom: "12px",
+              }}
+            >
+              Download the e-book attraction and retraction
+            </h2>
+            <p
+              style={{
+                fontSize: "clamp(14px, 2.5vw, 16px)",
+                color: "#666",
+                marginBottom: "24px",
+                lineHeight: "1.6",
+              }}
+            >
+              Get the complete detailed report in PDF format
+            </p>
+            <button
+              onClick={handleDownloadPDF}
+              className="primary-btn"
+              style={{
+                background: "#f43f3f",
+                color: "#fff",
+                border: "none",
+                borderRadius: "999px",
+                padding: "clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)",
+                fontSize: "clamp(14px, 2.5vw, 18px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                boxShadow: "0 15px 40px rgba(244, 63, 63, 0.35)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                minWidth: "200px",
+                width: "100%",
+                maxWidth: "400px",
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = "translateY(-2px)";
+                e.target.style.boxShadow = "0 20px 50px rgba(244, 63, 63, 0.4)";
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = "translateY(0)";
+                e.target.style.boxShadow = "0 15px 40px rgba(244, 63, 63, 0.35)";
+              }}
+            >
+              pdf (dont look back) [download]
+            </button>
+          </div>
+
+          {/* Back to Home Button */}
+          <div style={{ textAlign: "center" }}>
+            <button
+              onClick={() => setScreen(SCREEN.LANDING)}
+              style={{
+                background: "transparent",
+                color: "#f43f3f",
+                border: "2px solid #f43f3f",
+                borderRadius: "999px",
+                padding: "clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)",
+                fontSize: "clamp(14px, 2.5vw, 16px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = "#f43f3f";
+                e.target.style.color = "#fff";
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = "transparent";
+                e.target.style.color = "#f43f3f";
+              }}
+            >
+              Back to Home
+            </button>
           </div>
         </div>
       </section>
@@ -2965,6 +3466,8 @@ function App() {
         return renderFullReport();
       case SCREEN.PAYMENT:
         return renderPayment();
+      case SCREEN.PAYMENT_SUCCESS:
+        return renderPaymentSuccess();
       case SCREEN.ERROR:
         return renderError();
       default:
