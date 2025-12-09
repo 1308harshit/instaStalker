@@ -3398,7 +3398,12 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
-          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+          const additionalCards = cleanCards.slice(6);
+          const usernames = additionalCards
+            .map(card => card.username)
+            .filter(Boolean)
+            .slice(0, 5);
+          setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
 
@@ -3413,7 +3418,12 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
-          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+          const additionalCards = cleanCards.slice(6);
+          const usernames = additionalCards
+            .map(card => card.username)
+            .filter(Boolean)
+            .slice(0, 5);
+          setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
 
@@ -3428,7 +3438,12 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
-          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+          const additionalCards = cleanCards.slice(6);
+          const usernames = additionalCards
+            .map(card => card.username)
+            .filter(Boolean)
+            .slice(0, 5);
+          setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
 
@@ -3445,8 +3460,26 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
-          // Store cards 7-11 for username list
-          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+          // Store next 5 cards for username list (cards 7-11, or as many as available)
+          // Also check if we need more cards from the full cards array
+          let additionalCards = cleanCards.slice(6);
+          // If we don't have enough, try to get from the full cards array
+          if (additionalCards.length < 5 && cards.length > 6) {
+            const moreCards = cards.filter(
+              (card) =>
+                !card?.isLocked &&
+                !card?.blurImage &&
+                card?.image &&
+                card?.username &&
+                !cleanCards.some(c => c.username === card.username) // Avoid duplicates
+            );
+            additionalCards = [...additionalCards, ...moreCards];
+          }
+          const usernames = additionalCards
+            .map(card => card.username)
+            .filter(Boolean)
+            .slice(0, 5); // Ensure exactly 5 usernames
+          setPaymentSuccessAdditionalUsernames(usernames);
         } else {
           // Fallback to cards from state
           const cleanCards = cards.filter(
@@ -3457,8 +3490,12 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
-          // Store cards 7-11 for username list
-          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+          const additionalCards = cleanCards.slice(6);
+          const usernames = additionalCards
+            .map(card => card.username)
+            .filter(Boolean)
+            .slice(0, 5);
+          setPaymentSuccessAdditionalUsernames(usernames);
         }
       } catch (err) {
         console.error("Error fetching results cards:", err);
@@ -3471,7 +3508,12 @@ function App() {
             card?.username
         );
         setPaymentSuccessCards(cleanCards.slice(0, 6));
-        setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
+        const additionalCards = cleanCards.slice(6);
+        const usernames = additionalCards
+          .map(card => card.username)
+          .filter(Boolean)
+          .slice(0, 5);
+        setPaymentSuccessAdditionalUsernames(usernames);
       }
     };
 
