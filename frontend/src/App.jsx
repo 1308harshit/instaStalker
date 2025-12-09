@@ -2761,6 +2761,22 @@ function App() {
     if (orderId && window.location.pathname.includes('/payment/return')) {
       setScreen(SCREEN.PAYMENT_SUCCESS);
       
+      // Meta Pixel: Track Purchase event (fires AFTER redirect, outside Razorpay iframe)
+      const amount = 99 * quantity;
+      if (typeof fbq !== 'undefined') {
+        fbq('track', 'Purchase', {
+          value: amount,
+          currency: 'INR',
+          content_ids: [orderId],
+          content_name: 'Instagram Stalker Report',
+          content_type: 'product',
+          num_items: quantity
+        });
+        console.log('✅ Meta Pixel Purchase event fired:', { amount, currency: 'INR', orderId, paymentId });
+      } else {
+        console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
+      }
+      
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
       // This fires AFTER redirect, so Meta Pixel can track it
       // const amount = 99 * quantity;
