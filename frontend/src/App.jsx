@@ -300,6 +300,7 @@ function App() {
   const carouselLoopingRef = useRef(false);
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
+  const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -2759,7 +2760,19 @@ function App() {
     const paymentId = urlParams.get('payment_id');
     
     if (orderId && window.location.pathname.includes('/payment/return')) {
+      // Prevent duplicate Purchase events for the same order
+      if (purchaseEventFiredRef.current.has(orderId)) {
+        console.log('⚠️ Purchase event already fired for order:', orderId, '- skipping duplicate');
+        setScreen(SCREEN.PAYMENT_SUCCESS);
+        // Clean URL even if event was already fired
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+      
       setScreen(SCREEN.PAYMENT_SUCCESS);
+      
+      // Mark this order as processed to prevent duplicate events
+      purchaseEventFiredRef.current.add(orderId);
       
       // Meta Pixel: Track Purchase event (fires AFTER redirect, outside Razorpay iframe)
       const amount = 99 * quantity;
