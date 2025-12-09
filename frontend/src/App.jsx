@@ -3614,19 +3614,19 @@ function App() {
                     className="carousel-track"
                     style={{
                       display: 'flex',
-                      transform: `translateX(calc(-${paymentSuccessCarouselIndex * (100 / displayCards.length)}% - ${paymentSuccessCarouselIndex * (16 / displayCards.length)}%))`,
+                      transform: `translateX(calc(-${paymentSuccessCarouselIndex * (100 / displayCards.length)}% - ${paymentSuccessCarouselIndex * (20 / displayCards.length)}%))`,
                       transition: paymentSuccessCarouselResetRef.current
                         ? 'none'
                         : 'transform 0.4s ease-in-out',
-                      gap: 'clamp(12px, 2vw, 16px)',
-                      padding: '0 calc(50% - clamp(125px, 15vw, 150px))',
+                      gap: 'clamp(15px, 2vw, 20px)',
+                      padding: '0 calc(50% - clamp(140px, 17.5vw, 160px))',
                       width: `${displayCards.length * 100}%`
                     }}
                   >
                     {displayCards.map((card, index) => {
                       const isActive = index === paymentSuccessCarouselIndex;
                       const cardWidthPercent = 100 / displayCards.length;
-                      const gapPercent = (16 / displayCards.length);
+                      const gapPercent = (20 / displayCards.length);
                       return (
                         <div
                           key={index}
@@ -3638,8 +3638,8 @@ function App() {
                             border: '1px solid rgba(0, 0, 0, 0.08)',
                             boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
                             width: `calc(${cardWidthPercent}% - ${gapPercent}%)`,
-                            minWidth: 'clamp(250px, 30vw, 300px)',
-                            maxWidth: 'clamp(250px, 30vw, 300px)',
+                            minWidth: 'clamp(280px, 35vw, 320px)',
+                            maxWidth: 'clamp(280px, 35vw, 320px)',
                             flexShrink: 0,
                             opacity: isActive ? 1 : 0.6,
                             transform: isActive ? 'scale(1)' : 'scale(0.9)',
@@ -3648,10 +3648,15 @@ function App() {
                         >
                           <div style={{
                             width: '100%',
-                            height: 'clamp(350px, 35vw, 400px)',
-                            background: card.image 
-                              ? `url(${card.image}) center/cover` 
-                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            height: 'clamp(380px, 40vw, 450px)',
+                            ...(card.image ? {
+                              backgroundImage: `url(${card.image})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              backgroundRepeat: 'no-repeat'
+                            } : {
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                            }),
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
