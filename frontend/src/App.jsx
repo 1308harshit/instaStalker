@@ -52,6 +52,7 @@ const NON_EN_SUMMARY_REGEX =
   /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 const QUEUE_MESSAGE = "You are in the queue";
+const LAST_RUN_KEY = "stalker-last-run";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
@@ -327,6 +328,45 @@ function App() {
       return acc;
     }, {});
   }, [snapshots]);
+
+  const saveLastRun = (data) => {
+    try {
+      localStorage.setItem(LAST_RUN_KEY, JSON.stringify(data));
+    } catch (err) {
+      console.warn("⚠️ Failed to save last run to storage", err);
+    }
+  };
+
+  const loadLastRun = () => {
+    try {
+      const raw = localStorage.getItem(LAST_RUN_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch (err) {
+      console.warn("⚠️ Failed to load last run from storage", err);
+      return null;
+    }
+  };
+
+  // Restore last successful scrape when returning from payment
+  useEffect(() => {
+    const restored = loadLastRun();
+    if (!restored) return;
+
+    if (Array.isArray(restored.cards) && restored.cards.length > 0) {
+      setCards(restored.cards);
+    }
+
+    if (Array.isArray(restored.steps) && restored.steps.length > 0) {
+      setSnapshots(restored.steps);
+    }
+
+    if (restored.profile) {
+      setProfile((prev) => ({ ...prev, ...restored.profile }));
+    }
+  }, []);
 
   // Fetch HTML content for a snapshot
   const fetchSnapshotHtml = async (stepName, htmlPath) => {
@@ -1079,6 +1119,14 @@ function App() {
           if (finalResult.steps && Array.isArray(finalResult.steps)) {
             setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
           }
+
+          // Persist last successful scrape so payment-return pages can restore data
+          saveLastRun({
+            cards: finalResult.cards || [],
+            steps: finalResult.steps || [],
+            profile,
+            savedAt: Date.now(),
+          });
 
           eventSource.close();
           resolve(finalResult);
