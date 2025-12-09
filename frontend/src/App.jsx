@@ -3616,21 +3616,16 @@ function App() {
                 marginBottom: 'clamp(20px, 5vw, 40px)',
                 padding: '0 clamp(5px, 2vw, 10px)'
               }}>
-                <div className="carousel-wrapper" style={{
-                  overflow: 'hidden',
-                  position: 'relative',
-                  width: '100%'
-                }}>
+                <div className="carousel-wrapper">
                   <div
                     className="carousel-track"
                     style={{
-                      display: 'flex',
                       transform: `translateX(calc(-${validCarouselIndex * (380 + 20)}px))`,
                       transition: paymentSuccessCarouselResetRef.current
                         ? 'none'
                         : 'transform 0.4s ease-in-out',
                       gap: '20px',
-                      padding: '0 calc(50% - clamp(160px, 20vw, 190px))'
+                      padding: '0 calc(50% - 190px)'
                     }}
                   >
                     {displayCards.map((card, index) => {
@@ -3645,9 +3640,9 @@ function App() {
                             background: '#fff',
                             border: '1px solid rgba(0, 0, 0, 0.08)',
                             boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-                            width: 'clamp(320px, 40vw, 380px)',
-                            minWidth: 'clamp(320px, 40vw, 380px)',
-                            maxWidth: 'clamp(320px, 40vw, 380px)',
+                            width: '380px',
+                            minWidth: '380px',
+                            maxWidth: '380px',
                             flexShrink: 0,
                             opacity: isActive ? 1 : 0.6,
                             transform: isActive ? 'scale(1)' : 'scale(0.9)',
