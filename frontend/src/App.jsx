@@ -3829,7 +3829,7 @@ function App() {
                     marginBottom: 'clamp(15px, 3vw, 20px)',
                     textAlign: 'center'
                   }}>
-                    More profiles who viewed you:
+                    Following users have been visiting your profile:
                   </h3>
                   <div style={{
                     display: 'flex',
