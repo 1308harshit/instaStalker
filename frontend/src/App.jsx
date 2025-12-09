@@ -3398,11 +3398,13 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
           const additionalCards = cleanCards.slice(6);
           const usernames = additionalCards
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
+          console.log(`No snapshot: Found ${usernames.length} usernames for additional list:`, usernames);
           setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
@@ -3418,11 +3420,13 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
           const additionalCards = cleanCards.slice(6);
           const usernames = additionalCards
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
+          console.log(`No URL: Found ${usernames.length} usernames for additional list:`, usernames);
           setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
@@ -3438,11 +3442,13 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
           const additionalCards = cleanCards.slice(6);
           const usernames = additionalCards
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
+          console.log(`Fetch failed: Found ${usernames.length} usernames for additional list:`, usernames);
           setPaymentSuccessAdditionalUsernames(usernames);
           return;
         }
@@ -3452,33 +3458,42 @@ function App() {
         
         if (parsed && parsed.slider && parsed.slider.cards) {
           // Filter clean cards (not locked, not blurred, have image and username)
-          const cleanCards = parsed.slider.cards.filter(
+          const cleanSliderCards = parsed.slider.cards.filter(
             (card) =>
               !card?.isLocked &&
               !card?.blurImage &&
               card?.image &&
               card?.username
           );
-          setPaymentSuccessCards(cleanCards.slice(0, 6));
-          // Store next 5 cards for username list (cards 7-11, or as many as available)
-          // Also check if we need more cards from the full cards array
-          let additionalCards = cleanCards.slice(6);
-          // If we don't have enough, try to get from the full cards array
-          if (additionalCards.length < 5 && cards.length > 6) {
-            const moreCards = cards.filter(
+          
+          // Use first 6 for carousel
+          setPaymentSuccessCards(cleanSliderCards.slice(0, 6));
+          
+          // Get usernames from remaining slider cards
+          const carouselUsernames = new Set(cleanSliderCards.slice(0, 6).map(c => c.username).filter(Boolean));
+          let additionalCards = cleanSliderCards.slice(6);
+          
+          // If we don't have enough, supplement from the full cards array
+          if (additionalCards.length < 5) {
+            const stateCleanCards = cards.filter(
               (card) =>
                 !card?.isLocked &&
                 !card?.blurImage &&
                 card?.image &&
                 card?.username &&
-                !cleanCards.some(c => c.username === card.username) // Avoid duplicates
+                !carouselUsernames.has(card.username) && // Not already in carousel
+                !additionalCards.some(c => c.username === card.username) // Not already added
             );
-            additionalCards = [...additionalCards, ...moreCards];
+            additionalCards = [...additionalCards, ...stateCleanCards];
           }
+          
+          // Extract exactly 5 usernames
           const usernames = additionalCards
             .map(card => card.username)
             .filter(Boolean)
-            .slice(0, 5); // Ensure exactly 5 usernames
+            .slice(0, 5);
+          
+          console.log(`Found ${usernames.length} usernames for additional list:`, usernames);
           setPaymentSuccessAdditionalUsernames(usernames);
         } else {
           // Fallback to cards from state
@@ -3490,11 +3505,13 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
           const additionalCards = cleanCards.slice(6);
           const usernames = additionalCards
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
+          console.log(`Fallback: Found ${usernames.length} usernames for additional list:`, usernames);
           setPaymentSuccessAdditionalUsernames(usernames);
         }
       } catch (err) {
@@ -3508,11 +3525,13 @@ function App() {
             card?.username
         );
         setPaymentSuccessCards(cleanCards.slice(0, 6));
+        const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
         const additionalCards = cleanCards.slice(6);
         const usernames = additionalCards
           .map(card => card.username)
           .filter(Boolean)
           .slice(0, 5);
+        console.log(`Error: Found ${usernames.length} usernames for additional list:`, usernames);
         setPaymentSuccessAdditionalUsernames(usernames);
       }
     };
