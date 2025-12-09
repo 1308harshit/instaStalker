@@ -3695,18 +3695,11 @@ function App() {
                                   isActive ? "active" : ""
                                 }`}
                                 style={{
-                                  width: '380px',
-                                  minWidth: '380px',
-                                  maxWidth: '380px',
-                                  flexShrink: 0,
                                   borderRadius: '18px',
                                   overflow: 'hidden',
                                   background: '#fff',
                                   border: '1px solid rgba(0, 0, 0, 0.08)',
-                                  boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-                                  opacity: isActive ? 1 : 0.6,
-                                  transform: isActive ? 'scale(1)' : 'scale(0.9)',
-                                  transition: 'box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
+                                  boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)'
                                 }}
                               >
                                 <div

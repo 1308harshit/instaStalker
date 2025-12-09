@@ -736,6 +736,18 @@ body {
   position: relative;
 }
 
+/* Payment success carousel - wider cards */
+.payment-success-screen .carousel-track {
+  gap: 20px !important;
+  padding: 0 calc(50% - 190px) !important;
+}
+
+.payment-success-screen .carousel-track .slider-card {
+  width: 380px !important;
+  min-width: 380px !important;
+  max-width: 380px !important;
+}
+
 .carousel-track .slider-card--locked {
   opacity: 0.6;
   background: radial-gradient(circle at 30% 20%, #3e3e3e, #181818 55%, #050505 100%) !important;
