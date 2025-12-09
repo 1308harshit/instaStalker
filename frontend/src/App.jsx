@@ -3389,150 +3389,185 @@ function App() {
         const resultsStep = snapshots.find((step) => step.name === "results");
         if (!resultsStep || !resultsStep.htmlPath) {
           console.log("No results snapshot found, using cards from state");
-          // Fallback to cards from state
-          const cleanCards = cards.filter(
-            (card) =>
-              !card?.isLocked &&
-              !card?.blurImage &&
-              card?.image &&
-              card?.username
-          );
-          setPaymentSuccessCards(cleanCards.slice(0, 6));
-          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          const additionalCards = cleanCards.slice(6);
-          const usernames = additionalCards
+          // Helper function for carousel (strict criteria)
+          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+            return cardList.filter((card) => {
+              if (card?.isLocked || !card?.username) return false;
+              if (requireImage && !card?.image) return false;
+              if (requireNotBlurred && card?.blurImage) return false;
+              return true;
+            });
+          };
+          
+          // Carousel: strict criteria (clean profiles only)
+          const carouselCards = getCardsWithCriteria(cards, true, true);
+          setPaymentSuccessCards(carouselCards.slice(0, 6));
+          
+          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
+          
+          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          const additionalUsernames = cards
+            .filter(card => 
+              card?.username && // Only requirement: has username
+              !carouselUsernames.has(card.username) // Not already in carousel
+            )
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
-          console.log(`No snapshot: Found ${usernames.length} usernames for additional list:`, usernames);
-          setPaymentSuccessAdditionalUsernames(usernames);
+          
+          console.log(`No snapshot: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
 
         const url = buildSnapshotUrl(resultsStep.htmlPath);
         if (!url) {
           console.log("Could not build results URL, using cards from state");
-          const cleanCards = cards.filter(
-            (card) =>
-              !card?.isLocked &&
-              !card?.blurImage &&
-              card?.image &&
-              card?.username
-          );
-          setPaymentSuccessCards(cleanCards.slice(0, 6));
-          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          const additionalCards = cleanCards.slice(6);
-          const usernames = additionalCards
+          // Helper function for carousel (strict criteria)
+          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+            return cardList.filter((card) => {
+              if (card?.isLocked || !card?.username) return false;
+              if (requireImage && !card?.image) return false;
+              if (requireNotBlurred && card?.blurImage) return false;
+              return true;
+            });
+          };
+          
+          // Carousel: strict criteria (clean profiles only)
+          const carouselCards = getCardsWithCriteria(cards, true, true);
+          setPaymentSuccessCards(carouselCards.slice(0, 6));
+          
+          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
+          
+          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          const additionalUsernames = cards
+            .filter(card => 
+              card?.username && // Only requirement: has username
+              !carouselUsernames.has(card.username) // Not already in carousel
+            )
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
-          console.log(`No URL: Found ${usernames.length} usernames for additional list:`, usernames);
-          setPaymentSuccessAdditionalUsernames(usernames);
+          
+          console.log(`No URL: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
 
         const res = await fetch(url);
         if (!res.ok) {
           console.log("Failed to fetch results.html, using cards from state");
-          const cleanCards = cards.filter(
-            (card) =>
-              !card?.isLocked &&
-              !card?.blurImage &&
-              card?.image &&
-              card?.username
-          );
-          setPaymentSuccessCards(cleanCards.slice(0, 6));
-          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          const additionalCards = cleanCards.slice(6);
-          const usernames = additionalCards
+          // Helper function for carousel (strict criteria)
+          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+            return cardList.filter((card) => {
+              if (card?.isLocked || !card?.username) return false;
+              if (requireImage && !card?.image) return false;
+              if (requireNotBlurred && card?.blurImage) return false;
+              return true;
+            });
+          };
+          
+          // Carousel: strict criteria (clean profiles only)
+          const carouselCards = getCardsWithCriteria(cards, true, true);
+          setPaymentSuccessCards(carouselCards.slice(0, 6));
+          
+          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
+          
+          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          const additionalUsernames = cards
+            .filter(card => 
+              card?.username && // Only requirement: has username
+              !carouselUsernames.has(card.username) // Not already in carousel
+            )
             .map(card => card.username)
             .filter(Boolean)
             .slice(0, 5);
-          console.log(`Fetch failed: Found ${usernames.length} usernames for additional list:`, usernames);
-          setPaymentSuccessAdditionalUsernames(usernames);
+          
+          console.log(`Fetch failed: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
 
         const html = await res.text();
         const parsed = parseResultsSnapshot(html);
         
+        // Helper function to get cards with progressively relaxed criteria
+        const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+          return cardList.filter((card) => {
+            if (card?.isLocked || !card?.username) return false;
+            if (requireImage && !card?.image) return false;
+            if (requireNotBlurred && card?.blurImage) return false;
+            return true;
+          });
+        };
+        
+        // Collect all available cards from both sources
+        const allAvailableCards = [];
+        
+        // First, get cards from parsed slider
         if (parsed && parsed.slider && parsed.slider.cards) {
-          // Filter clean cards (not locked, not blurred, have image and username)
-          const cleanSliderCards = parsed.slider.cards.filter(
-            (card) =>
-              !card?.isLocked &&
-              !card?.blurImage &&
-              card?.image &&
-              card?.username
-          );
-          
-          // Use first 6 for carousel
-          setPaymentSuccessCards(cleanSliderCards.slice(0, 6));
-          
-          // Get usernames from remaining slider cards
-          const carouselUsernames = new Set(cleanSliderCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          let additionalCards = cleanSliderCards.slice(6);
-          
-          // If we don't have enough, supplement from the full cards array
-          if (additionalCards.length < 5) {
-            const stateCleanCards = cards.filter(
-              (card) =>
-                !card?.isLocked &&
-                !card?.blurImage &&
-                card?.image &&
-                card?.username &&
-                !carouselUsernames.has(card.username) && // Not already in carousel
-                !additionalCards.some(c => c.username === card.username) // Not already added
-            );
-            additionalCards = [...additionalCards, ...stateCleanCards];
-          }
-          
-          // Extract exactly 5 usernames
-          const usernames = additionalCards
-            .map(card => card.username)
-            .filter(Boolean)
-            .slice(0, 5);
-          
-          console.log(`Found ${usernames.length} usernames for additional list:`, usernames);
-          setPaymentSuccessAdditionalUsernames(usernames);
-        } else {
-          // Fallback to cards from state
-          const cleanCards = cards.filter(
-            (card) =>
-              !card?.isLocked &&
-              !card?.blurImage &&
-              card?.image &&
-              card?.username
-          );
-          setPaymentSuccessCards(cleanCards.slice(0, 6));
-          const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          const additionalCards = cleanCards.slice(6);
-          const usernames = additionalCards
-            .map(card => card.username)
-            .filter(Boolean)
-            .slice(0, 5);
-          console.log(`Fallback: Found ${usernames.length} usernames for additional list:`, usernames);
-          setPaymentSuccessAdditionalUsernames(usernames);
+          allAvailableCards.push(...parsed.slider.cards);
         }
+        
+        // Add cards from state (avoid duplicates)
+        const existingUsernames = new Set(allAvailableCards.map(c => c.username).filter(Boolean));
+        cards.forEach(card => {
+          if (card?.username && !existingUsernames.has(card.username)) {
+            allAvailableCards.push(card);
+            existingUsernames.add(card.username);
+          }
+        });
+        
+        // Get best quality cards for carousel (strict criteria: not locked, not blurred, has image, has username)
+        const carouselCards = getCardsWithCriteria(allAvailableCards, true, true);
+        setPaymentSuccessCards(carouselCards.slice(0, 6));
+        
+        // Get usernames already in carousel
+        const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
+        
+        // Get additional usernames - NO CRITERIA NEEDED, just need username and not in carousel
+        const additionalUsernames = allAvailableCards
+          .filter(card => 
+            card?.username && // Only requirement: has username
+            !carouselUsernames.has(card.username) // Not already in carousel
+          )
+          .map(card => card.username)
+          .filter(Boolean)
+          .slice(0, 5); // Take exactly 5 usernames
+        
+        console.log(`Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+        console.log(`Total available cards: ${allAvailableCards.length}, Carousel cards: ${carouselCards.length}`);
+        setPaymentSuccessAdditionalUsernames(additionalUsernames);
       } catch (err) {
         console.error("Error fetching results cards:", err);
-        // Fallback to cards from state
-        const cleanCards = cards.filter(
-          (card) =>
-            !card?.isLocked &&
-            !card?.blurImage &&
-            card?.image &&
-            card?.username
-        );
-        setPaymentSuccessCards(cleanCards.slice(0, 6));
-        const carouselUsernames = new Set(cleanCards.slice(0, 6).map(c => c.username).filter(Boolean));
-        const additionalCards = cleanCards.slice(6);
-        const usernames = additionalCards
+        // Helper function for carousel (strict criteria)
+        const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+          return cardList.filter((card) => {
+            if (card?.isLocked || !card?.username) return false;
+            if (requireImage && !card?.image) return false;
+            if (requireNotBlurred && card?.blurImage) return false;
+            return true;
+          });
+        };
+        
+        // Carousel: strict criteria (clean profiles only)
+        const carouselCards = getCardsWithCriteria(cards, true, true);
+        setPaymentSuccessCards(carouselCards.slice(0, 6));
+        
+        const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
+        
+        // Additional usernames: NO CRITERIA, just need username and not in carousel
+        const additionalUsernames = cards
+          .filter(card => 
+            card?.username && // Only requirement: has username
+            !carouselUsernames.has(card.username) // Not already in carousel
+          )
           .map(card => card.username)
           .filter(Boolean)
           .slice(0, 5);
-        console.log(`Error: Found ${usernames.length} usernames for additional list:`, usernames);
-        setPaymentSuccessAdditionalUsernames(usernames);
+        
+        console.log(`Error fallback: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+        setPaymentSuccessAdditionalUsernames(additionalUsernames);
       }
     };
 
