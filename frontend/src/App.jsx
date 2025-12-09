@@ -3674,13 +3674,13 @@ function App() {
                         className="carousel-track"
                         style={{
                           transform: `translateX(calc(-${
-                            displayIndex * (380 + 20)
+                            displayIndex * (220 + 16)
                           }px))`,
                           transition: paymentSuccessCarouselResetRef.current
                             ? 'none'
                             : 'transform 0.4s ease-in-out',
-                          gap: '20px',
-                          padding: '0 calc(50% - 190px)'
+                          gap: '16px',
+                          padding: '0 calc(50% - 110px)'
                         }}
                       >
                         {duplicatedCards.map(
@@ -3706,7 +3706,7 @@ function App() {
                                   className="slider-image"
                                   style={{
                                     width: '100%',
-                                    height: 'clamp(380px, 40vw, 450px)',
+                                    height: '250px',
                                     backgroundImage: imageUrl
                                       ? `url(${imageUrl})`
                                       : "none",
