@@ -2694,28 +2694,28 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       
-      // Google Tag Manager: Push InitiateCheckout event to dataLayer
-      const amount = 99 * quantity;
-      console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
-      
-      if (window.dataLayer) {
-        window.dataLayer.push({
-          event: 'InitiateCheckout',
-          ecommerce: {
-            currency: 'INR',
-            value: amount,
-            items: [{
-              item_name: 'Instagram Stalker Report',
-              item_category: 'product',
-              quantity: quantity,
-              price: 99
-            }]
-          }
-        });
-        console.log('✅ InitiateCheckout event pushed to dataLayer successfully');
-      } else {
-        console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
-      }
+      // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
+      // const amount = 99 * quantity;
+      // console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
+      // 
+      // if (window.dataLayer) {
+      //   window.dataLayer.push({
+      //     event: 'InitiateCheckout',
+      //     ecommerce: {
+      //       currency: 'INR',
+      //       value: amount,
+      //       items: [{
+      //         item_name: 'Instagram Stalker Report',
+      //         item_category: 'product',
+      //         quantity: quantity,
+      //         price: 99
+      //       }]
+      //     }
+      //   });
+      //   console.log('✅ InitiateCheckout event pushed to dataLayer successfully');
+      // } else {
+      //   console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
+      // }
     }
   }, [screen, quantity]);
 
@@ -2735,22 +2735,22 @@ function App() {
     }
   }, [screen, paymentCountdown]);
 
-  // Google Tag Manager: Track PageView on screen changes (for SPA navigation)
-  useEffect(() => {
-    console.log('🎯 Pushing PageView event to dataLayer for screen:', screen);
-    
-    if (window.dataLayer) {
-      window.dataLayer.push({
-        event: 'page_view',
-        page_path: window.location.pathname,
-        page_title: `Instagram Stalker - ${screen}`,
-        screen: screen
-      });
-      console.log('✅ PageView event pushed to dataLayer successfully');
-    } else {
-      console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
-    }
-  }, [screen]);
+  // GTM CODE COMMENTED OUT - Google Tag Manager: Track PageView on screen changes (for SPA navigation)
+  // useEffect(() => {
+  //   console.log('🎯 Pushing PageView event to dataLayer for screen:', screen);
+  //   
+  //   if (window.dataLayer) {
+  //     window.dataLayer.push({
+  //       event: 'page_view',
+  //       page_path: window.location.pathname,
+  //       page_title: `Instagram Stalker - ${screen}`,
+  //       screen: screen
+  //     });
+  //     console.log('✅ PageView event pushed to dataLayer successfully');
+  //   } else {
+  //     console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
+  //   }
+  // }, [screen]);
 
   // Handle payment return URL and fire Purchase event
   useEffect(() => {
@@ -2761,30 +2761,30 @@ function App() {
     if (orderId && window.location.pathname.includes('/payment/return')) {
       setScreen(SCREEN.PAYMENT_SUCCESS);
       
-      // Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
+      // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
       // This fires AFTER redirect, so Meta Pixel can track it
-      const amount = 99 * quantity;
-      console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
-      
-      if (window.dataLayer) {
-        window.dataLayer.push({
-          event: 'purchase',
-          ecommerce: {
-            transaction_id: orderId,
-            value: amount,
-            currency: 'INR',
-            items: [{
-              item_name: 'Instagram Stalker Report',
-              item_category: 'product',
-              quantity: quantity,
-              price: 99
-            }]
-          }
-        });
-        console.log('✅ Purchase event pushed to dataLayer successfully (on success page)');
-      } else {
-        console.warn('⚠️ dataLayer not available for Purchase event (on success page)');
-      }
+      // const amount = 99 * quantity;
+      // console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
+      // 
+      // if (window.dataLayer) {
+      //   window.dataLayer.push({
+      //     event: 'purchase',
+      //     ecommerce: {
+      //       transaction_id: orderId,
+      //       value: amount,
+      //       currency: 'INR',
+      //       items: [{
+      //         item_name: 'Instagram Stalker Report',
+      //         item_category: 'product',
+      //         quantity: quantity,
+      //         price: 99
+      //       }]
+      //     }
+      //   });
+      //   console.log('✅ Purchase event pushed to dataLayer successfully (on success page)');
+      // } else {
+      //   console.warn('⚠️ dataLayer not available for Purchase event (on success page)');
+      // }
       
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
