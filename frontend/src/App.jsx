@@ -3478,15 +3478,21 @@ function App() {
     fetchResultsCards();
   }, [screen, snapshots, cards]);
 
-  // Auto-scroll payment success carousel (0->5->0 loop, no animation on reset)
+  // Auto-scroll payment success carousel (0->N->0 loop, no animation on reset)
   useEffect(() => {
-    if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length <= 1) return;
+    if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length === 0) return;
+
+    // Reset to 0 when cards change or index is out of bounds
+    if (paymentSuccessCarouselIndex >= paymentSuccessCards.length) {
+      setPaymentSuccessCarouselIndex(0);
+      return;
+    }
 
     const interval = setInterval(() => {
       setPaymentSuccessCarouselIndex((prev) => {
         const nextIndex = prev + 1;
-        // When we reach 6 (after 0-5), reset to 0 without animation
-        if (nextIndex >= 6) {
+        // When we reach the end, reset to 0 without animation
+        if (nextIndex >= paymentSuccessCards.length) {
           paymentSuccessCarouselResetRef.current = true;
           setTimeout(() => {
             paymentSuccessCarouselResetRef.current = false;
@@ -3495,10 +3501,10 @@ function App() {
         }
         return nextIndex;
       });
-    }, 1500); // Change slide every 1.5 seconds
+    }, 2500); // Change slide every 2.5 seconds
 
     return () => clearInterval(interval);
-  }, [screen, paymentSuccessCards.length]);
+  }, [screen, paymentSuccessCards.length, paymentSuccessCarouselIndex]);
 
   const renderPaymentSuccess = () => {
     // Use cards from results.html, fallback to cards from state
@@ -3511,6 +3517,11 @@ function App() {
             card?.image &&
             card?.username
         ).slice(0, 6);
+    
+    // Ensure carousel index is valid
+    const validCarouselIndex = displayCards.length > 0 
+      ? Math.min(paymentSuccessCarouselIndex, displayCards.length - 1)
+      : 0;
     
     // Profile action texts (one for each of the 6 profiles)
     const profileActions = [
@@ -3614,19 +3625,16 @@ function App() {
                     className="carousel-track"
                     style={{
                       display: 'flex',
-                      transform: `translateX(calc(-${paymentSuccessCarouselIndex * (100 / displayCards.length)}% - ${paymentSuccessCarouselIndex * (20 / displayCards.length)}%))`,
+                      transform: `translateX(calc(-${validCarouselIndex * (380 + 20)}px))`,
                       transition: paymentSuccessCarouselResetRef.current
                         ? 'none'
                         : 'transform 0.4s ease-in-out',
-                      gap: 'clamp(15px, 2vw, 20px)',
-                      padding: '0 calc(50% - clamp(140px, 17.5vw, 160px))',
-                      width: `${displayCards.length * 100}%`
+                      gap: '20px',
+                      padding: '0 calc(50% - clamp(160px, 20vw, 190px))'
                     }}
                   >
                     {displayCards.map((card, index) => {
-                      const isActive = index === paymentSuccessCarouselIndex;
-                      const cardWidthPercent = 100 / displayCards.length;
-                      const gapPercent = (20 / displayCards.length);
+                      const isActive = index === validCarouselIndex;
                       return (
                         <div
                           key={index}
@@ -3637,9 +3645,9 @@ function App() {
                             background: '#fff',
                             border: '1px solid rgba(0, 0, 0, 0.08)',
                             boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-                            width: `calc(${cardWidthPercent}% - ${gapPercent}%)`,
-                            minWidth: 'clamp(280px, 35vw, 320px)',
-                            maxWidth: 'clamp(280px, 35vw, 320px)',
+                            width: 'clamp(320px, 40vw, 380px)',
+                            minWidth: 'clamp(320px, 40vw, 380px)',
+                            maxWidth: 'clamp(320px, 40vw, 380px)',
                             flexShrink: 0,
                             opacity: isActive ? 1 : 0.6,
                             transform: isActive ? 'scale(1)' : 'scale(0.9)',
