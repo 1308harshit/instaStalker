@@ -3468,18 +3468,30 @@ function App() {
         // Use only parsed slider cards from results.html
         const sliderCards = parsed.slider.cards || [];
 
-        // Carousel: strict criteria (clean profiles only)
-        const carouselCards = getCardsWithCriteria(sliderCards, true, true);
+        // Dedupe by username while preserving order
+        const seen = new Set();
+        const deduped = [];
+        sliderCards.forEach(card => {
+          const u = card?.username;
+          if (u && !seen.has(u)) {
+            seen.add(u);
+            deduped.push(card);
+          }
+        });
+
+        // Carousel: strict criteria (clean profiles only) from deduped slider cards
+        const carouselCards = getCardsWithCriteria(deduped, true, true);
         setPaymentSuccessCards(carouselCards.slice(0, 6));
 
-        // Additional usernames: cards 7-11 from results.html (no filters)
-        const additionalUsernames = sliderCards
-          .slice(6, 11) // indices 6-10
+        // Additional usernames: from all remaining cards (>=7), any status, just need username
+        const additionalUsernames = deduped
+          .slice(6)              // skip first 6 used by carousel
           .map(card => card?.username)
-          .filter(Boolean);
+          .filter(Boolean)
+          .slice(0, 5);          // up to 5
 
         console.log(
-          `Parsed slider usernames (cards 7-11): count=${additionalUsernames.length}`,
+          `Parsed slider usernames (deduped, after carousel): count=${additionalUsernames.length}`,
           additionalUsernames
         );
         setPaymentSuccessAdditionalUsernames(additionalUsernames);
