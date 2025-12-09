@@ -288,6 +288,8 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
+  const [paymentSuccessCarouselIndex, setPaymentSuccessCarouselIndex] = useState(0);
+  const [paymentSuccessAdditionalUsernames, setPaymentSuccessAdditionalUsernames] = useState([]);
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -297,6 +299,7 @@ function App() {
   const notificationTimerRef = useRef(null);
   const carouselLoopingRef = useRef(false);
   const storiesCarouselLoopingRef = useRef(false);
+  const paymentSuccessCarouselResetRef = useRef(false);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -3395,6 +3398,7 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
           return;
         }
 
@@ -3409,6 +3413,7 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
           return;
         }
 
@@ -3423,6 +3428,7 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
           return;
         }
 
@@ -3439,6 +3445,8 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          // Store cards 7-11 for username list
+          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
         } else {
           // Fallback to cards from state
           const cleanCards = cards.filter(
@@ -3449,6 +3457,8 @@ function App() {
               card?.username
           );
           setPaymentSuccessCards(cleanCards.slice(0, 6));
+          // Store cards 7-11 for username list
+          setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
         }
       } catch (err) {
         console.error("Error fetching results cards:", err);
@@ -3461,11 +3471,34 @@ function App() {
             card?.username
         );
         setPaymentSuccessCards(cleanCards.slice(0, 6));
+        setPaymentSuccessAdditionalUsernames(cleanCards.slice(6, 11).map(card => card.username).filter(Boolean));
       }
     };
 
     fetchResultsCards();
   }, [screen, snapshots, cards]);
+
+  // Auto-scroll payment success carousel (0->5->0 loop, no animation on reset)
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setPaymentSuccessCarouselIndex((prev) => {
+        const nextIndex = prev + 1;
+        // When we reach 6 (after 0-5), reset to 0 without animation
+        if (nextIndex >= 6) {
+          paymentSuccessCarouselResetRef.current = true;
+          setTimeout(() => {
+            paymentSuccessCarouselResetRef.current = false;
+          }, 50);
+          return 0;
+        }
+        return nextIndex;
+      });
+    }, 1500); // Change slide every 1.5 seconds
+
+    return () => clearInterval(interval);
+  }, [screen, paymentSuccessCards.length]);
 
   const renderPaymentSuccess = () => {
     // Use cards from results.html, fallback to cards from state
@@ -3565,79 +3598,156 @@ function App() {
             </p>
           </div>
 
-          {/* Unlocked Profiles Grid - Show 6 clean cards from results */}
+          {/* Carousel - Show 6 clean cards from results */}
           {displayCards.length > 0 ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gap: 'clamp(15px, 3vw, 20px)',
-              marginBottom: 'clamp(20px, 5vw, 40px)',
-              padding: '0 clamp(5px, 2vw, 10px)'
-            }}>
-              {displayCards.map((card, index) => (
-                <div
-                  key={index}
-                  className="slider-card"
-                  style={{
-                    borderRadius: '18px',
-                    overflow: 'hidden',
-                    background: '#fff',
-                    border: '1px solid rgba(0, 0, 0, 0.08)',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                  }}
-                >
-                  <div style={{
-                    width: '100%',
-                    height: 'clamp(350px, 35vw, 320px)',
-                    background: card.image 
-                      ? `url(${card.image}) center/cover` 
-                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative'
-                  }}>
-                    {!card.image && (
-                      <div style={{
-                        width: '120px',
-                        height: '120px',
-                        borderRadius: '50%',
-                        background: 'rgba(255, 255, 255, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '48px',
-                        color: '#fff'
-                      }}>
-                        👤
-                      </div>
-                    )}
-                  </div>
-                  <div className="slider-card-content" style={{
-                    padding: 'clamp(15px, 3vw, 20px)',
-                    textAlign: 'center'
-                  }}>
-                    <h4 className="username" style={{
-                      fontSize: 'clamp(16px, 3vw, 18px)',
-                      fontWeight: '600',
-                      color: '#1a1a1a',
-                      margin: '0 0 8px 0'
-                    }}>
-                      {card.username}
-                    </h4>
-                    <p style={{
-                      fontSize: 'clamp(13px, 2.5vw, 15px)',
-                      color: '#666',
-                      margin: '8px 0 0 0',
-                      fontWeight: '500',
-                      lineHeight: '1.5'
-                    }}>
-                      {profileActions[index] || profileActions[0]}
-                    </p>
+            <>
+              <div className="carousel-container" style={{
+                marginBottom: 'clamp(20px, 5vw, 40px)',
+                padding: '0 clamp(5px, 2vw, 10px)'
+              }}>
+                <div className="carousel-wrapper" style={{
+                  overflow: 'hidden',
+                  position: 'relative',
+                  width: '100%'
+                }}>
+                  <div
+                    className="carousel-track"
+                    style={{
+                      display: 'flex',
+                      transform: `translateX(calc(-${paymentSuccessCarouselIndex * (100 / displayCards.length)}% - ${paymentSuccessCarouselIndex * (16 / displayCards.length)}%))`,
+                      transition: paymentSuccessCarouselResetRef.current
+                        ? 'none'
+                        : 'transform 0.4s ease-in-out',
+                      gap: 'clamp(12px, 2vw, 16px)',
+                      padding: '0 calc(50% - clamp(125px, 15vw, 150px))',
+                      width: `${displayCards.length * 100}%`
+                    }}
+                  >
+                    {displayCards.map((card, index) => {
+                      const isActive = index === paymentSuccessCarouselIndex;
+                      const cardWidthPercent = 100 / displayCards.length;
+                      const gapPercent = (16 / displayCards.length);
+                      return (
+                        <div
+                          key={index}
+                          className={`slider-card ${isActive ? 'active' : ''}`}
+                          style={{
+                            borderRadius: '18px',
+                            overflow: 'hidden',
+                            background: '#fff',
+                            border: '1px solid rgba(0, 0, 0, 0.08)',
+                            boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
+                            width: `calc(${cardWidthPercent}% - ${gapPercent}%)`,
+                            minWidth: 'clamp(250px, 30vw, 300px)',
+                            maxWidth: 'clamp(250px, 30vw, 300px)',
+                            flexShrink: 0,
+                            opacity: isActive ? 1 : 0.6,
+                            transform: isActive ? 'scale(1)' : 'scale(0.9)',
+                            transition: 'box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
+                          }}
+                        >
+                          <div style={{
+                            width: '100%',
+                            height: 'clamp(350px, 35vw, 400px)',
+                            background: card.image 
+                              ? `url(${card.image}) center/cover` 
+                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative'
+                          }}>
+                            {!card.image && (
+                              <div style={{
+                                width: '120px',
+                                height: '120px',
+                                borderRadius: '50%',
+                                background: 'rgba(255, 255, 255, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '48px',
+                                color: '#fff'
+                              }}>
+                                👤
+                              </div>
+                            )}
+                          </div>
+                          <div className="slider-card-content" style={{
+                            padding: 'clamp(15px, 3vw, 20px)',
+                            textAlign: 'center'
+                          }}>
+                            <h4 className="username" style={{
+                              fontSize: 'clamp(16px, 3vw, 18px)',
+                              fontWeight: '600',
+                              color: '#1a1a1a',
+                              margin: '0 0 8px 0'
+                            }}>
+                              {card.username}
+                            </h4>
+                            <p style={{
+                              fontSize: 'clamp(13px, 2.5vw, 15px)',
+                              color: '#666',
+                              margin: '8px 0 0 0',
+                              fontWeight: '500',
+                              lineHeight: '1.5'
+                            }}>
+                              {profileActions[index] || profileActions[0]}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+
+              {/* Additional 5 Usernames List */}
+              {paymentSuccessAdditionalUsernames.length > 0 && (
+                <div style={{
+                  marginBottom: 'clamp(20px, 5vw, 40px)',
+                  padding: 'clamp(20px, 4vw, 30px)',
+                  background: '#f9f9f9',
+                  borderRadius: '16px',
+                  border: '1px solid #e0e0e0'
+                }}>
+                  <h3 style={{
+                    fontSize: 'clamp(18px, 3.5vw, 22px)',
+                    fontWeight: '700',
+                    color: '#1a1a1a',
+                    marginBottom: 'clamp(15px, 3vw, 20px)',
+                    textAlign: 'center'
+                  }}>
+                    More profiles who viewed you:
+                  </h3>
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 'clamp(10px, 2vw, 15px)',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                  }}>
+                    {paymentSuccessAdditionalUsernames.map((username, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          padding: 'clamp(8px, 1.5vw, 12px) clamp(16px, 3vw, 24px)',
+                          background: '#fff',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '999px',
+                          fontSize: 'clamp(14px, 2.5vw, 16px)',
+                          fontWeight: '600',
+                          color: '#1a1a1a',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {username}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div style={{
               textAlign: 'center',
