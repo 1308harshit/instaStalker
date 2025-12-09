@@ -3403,19 +3403,13 @@ function App() {
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
           
-          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          
-          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          // Get additional usernames from cards 7-11 (indices 6-10) - NO CRITERIA, just take them directly
           const additionalUsernames = cards
-            .filter(card => 
-              card?.username && // Only requirement: has username
-              !carouselUsernames.has(card.username) // Not already in carousel
-            )
+            .slice(6, 11) // Cards 7, 8, 9, 10, 11 (indices 6-10)
             .map(card => card.username)
-            .filter(Boolean)
-            .slice(0, 5);
+            .filter(Boolean); // Remove any null/undefined usernames
           
-          console.log(`No snapshot: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          console.log(`No snapshot: Found ${additionalUsernames.length} usernames for additional list (cards 7-11):`, additionalUsernames);
           setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
@@ -3437,19 +3431,13 @@ function App() {
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
           
-          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          
-          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          // Get additional usernames from cards 7-11 (indices 6-10) - NO CRITERIA, just take them directly
           const additionalUsernames = cards
-            .filter(card => 
-              card?.username && // Only requirement: has username
-              !carouselUsernames.has(card.username) // Not already in carousel
-            )
+            .slice(6, 11) // Cards 7, 8, 9, 10, 11 (indices 6-10)
             .map(card => card.username)
-            .filter(Boolean)
-            .slice(0, 5);
+            .filter(Boolean); // Remove any null/undefined usernames
           
-          console.log(`No URL: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          console.log(`No URL: Found ${additionalUsernames.length} usernames for additional list (cards 7-11):`, additionalUsernames);
           setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
@@ -3471,19 +3459,13 @@ function App() {
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
           
-          const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
-          
-          // Additional usernames: NO CRITERIA, just need username and not in carousel
+          // Get additional usernames from cards 7-11 (indices 6-10) - NO CRITERIA, just take them directly
           const additionalUsernames = cards
-            .filter(card => 
-              card?.username && // Only requirement: has username
-              !carouselUsernames.has(card.username) // Not already in carousel
-            )
+            .slice(6, 11) // Cards 7, 8, 9, 10, 11 (indices 6-10)
             .map(card => card.username)
-            .filter(Boolean)
-            .slice(0, 5);
+            .filter(Boolean); // Remove any null/undefined usernames
           
-          console.log(`Fetch failed: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+          console.log(`Fetch failed: Found ${additionalUsernames.length} usernames for additional list (cards 7-11):`, additionalUsernames);
           setPaymentSuccessAdditionalUsernames(additionalUsernames);
           return;
         }
@@ -3522,20 +3504,13 @@ function App() {
         const carouselCards = getCardsWithCriteria(allAvailableCards, true, true);
         setPaymentSuccessCards(carouselCards.slice(0, 6));
         
-        // Get usernames already in carousel
-        const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
-        
-        // Get additional usernames - NO CRITERIA NEEDED, just need username and not in carousel
+        // Get additional usernames from cards 7-11 (indices 6-10) - NO CRITERIA, just take them directly
         const additionalUsernames = allAvailableCards
-          .filter(card => 
-            card?.username && // Only requirement: has username
-            !carouselUsernames.has(card.username) // Not already in carousel
-          )
+          .slice(6, 11) // Cards 7, 8, 9, 10, 11 (indices 6-10)
           .map(card => card.username)
-          .filter(Boolean)
-          .slice(0, 5); // Take exactly 5 usernames
+          .filter(Boolean); // Remove any null/undefined usernames
         
-        console.log(`Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+        console.log(`Found ${additionalUsernames.length} usernames for additional list (cards 7-11):`, additionalUsernames);
         console.log(`Total available cards: ${allAvailableCards.length}, Carousel cards: ${carouselCards.length}`);
         setPaymentSuccessAdditionalUsernames(additionalUsernames);
       } catch (err) {
@@ -3554,19 +3529,13 @@ function App() {
         const carouselCards = getCardsWithCriteria(cards, true, true);
         setPaymentSuccessCards(carouselCards.slice(0, 6));
         
-        const carouselUsernames = new Set(carouselCards.slice(0, 6).map(c => c.username).filter(Boolean));
-        
-        // Additional usernames: NO CRITERIA, just need username and not in carousel
+        // Get additional usernames from cards 7-11 (indices 6-10) - NO CRITERIA, just take them directly
         const additionalUsernames = cards
-          .filter(card => 
-            card?.username && // Only requirement: has username
-            !carouselUsernames.has(card.username) // Not already in carousel
-          )
+          .slice(6, 11) // Cards 7, 8, 9, 10, 11 (indices 6-10)
           .map(card => card.username)
-          .filter(Boolean)
-          .slice(0, 5);
+          .filter(Boolean); // Remove any null/undefined usernames
         
-        console.log(`Error fallback: Found ${additionalUsernames.length} usernames for additional list:`, additionalUsernames);
+        console.log(`Error fallback: Found ${additionalUsernames.length} usernames for additional list (cards 7-11):`, additionalUsernames);
         setPaymentSuccessAdditionalUsernames(additionalUsernames);
       }
     };
