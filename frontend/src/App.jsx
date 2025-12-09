@@ -3478,37 +3478,60 @@ function App() {
     fetchResultsCards();
   }, [screen, snapshots, cards]);
 
-  // Auto-scroll payment success carousel (0->N->0 loop, no animation on reset)
+  // Reset payment success carousel when cards change
+  useEffect(() => {
+    if (screen === SCREEN.PAYMENT_SUCCESS && paymentSuccessCards.length > 0) {
+      const filteredCards = paymentSuccessCards.filter((card, index) => {
+        const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
+        return !isAfterBlurredCard;
+      });
+      const offset = 3;
+      if (filteredCards.length > 0) {
+        setPaymentSuccessCarouselIndex(offset);
+      }
+    }
+  }, [screen, paymentSuccessCards]);
+
+  // Auto-scroll payment success carousel (same logic as result page)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length === 0) return;
 
-    // Reset to 0 when cards change or index is out of bounds
-    if (paymentSuccessCarouselIndex >= paymentSuccessCards.length) {
-      setPaymentSuccessCarouselIndex(0);
-      return;
+    // Filter cards (same logic as result page)
+    const filteredCards = paymentSuccessCards.filter((card, index) => {
+      const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
+      return !isAfterBlurredCard;
+    });
+
+    if (filteredCards.length <= 1) return;
+
+    // Initialize carousel at offset (after duplicated items at start)
+    const offset = 3;
+    if (paymentSuccessCarouselIndex < offset && filteredCards.length > 0) {
+      setPaymentSuccessCarouselIndex(offset);
     }
 
     const interval = setInterval(() => {
       setPaymentSuccessCarouselIndex((prev) => {
         const nextIndex = prev + 1;
-        // When we reach the end, reset to 0 without animation
-        if (nextIndex >= paymentSuccessCards.length) {
+        // When we reach duplicated end items, jump to real first items
+        if (nextIndex >= offset + filteredCards.length) {
           paymentSuccessCarouselResetRef.current = true;
           setTimeout(() => {
             paymentSuccessCarouselResetRef.current = false;
           }, 50);
-          return 0;
+          return offset; // Jump to start of second copy
         }
+        paymentSuccessCarouselResetRef.current = false;
         return nextIndex;
       });
     }, 2500); // Change slide every 2.5 seconds
 
     return () => clearInterval(interval);
-  }, [screen, paymentSuccessCards.length, paymentSuccessCarouselIndex]);
+  }, [screen, paymentSuccessCards.length]);
 
   const renderPaymentSuccess = () => {
     // Use cards from results.html, fallback to cards from state
-    const displayCards = paymentSuccessCards.length > 0 
+    const allCards = paymentSuccessCards.length > 0 
       ? paymentSuccessCards 
       : cards.filter(
           (card) =>
@@ -3517,11 +3540,6 @@ function App() {
             card?.image &&
             card?.username
         ).slice(0, 6);
-    
-    // Ensure carousel index is valid
-    const validCarouselIndex = displayCards.length > 0 
-      ? Math.min(paymentSuccessCarouselIndex, displayCards.length - 1)
-      : 0;
     
     // Profile action texts (one for each of the 6 profiles)
     const profileActions = [
@@ -3609,106 +3627,157 @@ function App() {
             </p>
           </div>
 
-          {/* Carousel - Show 6 clean cards from results */}
-          {displayCards.length > 0 ? (
+          {/* Carousel - Show cards using same logic as result page */}
+          {allCards.length > 0 ? (
             <>
-              <div className="carousel-container" style={{
-                marginBottom: 'clamp(20px, 5vw, 40px)',
-                padding: '0 clamp(5px, 2vw, 10px)'
-              }}>
-                <div className="carousel-wrapper">
-                  <div
-                    className="carousel-track"
-                    style={{
-                      transform: `translateX(calc(-${validCarouselIndex * (380 + 20)}px))`,
-                      transition: paymentSuccessCarouselResetRef.current
-                        ? 'none'
-                        : 'transform 0.4s ease-in-out',
-                      gap: '20px',
-                      padding: '0 calc(50% - 190px)'
-                    }}
-                  >
-                    {displayCards.map((card, index) => {
-                      const isActive = index === validCarouselIndex;
-                      return (
-                        <div
-                          key={index}
-                          className={`slider-card ${isActive ? 'active' : ''}`}
-                          style={{
-                            borderRadius: '18px',
-                            overflow: 'hidden',
-                            background: '#fff',
-                            border: '1px solid rgba(0, 0, 0, 0.08)',
-                            boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-                            width: '380px',
-                            minWidth: '380px',
-                            maxWidth: '380px',
-                            flexShrink: 0,
-                            opacity: isActive ? 1 : 0.6,
-                            transform: isActive ? 'scale(1)' : 'scale(0.9)',
-                            transition: 'box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
-                          }}
-                        >
-                          <div style={{
-                            width: '100%',
-                            height: 'clamp(380px, 40vw, 450px)',
-                            ...(card.image ? {
-                              backgroundImage: `url(${card.image})`,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                              backgroundRepeat: 'no-repeat'
-                            } : {
-                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                            }),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative'
-                          }}>
-                            {!card.image && (
-                              <div style={{
-                                width: '120px',
-                                height: '120px',
-                                borderRadius: '50%',
-                                background: 'rgba(255, 255, 255, 0.3)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '48px',
-                                color: '#fff'
-                              }}>
-                                👤
-                              </div>
-                            )}
-                          </div>
-                          <div className="slider-card-content" style={{
-                            padding: 'clamp(15px, 3vw, 20px)',
-                            textAlign: 'center'
-                          }}>
-                            <h4 className="username" style={{
-                              fontSize: 'clamp(16px, 3vw, 18px)',
-                              fontWeight: '600',
-                              color: '#1a1a1a',
-                              margin: '0 0 8px 0'
-                            }}>
-                              {card.username}
-                            </h4>
-                            <p style={{
-                              fontSize: 'clamp(13px, 2.5vw, 15px)',
-                              color: '#666',
-                              margin: '8px 0 0 0',
-                              fontWeight: '500',
-                              lineHeight: '1.5'
-                            }}>
-                              {profileActions[index] || profileActions[0]}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
+              {(() => {
+                // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
+                // to prevent duplicates, while keeping track of original indices
+                const filteredCardsWithIndex = allCards
+                  .map((card, originalIndex) => ({ card, originalIndex }))
+                  .filter(({ originalIndex }) => {
+                    const isAfterBlurredCard =
+                      originalIndex - 1 > 0 && (originalIndex - 1) % 5 === 0;
+                    return !isAfterBlurredCard;
+                  });
+
+                if (filteredCardsWithIndex.length === 0) return null;
+
+                // Create duplicated array for infinite loop
+                // Last 3 items at start + all original items + first 3 items at end
+                const offset = 3;
+                const duplicatedCards = [
+                  ...filteredCardsWithIndex.slice(-offset).map((item, idx) => ({
+                    ...item,
+                    duplicateKey: `start-${idx}`,
+                  })),
+                  ...filteredCardsWithIndex.map((item, idx) => ({
+                    ...item,
+                    duplicateKey: `original-${idx}`,
+                  })),
+                  ...filteredCardsWithIndex.slice(0, offset).map((item, idx) => ({
+                    ...item,
+                    duplicateKey: `end-${idx}`,
+                  })),
+                ];
+
+                // Use paymentSuccessCarouselIndex directly (it already includes offset)
+                const displayIndex = paymentSuccessCarouselIndex;
+
+                return (
+                  <div className="carousel-container" style={{
+                    marginBottom: 'clamp(20px, 5vw, 40px)',
+                    padding: '0 clamp(5px, 2vw, 10px)'
+                  }}>
+                    <div className="carousel-wrapper">
+                      <div
+                        className="carousel-track"
+                        style={{
+                          transform: `translateX(calc(-${
+                            displayIndex * (380 + 20)
+                          }px))`,
+                          transition: paymentSuccessCarouselResetRef.current
+                            ? 'none'
+                            : 'transform 0.4s ease-in-out',
+                          gap: '20px',
+                          padding: '0 calc(50% - 190px)'
+                        }}
+                      >
+                        {duplicatedCards.map(
+                          ({ card, originalIndex, duplicateKey }, index) => {
+                            const isActive = index === displayIndex;
+                            const imageUrl = card.image;
+
+                            return (
+                              <article
+                                key={`${card.username || 'card'}-${duplicateKey}-${index}`}
+                                className={`slider-card ${
+                                  isActive ? "active" : ""
+                                }`}
+                                style={{
+                                  width: '380px',
+                                  minWidth: '380px',
+                                  maxWidth: '380px',
+                                  flexShrink: 0,
+                                  borderRadius: '18px',
+                                  overflow: 'hidden',
+                                  background: '#fff',
+                                  border: '1px solid rgba(0, 0, 0, 0.08)',
+                                  boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
+                                  opacity: isActive ? 1 : 0.6,
+                                  transform: isActive ? 'scale(1)' : 'scale(0.9)',
+                                  transition: 'box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
+                                }}
+                              >
+                                <div
+                                  className="slider-image"
+                                  style={{
+                                    width: '100%',
+                                    height: 'clamp(380px, 40vw, 450px)',
+                                    backgroundImage: imageUrl
+                                      ? `url(${imageUrl})`
+                                      : "none",
+                                    backgroundColor: imageUrl
+                                      ? "transparent"
+                                      : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                    backgroundRepeat: 'no-repeat',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative'
+                                  }}
+                                >
+                                  {!imageUrl && (
+                                    <div style={{
+                                      width: '120px',
+                                      height: '120px',
+                                      borderRadius: '50%',
+                                      background: 'rgba(255, 255, 255, 0.3)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '48px',
+                                      color: '#fff'
+                                    }}>
+                                      👤
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="slider-card-content" style={{
+                                  padding: 'clamp(15px, 3vw, 20px)',
+                                  textAlign: 'center'
+                                }}>
+                                  {card?.username && (
+                                    <h4 className="username" style={{
+                                      fontSize: 'clamp(16px, 3vw, 18px)',
+                                      fontWeight: '600',
+                                      color: '#1a1a1a',
+                                      margin: '0 0 8px 0'
+                                    }}>
+                                      {card.username}
+                                    </h4>
+                                  )}
+                                  <p style={{
+                                    fontSize: 'clamp(13px, 2.5vw, 15px)',
+                                    color: '#666',
+                                    margin: '8px 0 0 0',
+                                    fontWeight: '500',
+                                    lineHeight: '1.5'
+                                  }}>
+                                    {profileActions[originalIndex] || profileActions[0]}
+                                  </p>
+                                </div>
+                              </article>
+                            );
+                          }
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Additional 5 Usernames List */}
               {paymentSuccessAdditionalUsernames.length > 0 && (
