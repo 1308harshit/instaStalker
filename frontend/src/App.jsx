@@ -2774,21 +2774,9 @@ function App() {
       // Mark this order as processed to prevent duplicate events
       purchaseEventFiredRef.current.add(orderId);
       
-      // Meta Pixel: Track Purchase event (fires AFTER redirect, outside Razorpay iframe)
-      const amount = 99 * quantity;
-      if (typeof fbq !== 'undefined') {
-        fbq('track', 'Purchase', {
-          value: amount,
-          currency: 'INR',
-          content_ids: [orderId],
-          content_name: 'Instagram Stalker Report',
-          content_type: 'product',
-          num_items: quantity
-        });
-        console.log('✅ Meta Pixel Purchase event fired:', { amount, currency: 'INR', orderId, paymentId });
-      } else {
-        console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
-      }
+      // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
+      // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
+      // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
       
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
       // This fires AFTER redirect, so Meta Pixel can track it
