@@ -149,6 +149,39 @@ body {
   padding-inline: 21px;
 }
 
+.landing-note {
+  margin: 0 0 12px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.landing-footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.landing-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.landing-links a {
+  color: #f43f3f;
+  text-decoration: none;
+}
+
+.landing-links a:hover {
+  text-decoration: underline;
+}
+
 .cta-eye-btn {
   display: flex;
   align-items: center;

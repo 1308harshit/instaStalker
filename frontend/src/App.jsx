@@ -1312,6 +1312,9 @@ function App() {
           {QUEUE_MESSAGE}
         </div>
       )}
+      <p className="landing-note">
+        This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
+      </p>
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
       <button className="result-btn">Result in 1 minute</button>
@@ -1360,7 +1363,17 @@ function App() {
           Additionally, This site is NOT endorsed by Google or Meta in any way.
         </small>
       </form>
-      
+      <div className="landing-footer">
+        <p className="landing-note">
+          This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
+        </p>
+        <div className="landing-links">
+          <a href="https://whoviewedmyprofile.in/contact.html" target="_blank" rel="noreferrer">Contact</a>
+          <a href="https://whoviewedmyprofile.in/terms-and-conditions.html" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>
+          <a href="https://whoviewedmyprofile.in/privacy-policy.html" target="_blank" rel="noreferrer">Privacy Policy</a>
+          <a href="https://whoviewedmyprofile.in/shipping.html" target="_blank" rel="noreferrer">Shipping Policy</a>
+        </div>
+      </div>
     </section>
   );
 
