@@ -88,7 +88,7 @@ const createProcessingStageData = (
   subtitle: "Our robots are analyzing the behavior of your followers",
   bullets: [
     `Found 10 mentions of ${username} in messages from your followers`,
-    "Our AI detected a possible screenshot of someone talking about you",
+    "",
     "It was detected that someone you know visited your profile 9 times yesterday",
     "2 people from your region shared one of your stories",
   ],
