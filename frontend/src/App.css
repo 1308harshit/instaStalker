@@ -2998,6 +2998,83 @@ body {
   cursor: not-allowed;
 }
 
+.payment-disclaimer-box {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.payment-disclaimer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.payment-disclaimer-toggle {
+  border: none;
+  background: none;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.payment-disclaimer-toggle:hover {
+  text-decoration: underline;
+}
+
+.payment-disclaimer-body {
+  display: grid;
+  gap: 6px;
+}
+
+.payment-disclaimer-body h4 {
+  margin: 6px 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.payment-disclaimer-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.payment-disclaimer-body ul {
+  margin: 0 0 6px 18px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.payment-page-footer {
+  margin: 20px 40px 0;
+  padding: 12px 0 0;
+  border-top: 1px solid #e5e7eb;
+  color: #4b5563;
+  font-size: 13px;
+  display: grid;
+  gap: 4px;
+}
+
+.payment-page-footer a {
+  color: inherit;
+}
+
+.payment-note {
+  margin: 0 0 12px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* Responsive Design for Payment Page */
 @media (max-width: 968px) {
   .payment-content {
@@ -3078,6 +3155,15 @@ body {
   .place-order-btn {
     font-size: 16px;
     padding: 14px 24px;
+  }
+
+  .payment-disclaimer-header {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .payment-page-footer {
+    margin: 16px 16px 0;
   }
 }
 

@@ -324,6 +324,7 @@ function App() {
   const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
   const [quantity, setQuantity] = useState(1);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [showDisclaimers, setShowDisclaimers] = useState(false);
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const snapshotLookup = useMemo(() => {
@@ -1352,7 +1353,7 @@ function App() {
             placeholder="Ex.: username"
           />
         </div>
-        <button type="submit">Reveal Stalkers</button>
+        <button type="submit">Reveal</button>
         <small className="small-text-footer">
           Also NOT GOOGLE or FACEBOOK: This site is not a part of the Google
           website, Google Inc, Facebook/Meta website, or Meta, Inc.
@@ -3013,6 +3014,9 @@ function App() {
 
               {/* Contact Form */}
               <div className="payment-form-section">
+                <p className="payment-note">
+                  This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
+                </p>
                 <h3 className="payment-form-title">Contact</h3>
                 <form onSubmit={handlePaymentSubmit} className="payment-form">
                   <div className="payment-form-group">
@@ -3177,8 +3181,62 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
+                {/* Disclaimers */}
+                <div className="payment-disclaimer-box">
+                  <p className="payment-note" style={{ margin: 0 }}>
+                    This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
+                  </p>
+                  <div className="payment-disclaimer-header">
+                    <span>
+                      By continuing, you acknowledge our Service Disclaimer, Acceptable Use, and Data &amp; Privacy Statement.
+                    </span>
+                    <button
+                      type="button"
+                      className="payment-disclaimer-toggle"
+                      onClick={() => setShowDisclaimers((prev) => !prev)}
+                    >
+                      {showDisclaimers ? "Hide details" : "View details"}
+                    </button>
+                  </div>
+
+                  {showDisclaimers && (
+                    <div className="payment-disclaimer-body">
+                      <h4>Service Disclaimer</h4>
+                      <p>This website provides digital, entertainment-based informational services related to social media engagement insights.</p>
+                      <p>All information and reports generated are strictly based on publicly available data and user-provided inputs.</p>
+                      <p>We do not access private accounts, do not require login credentials, and do not retrieve or store any personal or confidential information.</p>
+                      <p>This service is intended solely for entertainment and informational purposes and should not be interpreted as factual tracking, surveillance, or monitoring of any individual.</p>
+
+                      <h4>Acceptable Use</h4>
+                      <p>By using this service, you confirm that:</p>
+                      <ul>
+                        <li>You are requesting insights only for lawful and ethical purposes</li>
+                        <li>You understand that the service does not guarantee accuracy or real-time activity</li>
+                        <li>You agree that this service does not invade privacy or bypass platform restrictions</li>
+                        <li>Any misuse or misinterpretation of the information provided is solely the responsibility of the user.</li>
+                      </ul>
+
+                      <h4>Data &amp; Privacy Statement</h4>
+                      <p>We do not collect, store, or process:</p>
+                      <ul>
+                        <li>Private social media data</li>
+                        <li>Login credentials</li>
+                        <li>Passwords or authentication details</li>
+                      </ul>
+                      <p>All outputs are generated using publicly accessible information and automated analysis for entertainment use only.</p>
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
+          </div>
+
+          {/* Payment footer ownership/contact */}
+          <div className="payment-page-footer">
+            <div>Site owned by: Pranav Bhandari</div>
+            <div>Contact email: <a href="mailto:velarlunera@gmail.com">velarlunera@gmail.com</a></div>
+            <div>Phone: <a href="tel:7337594957">7337594957</a></div>
           </div>
         </div>
       </section>
@@ -3906,7 +3964,7 @@ function App() {
               color: '#1a1a1a',
               marginBottom: '12px'
             }}>
-              Download the e-book attraction and retraction
+              Download your ebook
             </h2>
             <p style={{
               fontSize: 'clamp(14px, 2.5vw, 16px)',
