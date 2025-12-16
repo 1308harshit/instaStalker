@@ -25,7 +25,6 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { Cashfree } from "cashfree-pg";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
@@ -72,51 +71,16 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || '');
 };
 
-// Initialize Cashfree using static configuration (as per official documentation)
-// This is the correct way according to cashfree-pg documentation
-log(`🔧 Configuring Cashfree using static properties...`);
+// Cashfree API Configuration
+// Using direct HTTP requests instead of SDK (as per official documentation)
+const CASHFREE_API_BASE_URL = "https://api.cashfree.com/pg";
+const CASHFREE_API_VERSION = "2023-08-01";
 
-// Set credentials using static properties
-Cashfree.XClientId = CASHFREE_APP_ID;
-Cashfree.XClientSecret = CASHFREE_SECRET_KEY;
-
-// Set environment - use PRODUCTION for api.cashfree.com
-// Check available environment constants
-if (Cashfree.Environment) {
-  if (Cashfree.Environment.PRODUCTION !== undefined) {
-    Cashfree.XEnvironment = Cashfree.Environment.PRODUCTION;
-    log(`🔧 Using Cashfree.Environment.PRODUCTION`);
-  } else if (Cashfree.Environment.SANDBOX !== undefined) {
-    // If PRODUCTION doesn't exist, check what's available
-    log(`⚠️ Cashfree.Environment.PRODUCTION not found, available: ${Object.keys(Cashfree.Environment).join(', ')}`);
-    // Try to use a value that represents production
-    // Some SDKs use 1 for production, 0 for sandbox
-    Cashfree.XEnvironment = Cashfree.Environment.SANDBOX === 0 ? 1 : 'PRODUCTION';
-    log(`🔧 Attempting to set XEnvironment to PRODUCTION`);
-  } else {
-    Cashfree.XEnvironment = 'PRODUCTION';
-    log(`🔧 Using string 'PRODUCTION' for XEnvironment`);
-  }
-} else {
-  // Fallback: try direct constants
-  if (Cashfree.PRODUCTION !== undefined) {
-    Cashfree.XEnvironment = Cashfree.PRODUCTION;
-    log(`🔧 Using Cashfree.PRODUCTION constant`);
-  } else {
-    Cashfree.XEnvironment = 'PRODUCTION';
-    log(`🔧 Using string 'PRODUCTION' for XEnvironment`);
-  }
-}
-
-log(`🔧 Cashfree configured:`);
-log(`   XClientId: ${Cashfree.XClientId ? Cashfree.XClientId.substring(0, 12) + '...' : 'MISSING'}`);
-log(`   XClientSecret: ${Cashfree.XClientSecret ? 'Present (length: ' + Cashfree.XClientSecret.length + ')' : 'MISSING'}`);
-log(`   XEnvironment: ${Cashfree.XEnvironment}`);
-
-// Verify configuration
-if (!Cashfree.XClientId || !Cashfree.XClientSecret) {
-  throw new Error("❌ Cashfree credentials not configured properly");
-}
+log(`🔧 Cashfree configured for direct API calls:`);
+log(`   App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
+log(`   Secret Key: ${CASHFREE_SECRET_KEY ? 'Present (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'MISSING'}`);
+log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
+log(`   API Version: ${CASHFREE_API_VERSION}`);
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
@@ -177,7 +141,7 @@ app.post("/api/payment/create-session", async (req, res) => {
     }
 
     // Verify Cashfree is configured correctly
-    if (!Cashfree.XClientId || !Cashfree.XClientSecret) {
+    if (!CASHFREE_APP_ID || !CASHFREE_SECRET_KEY) {
       throw new Error("Cashfree not configured properly");
     }
     
@@ -210,55 +174,46 @@ app.post("/api/payment/create-session", async (req, res) => {
       },
     };
     
-    log(`📤 Calling Cashfree API: PGCreateOrder`);
+    log(`📤 Calling Cashfree API: POST ${CASHFREE_API_BASE_URL}/orders`);
     log(`📦 Order Request: ${JSON.stringify(orderRequest)}`);
     
-    // Cashfree SDK - Use static method PGCreateOrder with API version
-    // According to documentation: Cashfree.PGCreateOrder("2023-08-01", request)
-    let response;
+    // Make direct HTTP request to Cashfree API (as per official documentation)
+    // Headers: x-client-id, x-client-secret, x-api-version
+    const apiUrl = `${CASHFREE_API_BASE_URL}/orders`;
+    log(`🔍 Making POST request to: ${apiUrl}`);
+    log(`📋 Headers: x-client-id, x-client-secret, x-api-version: ${CASHFREE_API_VERSION}`);
     
-    try {
-      log(`🔍 Calling: Cashfree.PGCreateOrder("2023-08-01", orderRequest)`);
-      // Use static method on Cashfree class (not instance)
-      response = await Cashfree.PGCreateOrder("2023-08-01", orderRequest);
-      
-      // Verify the request was successful
-      log(`✅ Cashfree API call successful`);
-    } catch (apiErr) {
-      // Enhanced error logging to verify URL and body
-      log(`❌ API call error: ${apiErr.message}`);
-      if (apiErr.config) {
-        log(`🌐 Request URL: ${apiErr.config.url}`);
-        log(`⚠️ CRITICAL: URL should be https://api.cashfree.com/pg/orders (PROD), not sandbox!`);
-        log(`📋 Request method: ${apiErr.config.method}`);
-        const requestData = apiErr.config.data;
-        if (typeof requestData === 'string') {
-          log(`📋 Request data (string): ${requestData}`);
-          log(`⚠️ WARNING: Request body is a string, not JSON object!`);
-        } else {
-          log(`📋 Request data (object): ${JSON.stringify(requestData)}`);
-        }
-        log(`📋 Request headers: ${JSON.stringify(apiErr.config.headers || {})}`);
-      }
-      if (apiErr.response) {
-        log(`📋 Response status: ${apiErr.response.status}`);
-        log(`📋 Response data: ${JSON.stringify(apiErr.response.data)}`);
-      }
-      throw apiErr;
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-client-id": CASHFREE_APP_ID,
+        "x-client-secret": CASHFREE_SECRET_KEY,
+        "x-api-version": CASHFREE_API_VERSION,
+      },
+      body: JSON.stringify(orderRequest),
+    });
+    
+    // Check if response is OK
+    if (!response.ok) {
+      const errorData = await response.text();
+      log(`❌ API call failed with status ${response.status}`);
+      log(`📋 Error response: ${errorData}`);
+      throw new Error(`Cashfree API error: ${response.status} - ${errorData}`);
     }
     
-    if (!response) {
-      throw new Error("Invalid response from Cashfree API");
-    }
+    const responseData = await response.json();
+    log(`✅ Cashfree API call successful`);
+    log(`📋 Response: ${JSON.stringify(responseData)}`);
     
-    // Response might be direct or wrapped in .data
-    const paymentSession = response.data || response;
-    
-    if (!paymentSession || !paymentSession.payment_session_id) {
-      log(`⚠️ Warning: Unexpected response structure: ${JSON.stringify(response)}`);
+    // Extract payment session ID from response
+    if (!responseData || !responseData.payment_session_id) {
+      log(`⚠️ Warning: Unexpected response structure: ${JSON.stringify(responseData)}`);
       throw new Error("Payment session ID not found in response");
     }
-    log(`✅ Cashfree payment session created: ${paymentSession.payment_session_id}`);
+    
+    const paymentSessionId = responseData.payment_session_id;
+    log(`✅ Cashfree payment session created: ${paymentSessionId}`);
     log(`📡 Order ID: ${orderId}, Amount: ₹${amount}`);
     
     // Save order to MongoDB (optional, don't fail if DB is unavailable)
@@ -270,7 +225,7 @@ app.post("/api/payment/create-session", async (req, res) => {
           
           await collection.insertOne({
             orderId: orderId,
-            paymentSessionId: paymentSession.payment_session_id,
+            paymentSessionId: paymentSessionId,
             email,
             fullName,
             phoneNumber: phone,
@@ -286,17 +241,9 @@ app.post("/api/payment/create-session", async (req, res) => {
     }
     
     // Return payment session data for frontend
-    // payment_session_id might be in different locations depending on SDK version
-    const sessionId = paymentSession.payment_session_id || paymentSession.paymentSessionId || paymentSession.payment_sessionId;
-    
-    if (!sessionId) {
-      log('⚠️ Warning: payment_session_id not found in response:', JSON.stringify(paymentSession));
-      throw new Error("Payment session ID not found in response");
-    }
-    
     res.json({
       order_id: orderId,
-      payment_session_id: sessionId,
+      payment_session_id: paymentSessionId,
       order_amount: amount,
       order_currency: "INR",
     });
@@ -342,30 +289,35 @@ app.get("/api/payment/test-credentials", async (req, res) => {
       },
     };
     
-    // Use static method Cashfree.PGCreateOrder with API version
-    let response;
-    try {
-      log(`🔍 Test: Calling Cashfree.PGCreateOrder("2023-08-01", testOrderRequest)`);
-      response = await Cashfree.PGCreateOrder("2023-08-01", testOrderRequest);
-    } catch (err) {
-      log(`❌ Test order error: ${err.message}`);
-      if (err.config) {
-        log(`🌐 Test URL: ${err.config.url}`);
-        log(`⚠️ CRITICAL: URL should be https://api.cashfree.com/pg/orders (PROD), not sandbox!`);
-        log(`📋 Test request data: ${typeof err.config.data === 'string' ? err.config.data : JSON.stringify(err.config.data)}`);
-        log(`📋 Test headers: ${JSON.stringify(err.config.headers || {})}`);
-      }
-      throw err;
+    // Make direct HTTP request to Cashfree API
+    const apiUrl = `${CASHFREE_API_BASE_URL}/orders`;
+    log(`🔍 Test: Making POST request to: ${apiUrl}`);
+    
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-client-id": CASHFREE_APP_ID,
+        "x-client-secret": CASHFREE_SECRET_KEY,
+        "x-api-version": CASHFREE_API_VERSION,
+      },
+      body: JSON.stringify(testOrderRequest),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      log(`❌ Test order error: Status ${response.status} - ${errorData}`);
+      throw new Error(`Cashfree API error: ${response.status} - ${errorData}`);
     }
     
-    const paymentSession = response.data || response;
-    log(`✅ Test payment session created successfully: ${paymentSession.payment_session_id}`);
+    const responseData = await response.json();
+    log(`✅ Test payment session created successfully: ${responseData.payment_session_id}`);
     
     res.json({
       success: true,
       message: "Cashfree credentials are valid",
       testOrderId: testOrderId,
-      testPaymentSessionId: paymentSession.payment_session_id,
+      testPaymentSessionId: responseData.payment_session_id,
       appIdLength: CASHFREE_APP_ID?.length || 0,
       secretKeyLength: CASHFREE_SECRET_KEY?.length || 0,
     });

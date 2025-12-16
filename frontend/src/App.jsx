@@ -2898,19 +2898,13 @@ function App() {
         retries++;
       }
 
-      // Initialize Cashfree checkout
+      // Initialize Cashfree checkout (as per official documentation)
       if (window.Cashfree) {
         try {
-          const cashfree = window.Cashfree({
-            mode: "production", // Use "sandbox" for testing
-          });
-
           console.log("Initializing Cashfree checkout with session:", paymentData.payment_session_id);
 
-          cashfree.checkout({
-            paymentSessionId: paymentData.payment_session_id,
-            redirectTarget: "_self", // Open in same window
-          });
+          // Use the official Cashfree method: new (window.Cashfree)(payment_session_id).redirect()
+          new (window.Cashfree)(paymentData.payment_session_id).redirect();
         } catch (initErr) {
           console.error("Cashfree initialization error:", initErr);
           alert(
