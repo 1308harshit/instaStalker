@@ -327,6 +327,7 @@ function App() {
   const [showDisclaimers, setShowDisclaimers] = useState(false);
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
+  const paymentSessionRef = useRef(null);
   const snapshotLookup = useMemo(() => {
     return snapshots.reduce((acc, step) => {
       acc[step.name] = step;
@@ -2881,8 +2882,11 @@ function App() {
       // Purchase should only fire AFTER payment is confirmed, not when session is created
       // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
 
+      // Store session synchronously in ref (production-safe pattern)
+      paymentSessionRef.current = paymentData.payment_session_id;
+
       // Check if payment session ID exists
-      if (!paymentData.payment_session_id) {
+      if (!paymentSessionRef.current) {
         throw new Error("Cashfree payment session ID not received from server");
       }
 
@@ -2891,7 +2895,8 @@ function App() {
       }
 
       // AFTER you receive backend response
-      // paymentData.payment_session_id is confirmed valid
+      // paymentSessionRef.current is confirmed valid
+      // IMMEDIATELY open Cashfree (same call stack - prevents browser blocking)
 
       if (!window.Cashfree) {
         console.error("❌ Cashfree SDK not loaded");
@@ -2902,15 +2907,17 @@ function App() {
 
       console.log(
         "✅ Opening Cashfree checkout with session:",
-        paymentData.payment_session_id
+        paymentSessionRef.current
       );
 
       const cashfree = window.Cashfree();
 
       cashfree.checkout({
-        paymentSessionId: paymentData.payment_session_id,
+        paymentSessionId: paymentSessionRef.current,
         redirectTarget: "_self", // same tab
       });
+
+      // DO NOT set loading false here - let Cashfree redirect
     } catch (err) {
       console.error("Payment error:", err);
       console.error("Error details:", err.message, err.stack);
