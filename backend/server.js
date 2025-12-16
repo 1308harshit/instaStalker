@@ -72,69 +72,50 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || '');
 };
 
-// Initialize Cashfree instance
-// CRITICAL: Must use PRODUCTION to hit api.cashfree.com, not sandbox.cashfree.com
-// The SDK might be buggy - try multiple approaches to force PRODUCTION
+// Initialize Cashfree using static configuration (as per official documentation)
+// This is the correct way according to cashfree-pg documentation
+log(`🔧 Configuring Cashfree using static properties...`);
 
-// Inspect Cashfree constants first
-log(`🔍 Inspecting Cashfree constants:`);
-log(`   Cashfree.PRODUCTION: ${Cashfree.PRODUCTION}`);
-log(`   Cashfree.TEST: ${Cashfree.TEST}`);
-log(`   Cashfree.SANDBOX: ${Cashfree.SANDBOX}`);
-if (Cashfree.PRODUCTION !== undefined) {
-  log(`   typeof Cashfree.PRODUCTION: ${typeof Cashfree.PRODUCTION}`);
-}
+// Set credentials using static properties
+Cashfree.XClientId = CASHFREE_APP_ID;
+Cashfree.XClientSecret = CASHFREE_SECRET_KEY;
 
-let CASHFREE_ENV;
-// Try multiple approaches to ensure PRODUCTION
-if (Cashfree && Cashfree.PRODUCTION !== undefined) {
-  // If PRODUCTION is a number, use it directly
-  if (typeof Cashfree.PRODUCTION === 'number') {
-    CASHFREE_ENV = Cashfree.PRODUCTION;
-    log(`🔧 Using Cashfree.PRODUCTION (numeric): ${CASHFREE_ENV}`);
+// Set environment - use PRODUCTION for api.cashfree.com
+// Check available environment constants
+if (Cashfree.Environment) {
+  if (Cashfree.Environment.PRODUCTION !== undefined) {
+    Cashfree.XEnvironment = Cashfree.Environment.PRODUCTION;
+    log(`🔧 Using Cashfree.Environment.PRODUCTION`);
+  } else if (Cashfree.Environment.SANDBOX !== undefined) {
+    // If PRODUCTION doesn't exist, check what's available
+    log(`⚠️ Cashfree.Environment.PRODUCTION not found, available: ${Object.keys(Cashfree.Environment).join(', ')}`);
+    // Try to use a value that represents production
+    // Some SDKs use 1 for production, 0 for sandbox
+    Cashfree.XEnvironment = Cashfree.Environment.SANDBOX === 0 ? 1 : 'PRODUCTION';
+    log(`🔧 Attempting to set XEnvironment to PRODUCTION`);
   } else {
-    CASHFREE_ENV = Cashfree.PRODUCTION;
-    log(`🔧 Using Cashfree.PRODUCTION (non-numeric): ${CASHFREE_ENV}`);
+    Cashfree.XEnvironment = 'PRODUCTION';
+    log(`🔧 Using string 'PRODUCTION' for XEnvironment`);
   }
 } else {
-  // Try string 'PRODUCTION'
-  CASHFREE_ENV = 'PRODUCTION';
-  log(`🔧 Using string 'PRODUCTION' (constant not available)`);
+  // Fallback: try direct constants
+  if (Cashfree.PRODUCTION !== undefined) {
+    Cashfree.XEnvironment = Cashfree.PRODUCTION;
+    log(`🔧 Using Cashfree.PRODUCTION constant`);
+  } else {
+    Cashfree.XEnvironment = 'PRODUCTION';
+    log(`🔧 Using string 'PRODUCTION' for XEnvironment`);
+  }
 }
 
-log(`🔧 Final CASHFREE_ENV: ${CASHFREE_ENV} (type: ${typeof CASHFREE_ENV})`);
+log(`🔧 Cashfree configured:`);
+log(`   XClientId: ${Cashfree.XClientId ? Cashfree.XClientId.substring(0, 12) + '...' : 'MISSING'}`);
+log(`   XClientSecret: ${Cashfree.XClientSecret ? 'Present (length: ' + Cashfree.XClientSecret.length + ')' : 'MISSING'}`);
+log(`   XEnvironment: ${Cashfree.XEnvironment}`);
 
-const cashfree = new Cashfree(
-  CASHFREE_ENV,
-  CASHFREE_APP_ID,
-  CASHFREE_SECRET_KEY
-);
-
-log(`🔧 Cashfree instance created`);
-log(`🔧 App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
-log(`🔧 Secret Key: ${CASHFREE_SECRET_KEY ? 'Present (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'MISSING'}`);
-
-// Inspect the instance to see what it's configured with
-try {
-  const instanceKeys = Object.keys(cashfree).slice(0, 20); // Limit to first 20 keys
-  log(`🔍 Cashfree instance keys (first 20): ${instanceKeys.join(', ')}`);
-  
-  // Check for environment-related properties
-  const envProps = ['env', 'environment', 'baseURL', 'baseUrl', 'apiUrl', 'apiURL', 'endpoint', 'url'];
-  envProps.forEach(prop => {
-    if (cashfree[prop] !== undefined) {
-      log(`🔍 cashfree.${prop}: ${cashfree[prop]}`);
-    }
-  });
-  
-  // Check if there's a PG property with its own config
-  if (cashfree.PG) {
-    log(`🔍 cashfree.PG exists, checking its properties...`);
-    const pgKeys = Object.keys(cashfree.PG).slice(0, 10);
-    log(`🔍 cashfree.PG keys (first 10): ${pgKeys.join(', ')}`);
-  }
-} catch (e) {
-  log(`⚠️ Could not inspect cashfree instance: ${e.message}`);
+// Verify configuration
+if (!Cashfree.XClientId || !Cashfree.XClientSecret) {
+  throw new Error("❌ Cashfree credentials not configured properly");
 }
 
 // Save user data to MongoDB
@@ -195,9 +176,9 @@ app.post("/api/payment/create-session", async (req, res) => {
       return res.status(400).json({ error: "Amount is required and must be greater than 0" });
     }
 
-    // Verify Cashfree instance is initialized correctly
-    if (!cashfree) {
-      throw new Error("Cashfree instance not initialized");
+    // Verify Cashfree is configured correctly
+    if (!Cashfree.XClientId || !Cashfree.XClientSecret) {
+      throw new Error("Cashfree not configured properly");
     }
     
     // Format phone number
@@ -232,24 +213,14 @@ app.post("/api/payment/create-session", async (req, res) => {
     log(`📤 Calling Cashfree API: PGCreateOrder`);
     log(`📦 Order Request: ${JSON.stringify(orderRequest)}`);
     
-    // Cashfree SDK v5 - Use PGCreateOrder(orderRequest) WITHOUT API version parameter
-    // Passing API version as first param causes it to be sent as body instead of orderRequest
-    // The SDK will use its default API version (which may be 2025-01-01, but that's acceptable)
-    // Most importantly: ensure PRODUCTION environment so URL is api.cashfree.com
+    // Cashfree SDK - Use static method PGCreateOrder with API version
+    // According to documentation: Cashfree.PGCreateOrder("2023-08-01", request)
     let response;
     
     try {
-      if (typeof cashfree.PGCreateOrder === 'function') {
-        log(`🔍 Calling: cashfree.PGCreateOrder(orderRequest)`);
-        response = await cashfree.PGCreateOrder(orderRequest);
-      } else if (typeof cashfree.PG?.createOrder === 'function') {
-        log(`🔍 Calling: cashfree.PG.createOrder(orderRequest)`);
-        response = await cashfree.PG.createOrder(orderRequest);
-      } else {
-        // Log available methods for debugging
-        const availableMethods = Object.keys(cashfree).filter(key => typeof cashfree[key] === 'function');
-        throw new Error(`Cashfree PGCreateOrder method not found. Available methods: ${availableMethods.join(', ')}`);
-      }
+      log(`🔍 Calling: Cashfree.PGCreateOrder("2023-08-01", orderRequest)`);
+      // Use static method on Cashfree class (not instance)
+      response = await Cashfree.PGCreateOrder("2023-08-01", orderRequest);
       
       // Verify the request was successful
       log(`✅ Cashfree API call successful`);
@@ -371,18 +342,11 @@ app.get("/api/payment/test-credentials", async (req, res) => {
       },
     };
     
-    // Use PGCreateOrder(orderRequest) WITHOUT API version parameter
-    // This ensures correct body (orderRequest JSON) is sent
+    // Use static method Cashfree.PGCreateOrder with API version
     let response;
     try {
-      log(`🔍 Test: Calling cashfree.PGCreateOrder(testOrderRequest)`);
-      if (typeof cashfree.PGCreateOrder === 'function') {
-        response = await cashfree.PGCreateOrder(testOrderRequest);
-      } else if (typeof cashfree.PG?.createOrder === 'function') {
-        response = await cashfree.PG.createOrder(testOrderRequest);
-      } else {
-        throw new Error("PGCreateOrder method not found");
-      }
+      log(`🔍 Test: Calling Cashfree.PGCreateOrder("2023-08-01", testOrderRequest)`);
+      response = await Cashfree.PGCreateOrder("2023-08-01", testOrderRequest);
     } catch (err) {
       log(`❌ Test order error: ${err.message}`);
       if (err.config) {
