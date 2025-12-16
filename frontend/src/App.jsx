@@ -2903,17 +2903,32 @@ function App() {
         try {
           console.log("Initializing Cashfree checkout with session:", paymentData.payment_session_id);
 
-          // Initialize Cashfree instance
-          const cashfree = window.Cashfree({
-            mode: "production" // Use "sandbox" for testing
-          });
+          // Initialize Cashfree instance - try different initialization methods
+          let cashfree;
+          if (typeof window.Cashfree === 'function') {
+            // Try constructor pattern first
+            try {
+              cashfree = new window.Cashfree();
+            } catch (e) {
+              // Fallback to function call pattern
+              cashfree = window.Cashfree();
+            }
+          } else {
+            throw new Error("Cashfree SDK not properly loaded");
+          }
 
           // Use checkout method as per official documentation
           cashfree.checkout({
-            paymentSessionId: paymentData.payment_session_id
+            paymentSessionId: paymentData.payment_session_id,
+            redirectTarget: "_self" // Open in same window
           });
         } catch (initErr) {
           console.error("Cashfree initialization error:", initErr);
+          console.error("Cashfree error details:", {
+            type: typeof window.Cashfree,
+            value: window.Cashfree,
+            error: initErr
+          });
           alert(
             `Failed to initialize payment gateway: ${
               initErr.message || "Unknown error"
