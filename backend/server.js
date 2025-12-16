@@ -74,21 +74,35 @@ const log = (message, data = null) => {
 
 // Initialize Cashfree instance
 // CRITICAL: Must use PRODUCTION to hit api.cashfree.com, not sandbox.cashfree.com
-// Try constant first, but force string 'PRODUCTION' if constant doesn't work
-let CASHFREE_ENV;
-try {
-  if (Cashfree && Cashfree.PRODUCTION !== undefined) {
-    CASHFREE_ENV = Cashfree.PRODUCTION;
-    log(`🔧 Using Cashfree.PRODUCTION constant`);
-  } else {
-    // Force string 'PRODUCTION' to ensure correct endpoint
-    CASHFREE_ENV = 'PRODUCTION';
-    log(`🔧 Using string 'PRODUCTION' (constant not available)`);
-  }
-} catch (e) {
-  CASHFREE_ENV = 'PRODUCTION';
-  log(`🔧 Using string 'PRODUCTION' (error checking constant: ${e.message})`);
+// The SDK might be buggy - try multiple approaches to force PRODUCTION
+
+// Inspect Cashfree constants first
+log(`🔍 Inspecting Cashfree constants:`);
+log(`   Cashfree.PRODUCTION: ${Cashfree.PRODUCTION}`);
+log(`   Cashfree.TEST: ${Cashfree.TEST}`);
+log(`   Cashfree.SANDBOX: ${Cashfree.SANDBOX}`);
+if (Cashfree.PRODUCTION !== undefined) {
+  log(`   typeof Cashfree.PRODUCTION: ${typeof Cashfree.PRODUCTION}`);
 }
+
+let CASHFREE_ENV;
+// Try multiple approaches to ensure PRODUCTION
+if (Cashfree && Cashfree.PRODUCTION !== undefined) {
+  // If PRODUCTION is a number, use it directly
+  if (typeof Cashfree.PRODUCTION === 'number') {
+    CASHFREE_ENV = Cashfree.PRODUCTION;
+    log(`🔧 Using Cashfree.PRODUCTION (numeric): ${CASHFREE_ENV}`);
+  } else {
+    CASHFREE_ENV = Cashfree.PRODUCTION;
+    log(`🔧 Using Cashfree.PRODUCTION (non-numeric): ${CASHFREE_ENV}`);
+  }
+} else {
+  // Try string 'PRODUCTION'
+  CASHFREE_ENV = 'PRODUCTION';
+  log(`🔧 Using string 'PRODUCTION' (constant not available)`);
+}
+
+log(`🔧 Final CASHFREE_ENV: ${CASHFREE_ENV} (type: ${typeof CASHFREE_ENV})`);
 
 const cashfree = new Cashfree(
   CASHFREE_ENV,
@@ -96,10 +110,32 @@ const cashfree = new Cashfree(
   CASHFREE_SECRET_KEY
 );
 
-log(`🔧 Cashfree initialized`);
-log(`🔧 Environment: ${CASHFREE_ENV} (type: ${typeof CASHFREE_ENV})`);
+log(`🔧 Cashfree instance created`);
 log(`🔧 App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
 log(`🔧 Secret Key: ${CASHFREE_SECRET_KEY ? 'Present (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'MISSING'}`);
+
+// Inspect the instance to see what it's configured with
+try {
+  const instanceKeys = Object.keys(cashfree).slice(0, 20); // Limit to first 20 keys
+  log(`🔍 Cashfree instance keys (first 20): ${instanceKeys.join(', ')}`);
+  
+  // Check for environment-related properties
+  const envProps = ['env', 'environment', 'baseURL', 'baseUrl', 'apiUrl', 'apiURL', 'endpoint', 'url'];
+  envProps.forEach(prop => {
+    if (cashfree[prop] !== undefined) {
+      log(`🔍 cashfree.${prop}: ${cashfree[prop]}`);
+    }
+  });
+  
+  // Check if there's a PG property with its own config
+  if (cashfree.PG) {
+    log(`🔍 cashfree.PG exists, checking its properties...`);
+    const pgKeys = Object.keys(cashfree.PG).slice(0, 10);
+    log(`🔍 cashfree.PG keys (first 10): ${pgKeys.join(', ')}`);
+  }
+} catch (e) {
+  log(`⚠️ Could not inspect cashfree instance: ${e.message}`);
+}
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
