@@ -2841,16 +2841,23 @@ function App() {
       // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
       const verifyPayment = async () => {
         try {
+          console.log('🔍 Verifying payment for order:', orderId);
           const verifyResponse = await fetch(`${API_BASE}/api/payment/verify?order_id=${orderId}`);
           
           if (!verifyResponse.ok) {
             // Payment verification failed - stay on payment page (silent fail)
-            console.log('⚠️ Payment verification failed, staying on payment page');
+            const errorData = await verifyResponse.json().catch(() => ({ error: 'Unknown error' }));
+            console.log('⚠️ Payment verification failed:', errorData);
+            console.log('⚠️ Response status:', verifyResponse.status);
             setScreen(SCREEN.PAYMENT);
             return;
           }
           
           const paymentData = await verifyResponse.json();
+          console.log('📋 Payment verification response:', paymentData);
+          console.log('📋 Order status:', paymentData.order_status);
+          console.log('📋 Payment status:', paymentData.payment_status);
+          console.log('📋 Is successful:', paymentData.is_successful);
           
           // Only show success if payment is actually successful
           if (paymentData.is_successful) {
@@ -2865,7 +2872,7 @@ function App() {
             window.history.replaceState({}, '', window.location.pathname);
           } else {
             // Payment not successful - stay on payment page (silent fail)
-            console.log('⚠️ Payment not successful, staying on payment page');
+            console.log('⚠️ Payment not successful - order_status:', paymentData.order_status, 'payment_status:', paymentData.payment_status);
             setScreen(SCREEN.PAYMENT);
           }
         } catch (err) {

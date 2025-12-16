@@ -343,10 +343,20 @@ app.get("/api/payment/verify", async (req, res) => {
     const orderData = await response.json();
     log(`✅ Payment verification response: ${JSON.stringify(orderData)}`);
     
-    // Check if payment is successful
-    const isSuccessful = orderData.order_status === "PAID" || 
-                        orderData.payment_status === "SUCCESS" ||
-                        orderData.payment_status === "PAID";
+    // Check if payment is successful - Cashfree status values
+    // order_status can be: ACTIVE, PAID, EXPIRED, CANCELLED
+    // payment_status can be: SUCCESS, FAILED, PENDING, NOT_ATTEMPTED, USER_DROPPED, VOID, CANCELLED, AUTHENTICATION_FAILED, AUTHORIZATION_FAILED
+    const orderStatus = orderData.order_status?.toUpperCase();
+    const paymentStatus = orderData.payment_status?.toUpperCase();
+    
+    log(`🔍 Order status: ${orderStatus}, Payment status: ${paymentStatus}`);
+    
+    const isSuccessful = orderStatus === "PAID" || 
+                        paymentStatus === "SUCCESS" ||
+                        paymentStatus === "PAID" ||
+                        (orderStatus === "ACTIVE" && paymentStatus === "SUCCESS");
+    
+    log(`✅ Payment is successful: ${isSuccessful}`);
     
     res.json({
       order_id: orderData.order_id,
@@ -355,6 +365,8 @@ app.get("/api/payment/verify", async (req, res) => {
       is_successful: isSuccessful,
       order_amount: orderData.order_amount,
       order_currency: orderData.order_currency,
+      // Include raw data for debugging
+      raw_data: orderData,
     });
   } catch (err) {
     log(`❌ Error verifying payment: ${err.message}`);
