@@ -162,6 +162,9 @@ app.post("/api/payment/create-session", async (req, res) => {
     // Generate unique order ID
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
+    // Generate safe customer ID (never use email)
+    const customerId = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
     log(`💰 Creating payment session: ₹${amount} (Order ID: ${orderId})`);
     log(`🔑 Using App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
     
@@ -171,9 +174,9 @@ app.post("/api/payment/create-session", async (req, res) => {
       order_amount: amount, // Cashfree uses rupees, not paise
       order_currency: "INR",
       customer_details: {
-        customer_id: email || `customer_${Date.now()}`,
+        customer_id: customerId, // Safe ID, never email
         customer_name: fullName || "Customer",
-        customer_email: email || "",
+        customer_email: email || "", // Email only here
         customer_phone: phone || "",
       },
       order_meta: {
@@ -293,12 +296,15 @@ app.get("/api/payment/test-credentials", async (req, res) => {
     
     // Try to create a minimal test payment session
     const testOrderId = `test_${Date.now()}`;
+    // Generate safe customer ID for test (never use email)
+    const testCustomerId = `cust_test_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
     const testOrderRequest = {
       order_id: testOrderId,
       order_amount: 1, // 1 rupee
       order_currency: "INR",
       customer_details: {
-        customer_id: "test_customer",
+        customer_id: testCustomerId, // Safe ID, never email
         customer_name: "Test Customer",
         customer_email: "[email protected]",
         customer_phone: "9999999999",
