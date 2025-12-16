@@ -1366,6 +1366,7 @@ function App() {
           <a href="https://whoviewedmyprofile.in/terms-and-conditions.html" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>
           <a href="https://whoviewedmyprofile.in/privacy-policy.html" target="_blank" rel="noreferrer">Privacy Policy</a>
           <a href="https://whoviewedmyprofile.in/shipping.html" target="_blank" rel="noreferrer">Shipping Policy</a>
+          <a href="https://whoviewedmyprofile.in/refund-and-cancellation.html" target="_blank" rel="noreferrer">Refund &amp; Cancellation</a>
         </div>
       </div>
     </section>
