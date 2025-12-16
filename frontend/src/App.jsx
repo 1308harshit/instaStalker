@@ -1312,9 +1312,6 @@ function App() {
           {QUEUE_MESSAGE}
         </div>
       )}
-      <p className="landing-note">
-        This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
-      </p>
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
       <button className="result-btn">Result in 1 minute</button>
@@ -1364,9 +1361,6 @@ function App() {
         </small>
       </form>
       <div className="landing-footer">
-        <p className="landing-note">
-          This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
-        </p>
         <div className="landing-links">
           <a href="https://whoviewedmyprofile.in/contact.html" target="_blank" rel="noreferrer">Contact</a>
           <a href="https://whoviewedmyprofile.in/terms-and-conditions.html" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>
@@ -3006,9 +3000,6 @@ function App() {
 
               {/* Contact Form */}
               <div className="payment-form-section">
-                <p className="payment-note">
-                  This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
-                </p>
                 <h3 className="payment-form-title">Contact</h3>
                 <form onSubmit={handlePaymentSubmit} className="payment-form">
                   <div className="payment-form-group">
@@ -3175,9 +3166,6 @@ function App() {
 
                 {/* Disclaimers */}
                 <div className="payment-disclaimer-box">
-                  <p className="payment-note" style={{ margin: 0 }}>
-                    This is a digital, entertainment-based service using publicly available insights. No private data is accessed.
-                  </p>
                   <div className="payment-disclaimer-header">
                     <span>
                       By continuing, you acknowledge our Service Disclaimer, Acceptable Use, and Data &amp; Privacy Statement.
