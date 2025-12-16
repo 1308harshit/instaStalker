@@ -2770,7 +2770,7 @@ function App() {
   useEffect(() => {
     const fetchCashfreeEnv = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/payment/environment`);
+        const response = await fetch('/api/payment/environment');
         if (response.ok) {
           const data = await response.json();
           const isTest = data.isTest;
@@ -2842,7 +2842,7 @@ function App() {
       const verifyPayment = async () => {
         try {
           console.log('🔍 Verifying payment for order:', orderId);
-          const verifyResponse = await fetch(`${API_BASE}/api/payment/verify?order_id=${orderId}`);
+          const verifyResponse = await fetch(`/api/payment/verify?order_id=${orderId}`);
           
           if (!verifyResponse.ok) {
             // Payment verification failed - stay on payment page (silent fail)
