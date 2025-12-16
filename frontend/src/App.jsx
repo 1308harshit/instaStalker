@@ -2903,8 +2903,15 @@ function App() {
         try {
           console.log("Initializing Cashfree checkout with session:", paymentData.payment_session_id);
 
-          // Use the official Cashfree method: new (window.Cashfree)(payment_session_id).redirect()
-          new (window.Cashfree)(paymentData.payment_session_id).redirect();
+          // Initialize Cashfree instance
+          const cashfree = window.Cashfree({
+            mode: "production" // Use "sandbox" for testing
+          });
+
+          // Use checkout method as per official documentation
+          cashfree.checkout({
+            paymentSessionId: paymentData.payment_session_id
+          });
         } catch (initErr) {
           console.error("Cashfree initialization error:", initErr);
           alert(
