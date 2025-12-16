@@ -68,16 +68,35 @@ if (!CASHFREE_SECRET_KEY) {
 }
 
 // Initialize Cashfree instance
-const cashfree = new Cashfree(
-  Cashfree.PRODUCTION, // Use Cashfree.TEST for sandbox
-  CASHFREE_APP_ID,
-  CASHFREE_SECRET_KEY
-);
+// Use explicit 'PRODUCTION' string to ensure correct endpoint (api.cashfree.com)
+// Check available constants first, but fallback to string
+let CASHFREE_ENV;
+if (typeof Cashfree !== 'undefined') {
+  if (Cashfree.PRODUCTION !== undefined) {
+    CASHFREE_ENV = Cashfree.PRODUCTION;
+  } else if (Cashfree.ENV_PRODUCTION !== undefined) {
+    CASHFREE_ENV = Cashfree.ENV_PRODUCTION;
+  } else {
+    CASHFREE_ENV = 'PRODUCTION'; // Use string as fallback
+  }
+} else {
+  CASHFREE_ENV = 'PRODUCTION';
+}
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, data || '');
 };
+
+const cashfree = new Cashfree(
+  CASHFREE_ENV,
+  CASHFREE_APP_ID,
+  CASHFREE_SECRET_KEY
+);
+
+log(`🔧 Cashfree initialized with environment: ${CASHFREE_ENV}`);
+log(`🔧 Environment type: ${typeof CASHFREE_ENV}, value: ${CASHFREE_ENV}`);
+log(`🔧 Cashfree instance created, checking available methods...`);
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
@@ -171,15 +190,101 @@ app.post("/api/payment/create-session", async (req, res) => {
       },
     };
     
-    log(`📤 Calling Cashfree API: PGCreateOrder(${JSON.stringify(orderRequest)})`);
+    log(`📤 Calling Cashfree API: PGCreateOrder`);
+    log(`📦 Order Request: ${JSON.stringify(orderRequest)}`);
     
-    const response = await cashfree.PGCreateOrder("2023-08-01", orderRequest);
+    // Cashfree SDK v5 - Try with explicit API version first (correct signature per docs)
+    // Method signature: PGCreateOrder(apiVersion, orderRequest)
+    // This ensures:
+    // 1. Correct API version header (2023-08-01, not 2025-01-01)
+    // 2. Correct endpoint (api.cashfree.com for PROD, not sandbox)
+    // 3. Correct body (orderRequest JSON, not API version string)
+    let response;
     
-    if (!response || !response.data) {
+    try {
+      // Try with explicit API version first
+      if (typeof cashfree.PGCreateOrder === 'function') {
+        log(`🔍 Attempting: cashfree.PGCreateOrder("2023-08-01", orderRequest)`);
+        response = await cashfree.PGCreateOrder("2023-08-01", orderRequest);
+      } else if (typeof cashfree.PG?.createOrder === 'function') {
+        log(`🔍 Attempting: cashfree.PG.createOrder("2023-08-01", orderRequest)`);
+        response = await cashfree.PG.createOrder("2023-08-01", orderRequest);
+      } else {
+        // Log available methods for debugging
+        const availableMethods = Object.keys(cashfree).filter(key => typeof cashfree[key] === 'function');
+        throw new Error(`Cashfree PGCreateOrder method not found. Available methods: ${availableMethods.join(', ')}`);
+      }
+    } catch (apiErr) {
+      // Enhanced error logging to verify URL and body
+      log(`❌ API call error: ${apiErr.message}`);
+      if (apiErr.config) {
+        log(`🌐 Request URL: ${apiErr.config.url}`);
+        log(`📋 Request method: ${apiErr.config.method}`);
+        const requestData = apiErr.config.data;
+        if (typeof requestData === 'string') {
+          log(`📋 Request data (string): ${requestData}`);
+          log(`⚠️ WARNING: Request body is a string, not JSON object!`);
+        } else {
+          log(`📋 Request data (object): ${JSON.stringify(requestData)}`);
+        }
+        log(`📋 Request headers: ${JSON.stringify(apiErr.config.headers || {})}`);
+      }
+      if (apiErr.response) {
+        log(`📋 Response status: ${apiErr.response.status}`);
+        log(`📋 Response data: ${JSON.stringify(apiErr.response.data)}`);
+      }
+      
+      // If error suggests wrong body format or authentication issue, try without API version
+      const errorMsg = apiErr.message?.toLowerCase() || '';
+      const responseData = apiErr.response?.data || {};
+      const responseStr = JSON.stringify(responseData).toLowerCase();
+      const requestDataStr = apiErr.config?.data || '';
+      
+      // Check if body is wrong (version string instead of order JSON) or authentication failed
+      if (errorMsg.includes('authentication') || 
+          errorMsg.includes('unauthorized') ||
+          responseStr.includes('authentication') ||
+          (typeof requestDataStr === 'string' && requestDataStr === '"2023-08-01"') ||
+          (typeof requestDataStr === 'string' && requestDataStr.includes('2023-08-01') && !requestDataStr.includes('order_id'))) {
+        log(`⚠️ First attempt failed, trying without explicit API version (SDK may handle it internally)`);
+        try {
+          if (typeof cashfree.PGCreateOrder === 'function') {
+            log(`🔍 Attempting fallback: cashfree.PGCreateOrder(orderRequest)`);
+            response = await cashfree.PGCreateOrder(orderRequest);
+          } else if (typeof cashfree.PG?.createOrder === 'function') {
+            log(`🔍 Attempting fallback: cashfree.PG.createOrder(orderRequest)`);
+            response = await cashfree.PG.createOrder(orderRequest);
+          }
+        } catch (fallbackErr) {
+          log(`❌ Fallback also failed: ${fallbackErr.message}`);
+          if (fallbackErr.config) {
+            log(`🌐 Fallback URL: ${fallbackErr.config.url}`);
+            const fallbackData = fallbackErr.config.data;
+            if (typeof fallbackData === 'string') {
+              log(`📋 Fallback data (string): ${fallbackData}`);
+            } else {
+              log(`📋 Fallback data (object): ${JSON.stringify(fallbackData)}`);
+            }
+            log(`📋 Fallback headers: ${JSON.stringify(fallbackErr.config.headers || {})}`);
+          }
+          throw fallbackErr;
+        }
+      } else {
+        throw apiErr;
+      }
+    }
+    
+    if (!response) {
       throw new Error("Invalid response from Cashfree API");
     }
     
-    const paymentSession = response.data;
+    // Response might be direct or wrapped in .data
+    const paymentSession = response.data || response;
+    
+    if (!paymentSession || !paymentSession.payment_session_id) {
+      log(`⚠️ Warning: Unexpected response structure: ${JSON.stringify(response)}`);
+      throw new Error("Payment session ID not found in response");
+    }
     log(`✅ Cashfree payment session created: ${paymentSession.payment_session_id}`);
     log(`📡 Order ID: ${orderId}, Amount: ₹${amount}`);
     
@@ -208,9 +313,17 @@ app.post("/api/payment/create-session", async (req, res) => {
     }
     
     // Return payment session data for frontend
+    // payment_session_id might be in different locations depending on SDK version
+    const sessionId = paymentSession.payment_session_id || paymentSession.paymentSessionId || paymentSession.payment_sessionId;
+    
+    if (!sessionId) {
+      log('⚠️ Warning: payment_session_id not found in response:', JSON.stringify(paymentSession));
+      throw new Error("Payment session ID not found in response");
+    }
+    
     res.json({
       order_id: orderId,
-      payment_session_id: paymentSession.payment_session_id,
+      payment_session_id: sessionId,
       order_amount: amount,
       order_currency: "INR",
     });
@@ -256,15 +369,50 @@ app.get("/api/payment/test-credentials", async (req, res) => {
       },
     };
     
-    const response = await cashfree.PGCreateOrder("2023-08-01", testOrderRequest);
+    // Use correct API version "2023-08-01" for production
+    let response;
+    try {
+      log(`🔍 Test: Attempting cashfree.PGCreateOrder("2023-08-01", testOrderRequest)`);
+      if (typeof cashfree.PGCreateOrder === 'function') {
+        response = await cashfree.PGCreateOrder("2023-08-01", testOrderRequest);
+      } else if (typeof cashfree.PG?.createOrder === 'function') {
+        response = await cashfree.PG.createOrder("2023-08-01", testOrderRequest);
+      } else {
+        throw new Error("PGCreateOrder method not found");
+      }
+    } catch (err) {
+      log(`❌ Test order error: ${err.message}`);
+      if (err.config) {
+        log(`🌐 Test URL: ${err.config.url}`);
+        log(`📋 Test request data: ${typeof err.config.data === 'string' ? err.config.data : JSON.stringify(err.config.data)}`);
+        log(`📋 Test headers: ${JSON.stringify(err.config.headers || {})}`);
+      }
+      // Try fallback without API version
+      if (err.response?.status === 401 || err.message?.includes('authentication')) {
+        log(`⚠️ Test: Trying fallback without API version`);
+        try {
+          if (typeof cashfree.PGCreateOrder === 'function') {
+            response = await cashfree.PGCreateOrder(testOrderRequest);
+          } else if (typeof cashfree.PG?.createOrder === 'function') {
+            response = await cashfree.PG.createOrder(testOrderRequest);
+          }
+        } catch (fallbackErr) {
+          log(`❌ Test fallback also failed: ${fallbackErr.message}`);
+          throw fallbackErr;
+        }
+      } else {
+        throw err;
+      }
+    }
     
-    log(`✅ Test payment session created successfully: ${response.data.payment_session_id}`);
+    const paymentSession = response.data || response;
+    log(`✅ Test payment session created successfully: ${paymentSession.payment_session_id}`);
     
     res.json({
       success: true,
       message: "Cashfree credentials are valid",
       testOrderId: testOrderId,
-      testPaymentSessionId: response.data.payment_session_id,
+      testPaymentSessionId: paymentSession.payment_session_id,
       appIdLength: CASHFREE_APP_ID?.length || 0,
       secretKeyLength: CASHFREE_SECRET_KEY?.length || 0,
     });
