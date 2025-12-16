@@ -2792,7 +2792,7 @@ function App() {
       // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
       // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
       
-      // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Razorpay popup)
+      // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Cashfree checkout)
       // This fires AFTER redirect, so Meta Pixel can track it
       // const amount = 99 * quantity;
       // console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
@@ -2850,14 +2850,19 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      // Create Razorpay order
+      // Create Cashfree payment session
       const amount = 99 * quantity; // 99₹ per item
       const orderResponse = await fetch(
         `/api/payment/create-session`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount }),
+          body: JSON.stringify({ 
+            amount,
+            email: paymentForm.email,
+            fullName: paymentForm.fullName,
+            phoneNumber: paymentForm.phoneNumber,
+          }),
         }
       ).catch((fetchErr) => {
         console.error("Network error creating payment:", fetchErr);
@@ -2868,77 +2873,51 @@ function App() {
         const errorData = await orderResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Payment order error:", errorData);
+        console.error("Payment session error:", errorData);
         throw new Error(
-          errorData.error || errorData.message || "Failed to create payment order"
+          errorData.error || errorData.message || "Failed to create payment session"
         );
       }
 
-      const order = await orderResponse.json();
-      console.log("Razorpay order created:", order);
+      const paymentData = await orderResponse.json();
+      console.log("Cashfree payment session created:", paymentData);
 
       // ❌ Purchase event removed from here - it will fire on success page instead
-      // Purchase should only fire AFTER payment is confirmed, not when order is created
-      // This prevents duplicate events and ensures tracking happens outside Razorpay iframe
+      // Purchase should only fire AFTER payment is confirmed, not when session is created
+      // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
 
-      // Check if Razorpay order ID exists
-      if (!order.id) {
-        throw new Error("Razorpay order ID not received from server");
+      // Check if payment session ID exists
+      if (!paymentData.payment_session_id) {
+        throw new Error("Cashfree payment session ID not received from server");
       }
 
-      if (!order.keyId) {
-        throw new Error("Razorpay key ID not received from server");
+      if (!paymentData.order_id) {
+        throw new Error("Cashfree order ID not received from server");
       }
 
-      // Wait a bit for Razorpay SDK to load if not already loaded
+      // Wait a bit for Cashfree SDK to load if not already loaded
       let retries = 0;
       const maxRetries = 10;
-      while (!window.Razorpay && retries < maxRetries) {
+      while (!window.Cashfree && retries < maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, 100));
         retries++;
       }
 
-      // Initialize Razorpay payment
-      if (window.Razorpay) {
+      // Initialize Cashfree checkout
+      if (window.Cashfree) {
         try {
-          const options = {
-            key: order.keyId, // Razorpay key ID from backend
-            amount: order.amount, // Amount in paise
-            currency: order.currency || "INR",
-            name: "Who Viewed My Profile",
-            description: "Instagram Stalker Report",
-            order_id: order.id,
-            handler: function (response) {
-              console.log("Payment successful:", response);
-              
-              // ❌ DO NOT fire Purchase event here - Razorpay opens in iframe/popup
-              // Meta Pixel cannot track events inside iframes
-              // Purchase event will fire on success page instead (after redirect)
-              
-              // Redirect to success page
-              window.location.href = `/payment/return?order_id=${response.razorpay_order_id}&payment_id=${response.razorpay_payment_id}`;
-            },
-            prefill: {
-              name: paymentForm.fullName,
-              email: paymentForm.email,
-              contact: paymentForm.phoneNumber,
-            },
-            theme: {
-              color: "#2D6EEA",
-            },
-            modal: {
-              ondismiss: function() {
-                setPaymentLoading(false);
-              }
-            }
-          };
+          const cashfree = window.Cashfree({
+            mode: "production", // Use "sandbox" for testing
+          });
 
-          console.log("Initializing Razorpay checkout with order:", order.id);
+          console.log("Initializing Cashfree checkout with session:", paymentData.payment_session_id);
 
-          const razor = new window.Razorpay(options);
-          razor.open();
+          cashfree.checkout({
+            paymentSessionId: paymentData.payment_session_id,
+            redirectTarget: "_self", // Open in same window
+          });
         } catch (initErr) {
-          console.error("Razorpay initialization error:", initErr);
+          console.error("Cashfree initialization error:", initErr);
           alert(
             `Failed to initialize payment gateway: ${
               initErr.message || "Unknown error"
@@ -2947,8 +2926,8 @@ function App() {
           setPaymentLoading(false);
         }
       } else {
-        console.error("Razorpay SDK not loaded after waiting");
-        console.log("Window.Razorpay:", window.Razorpay);
+        console.error("Cashfree SDK not loaded after waiting");
+        console.log("Window.Cashfree:", window.Cashfree);
         alert(
           "Payment gateway SDK not loaded. Please refresh the page and try again."
         );
