@@ -25,7 +25,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import cashfree from "@cashfreepayments/cashfree-sdk";
+import { Cashfree } from "@cashfreepayments/cashfree-pg";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
@@ -67,12 +67,12 @@ if (!CASHFREE_SECRET_KEY) {
   throw new Error("❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
 }
 
-// Initialize Cashfree SDK
-cashfree.PG.init({
-  appId: CASHFREE_APP_ID,
-  secretKey: CASHFREE_SECRET_KEY,
-  env: 'PRODUCTION', // Use 'TEST' for sandbox
-});
+// Initialize Cashfree instance
+const cashfree = new Cashfree(
+  Cashfree.PRODUCTION, // Use Cashfree.TEST for sandbox
+  CASHFREE_APP_ID,
+  CASHFREE_SECRET_KEY
+);
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -137,9 +137,9 @@ app.post("/api/payment/create-session", async (req, res) => {
       return res.status(400).json({ error: "Amount is required and must be greater than 0" });
     }
 
-    // Verify Cashfree SDK is initialized correctly
-    if (!cashfree || !cashfree.PG) {
-      throw new Error("Cashfree SDK not initialized");
+    // Verify Cashfree instance is initialized correctly
+    if (!cashfree) {
+      throw new Error("Cashfree instance not initialized");
     }
     
     // Format phone number
@@ -171,15 +171,15 @@ app.post("/api/payment/create-session", async (req, res) => {
       },
     };
     
-    log(`📤 Calling Cashfree API: createOrder(${JSON.stringify(orderRequest)})`);
+    log(`📤 Calling Cashfree API: PGCreateOrder(${JSON.stringify(orderRequest)})`);
     
-    const response = await cashfree.PG.createOrder(orderRequest);
+    const response = await cashfree.PGCreateOrder("2023-08-01", orderRequest);
     
-    if (!response) {
+    if (!response || !response.data) {
       throw new Error("Invalid response from Cashfree API");
     }
     
-    const paymentSession = response;
+    const paymentSession = response.data;
     log(`✅ Cashfree payment session created: ${paymentSession.payment_session_id}`);
     log(`📡 Order ID: ${orderId}, Amount: ₹${amount}`);
     
@@ -256,15 +256,15 @@ app.get("/api/payment/test-credentials", async (req, res) => {
       },
     };
     
-    const response = await cashfree.PG.createOrder(testOrderRequest);
+    const response = await cashfree.PGCreateOrder("2023-08-01", testOrderRequest);
     
-    log(`✅ Test payment session created successfully: ${response.payment_session_id}`);
+    log(`✅ Test payment session created successfully: ${response.data.payment_session_id}`);
     
     res.json({
       success: true,
       message: "Cashfree credentials are valid",
       testOrderId: testOrderId,
-      testPaymentSessionId: response.payment_session_id,
+      testPaymentSessionId: response.data.payment_session_id,
       appIdLength: CASHFREE_APP_ID?.length || 0,
       secretKeyLength: CASHFREE_SECRET_KEY?.length || 0,
     });
