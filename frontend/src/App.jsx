@@ -2823,67 +2823,35 @@ function App() {
     fetchCashfreeEnv();
   }, []);
 
-  // Handle payment return URL and verify payment status
+  // Handle payment return URL - simple like Razorpay
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('order_id');
-    const paymentId = urlParams.get('payment_id');
     
-    if (orderId && window.location.pathname.includes('/payment/return')) {
-      // Prevent duplicate Purchase events for the same order
+    // If order_id is present, payment was completed (Cashfree redirects here only after payment)
+    if (orderId) {
+      // Prevent duplicate processing
       if (purchaseEventFiredRef.current.has(orderId)) {
-        console.log('⚠️ Purchase event already fired for order:', orderId, '- skipping duplicate');
+        console.log('⚠️ Order already processed:', orderId);
         setScreen(SCREEN.PAYMENT_SUCCESS);
-        // Clean URL even if event was already fired
+        // Clean URL
         window.history.replaceState({}, '', window.location.pathname);
         return;
       }
       
-      // Verify payment status before showing success page
-      const verifyPayment = async () => {
-        try {
-          console.log('🔍 Verifying payment status for order:', orderId);
-          const verifyResponse = await fetch(`${API_BASE}/api/payment/verify?order_id=${orderId}`);
-          
-          if (!verifyResponse.ok) {
-            const errorData = await verifyResponse.json().catch(() => ({ error: 'Unknown error' }));
-            console.error('❌ Payment verification failed:', errorData);
-            alert('Payment verification failed. Please contact support if payment was successful.');
-            setScreen(SCREEN.PAYMENT);
-            return;
-          }
-          
-          const paymentData = await verifyResponse.json();
-          console.log('✅ Payment verification response:', paymentData);
-          
-          if (!paymentData.is_successful) {
-            console.warn('⚠️ Payment not successful:', paymentData);
-            alert(`Payment status: ${paymentData.payment_status || paymentData.order_status}. Please try again.`);
-            setScreen(SCREEN.PAYMENT);
-            return;
-          }
-          
-          // Payment is successful - show success page
-          console.log('✅ Payment verified successfully');
-          setScreen(SCREEN.PAYMENT_SUCCESS);
-          
-          // Mark this order as processed to prevent duplicate events
-          purchaseEventFiredRef.current.add(orderId);
-          
-          // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
-          // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
-          // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
-          
-          // Clean URL
-          window.history.replaceState({}, '', window.location.pathname);
-        } catch (err) {
-          console.error('❌ Error verifying payment:', err);
-          alert('Failed to verify payment. Please contact support if payment was successful.');
-          setScreen(SCREEN.PAYMENT);
-        }
-      };
+      // Payment completed - show success page immediately (like Razorpay)
+      console.log('✅ Payment completed, order ID:', orderId);
+      setScreen(SCREEN.PAYMENT_SUCCESS);
       
-      verifyPayment();
+      // Mark this order as processed to prevent duplicate events
+      purchaseEventFiredRef.current.add(orderId);
+      
+      // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
+      // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
+      // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
+      
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
