@@ -183,6 +183,17 @@ app.post("/api/payment/create-session", async (req, res) => {
     log(`🔍 Making POST request to: ${apiUrl}`);
     log(`📋 Headers: x-client-id, x-client-secret, x-api-version: ${CASHFREE_API_VERSION}`);
     
+    // Debug: Log credentials being sent (first 20 chars of secret for security)
+    log(`🔑 Credentials check:`);
+    log(`   x-client-id: ${CASHFREE_APP_ID}`);
+    log(`   x-client-secret (first 30 chars): ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.substring(0, 30) + '...' : 'MISSING'}`);
+    log(`   x-client-secret length: ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.length : 0}`);
+    log(`   x-client-secret ends with: ${CASHFREE_SECRET_KEY ? '...' + CASHFREE_SECRET_KEY.substring(CASHFREE_SECRET_KEY.length - 10) : 'MISSING'}`);
+    
+    // Expected values from curl command (for comparison):
+    // x-client-id: 1147729692de9b1aedf55a696b09277411
+    // x-client-secret: cfsk_ma_prod_26bfec1cccfce1b21f9ca96bd38659d0_fa148335 (length: 67)
+    
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
