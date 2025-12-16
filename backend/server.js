@@ -58,6 +58,12 @@ const COLLECTION_NAME = "user_orders";
 const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
 const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
 
+// Check CASHFREE_ENV and set base URL accordingly
+const CASHFREE_ENV = process.env.CASHFREE_ENV || "PRODUCTION";
+const CASHFREE_API_BASE_URL = CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
+  ? "https://sandbox.cashfree.com/pg"  // Test environment
+  : "https://api.cashfree.com/pg";     // Production environment
+
 // Validate required environment variables
 if (!CASHFREE_APP_ID) {
   throw new Error("❌ CASHFREE_APP_ID environment variable is required. Please set it in .env file or Railway environment variables.");
@@ -72,8 +78,10 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || '');
 };
 
-// Log credentials at startup to verify hardcoded values are being used
+// Log credentials at startup to verify environment configuration
 log(`🚀 Cashfree credentials loaded:`);
+log(`   Environment: ${CASHFREE_ENV}`);
+log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   App ID: ${CASHFREE_APP_ID}`);
 log(`   Secret Key length: ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.length : 0}`);
 log(`   Secret Key (first 40 chars): ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.substring(0, 40) + '...' : 'MISSING'}`);
@@ -81,7 +89,6 @@ log(`   Secret Key (last 15 chars): ${CASHFREE_SECRET_KEY ? '...' + CASHFREE_SEC
 
 // Cashfree API Configuration
 // Using direct HTTP requests instead of SDK (as per official documentation)
-const CASHFREE_API_BASE_URL = "https://api.cashfree.com/pg";
 const CASHFREE_API_VERSION = "2023-08-01";
 
 log(`🔧 Cashfree configured for direct API calls:`);
@@ -286,6 +293,72 @@ app.post("/api/payment/create-session", async (req, res) => {
       statusCode: err.statusCode || err.response?.status,
       cashfreeError: err.response?.data || null
     });
+  }
+});
+
+// Get Cashfree environment (for frontend to determine which SDK to load)
+app.get("/api/payment/environment", async (req, res) => {
+  try {
+    res.json({ 
+      environment: CASHFREE_ENV,
+      isTest: CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
+    });
+  } catch (err) {
+    log(`❌ Error getting environment: ${err.message}`);
+    res.status(500).json({ error: "Failed to get environment" });
+  }
+});
+
+// Verify payment status endpoint
+app.get("/api/payment/verify", async (req, res) => {
+  try {
+    const { order_id } = req.query;
+    
+    if (!order_id) {
+      return res.status(400).json({ error: "order_id is required" });
+    }
+    
+    log(`🔍 Verifying payment status for order: ${order_id}`);
+    
+    // Fetch order status from Cashfree
+    const apiUrl = `${CASHFREE_API_BASE_URL}/orders/${order_id}`;
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "x-client-id": CASHFREE_APP_ID,
+        "x-client-secret": CASHFREE_SECRET_KEY,
+        "x-api-version": CASHFREE_API_VERSION,
+      },
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      log(`❌ Payment verification failed: Status ${response.status} - ${errorData}`);
+      return res.status(response.status).json({ 
+        error: `Payment verification failed: ${response.status}`,
+        details: errorData 
+      });
+    }
+    
+    const orderData = await response.json();
+    log(`✅ Payment verification response: ${JSON.stringify(orderData)}`);
+    
+    // Check if payment is successful
+    const isSuccessful = orderData.order_status === "PAID" || 
+                        orderData.payment_status === "SUCCESS" ||
+                        orderData.payment_status === "PAID";
+    
+    res.json({
+      order_id: orderData.order_id,
+      order_status: orderData.order_status,
+      payment_status: orderData.payment_status,
+      is_successful: isSuccessful,
+      order_amount: orderData.order_amount,
+      order_currency: orderData.order_currency,
+    });
+  } catch (err) {
+    log(`❌ Error verifying payment: ${err.message}`);
+    res.status(500).json({ error: "Failed to verify payment", details: err.message });
   }
 });
 

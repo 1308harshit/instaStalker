@@ -314,6 +314,9 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
+  const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
+  const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
+  const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
 
   // Payment page state
   const [paymentForm, setPaymentForm] = useState({
@@ -2763,7 +2766,64 @@ function App() {
   //   }
   // }, [screen]);
 
-  // Handle payment return URL and fire Purchase event
+  // Fetch Cashfree environment and load appropriate SDK
+  useEffect(() => {
+    const fetchCashfreeEnv = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/payment/environment`);
+        if (response.ok) {
+          const data = await response.json();
+          const isTest = data.isTest;
+          const env = isTest ? "TEST" : "PRODUCTION";
+          setCashfreeEnv(env);
+          cashfreeEnvRef.current = env;
+          
+          // Remove any existing Cashfree SDK scripts (fallback or previous)
+          const existingScripts = document.querySelectorAll('script[src*="cashfree"], script[id*="cashfree"]');
+          existingScripts.forEach(script => script.remove());
+          
+          // Clear window.Cashfree if it exists (from previous script)
+          if (window.Cashfree) {
+            delete window.Cashfree;
+          }
+          
+          // Dynamically load the correct SDK script
+          const script = document.createElement('script');
+          script.id = 'cashfree-sdk';
+          script.src = isTest 
+            ? 'https://sdk.cashfree.com/js/ui/2.0.0/cashfree.sandbox.js'
+            : 'https://sdk.cashfree.com/js/v3/cashfree.js';
+          script.onload = () => {
+            console.log(`✅ Cashfree SDK loaded (${isTest ? 'TEST' : 'PRODUCTION'})`);
+            setCashfreeSdkLoaded(true);
+          };
+          script.onerror = () => {
+            console.error('❌ Failed to load Cashfree SDK');
+            setCashfreeSdkLoaded(false);
+          };
+          document.head.appendChild(script);
+        } else {
+          console.warn('⚠️ Failed to fetch Cashfree environment, defaulting to PRODUCTION');
+          const env = "PRODUCTION";
+          setCashfreeEnv(env);
+          cashfreeEnvRef.current = env;
+          // Keep the fallback script from index.html
+          setCashfreeSdkLoaded(true);
+        }
+      } catch (err) {
+        console.error('❌ Error fetching Cashfree environment:', err);
+        const env = "PRODUCTION";
+        setCashfreeEnv(env);
+        cashfreeEnvRef.current = env;
+        // Keep the fallback script from index.html
+        setCashfreeSdkLoaded(true);
+      }
+    };
+    
+    fetchCashfreeEnv();
+  }, []);
+
+  // Handle payment return URL and verify payment status
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get('order_id');
@@ -2779,44 +2839,53 @@ function App() {
         return;
       }
       
-      setScreen(SCREEN.PAYMENT_SUCCESS);
+      // Verify payment status before showing success page
+      const verifyPayment = async () => {
+        try {
+          console.log('🔍 Verifying payment status for order:', orderId);
+          const verifyResponse = await fetch(`${API_BASE}/api/payment/verify?order_id=${orderId}`);
+          
+          if (!verifyResponse.ok) {
+            const errorData = await verifyResponse.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('❌ Payment verification failed:', errorData);
+            alert('Payment verification failed. Please contact support if payment was successful.');
+            setScreen(SCREEN.PAYMENT);
+            return;
+          }
+          
+          const paymentData = await verifyResponse.json();
+          console.log('✅ Payment verification response:', paymentData);
+          
+          if (!paymentData.is_successful) {
+            console.warn('⚠️ Payment not successful:', paymentData);
+            alert(`Payment status: ${paymentData.payment_status || paymentData.order_status}. Please try again.`);
+            setScreen(SCREEN.PAYMENT);
+            return;
+          }
+          
+          // Payment is successful - show success page
+          console.log('✅ Payment verified successfully');
+          setScreen(SCREEN.PAYMENT_SUCCESS);
+          
+          // Mark this order as processed to prevent duplicate events
+          purchaseEventFiredRef.current.add(orderId);
+          
+          // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
+          // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
+          // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
+          
+          // Clean URL
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (err) {
+          console.error('❌ Error verifying payment:', err);
+          alert('Failed to verify payment. Please contact support if payment was successful.');
+          setScreen(SCREEN.PAYMENT);
+        }
+      };
       
-      // Mark this order as processed to prevent duplicate events
-      purchaseEventFiredRef.current.add(orderId);
-      
-      // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
-      // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
-      // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
-      
-      // GTM CODE COMMENTED OUT - Google Tag Manager: Push Purchase event to dataLayer (on success page, NOT in Cashfree checkout)
-      // This fires AFTER redirect, so Meta Pixel can track it
-      // const amount = 99 * quantity;
-      // console.log('🎯 Pushing Purchase event to dataLayer (on success page):', { amount, currency: 'INR', orderId, paymentId });
-      // 
-      // if (window.dataLayer) {
-      //   window.dataLayer.push({
-      //     event: 'purchase',
-      //     ecommerce: {
-      //       transaction_id: orderId,
-      //       value: amount,
-      //       currency: 'INR',
-      //       items: [{
-      //         item_name: 'Instagram Stalker Report',
-      //         item_category: 'product',
-      //         quantity: quantity,
-      //         price: 99
-      //       }]
-      //     }
-      //   });
-      //   console.log('✅ Purchase event pushed to dataLayer successfully (on success page)');
-      // } else {
-      //   console.warn('⚠️ dataLayer not available for Purchase event (on success page)');
-      // }
-      
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname);
+      verifyPayment();
     }
-  }, [quantity]);
+  }, []);
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -2909,11 +2978,30 @@ function App() {
         throw new Error("Cashfree order ID not received from server");
       }
 
+      // Wait for Cashfree environment to be determined (use ref for synchronous access)
+      if (cashfreeEnvRef.current === null) {
+        console.log('⏳ Waiting for Cashfree environment to load...');
+        // Wait up to 5 seconds for environment to load
+        let attempts = 0;
+        while (cashfreeEnvRef.current === null && attempts < 25) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          attempts++;
+        }
+        if (cashfreeEnvRef.current === null) {
+          // Default to PRODUCTION if still not loaded
+          cashfreeEnvRef.current = "PRODUCTION";
+          console.warn('⚠️ Cashfree environment not loaded, defaulting to PRODUCTION');
+        }
+      }
+
       // Wait for Cashfree SDK to load (eliminates timing issues)
       const Cashfree = await waitForCashfree();
 
-      // Initialize Cashfree with production mode
-      const cashfree = new Cashfree({ mode: "production" });
+      // Initialize Cashfree with environment-based mode (use ref for current value)
+      const currentEnv = cashfreeEnvRef.current || "PRODUCTION";
+      const cashfreeMode = currentEnv === "TEST" ? "sandbox" : "production";
+      console.log(`🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`);
+      const cashfree = new Cashfree({ mode: cashfreeMode });
 
       console.log(
         "✅ Opening Cashfree checkout with session:",

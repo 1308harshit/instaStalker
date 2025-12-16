@@ -40,8 +40,9 @@
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> -->
     <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
-    <!-- Cashfree Payment Gateway SDK - Production Environment -->
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+    <!-- Cashfree Payment Gateway SDK - Will be loaded dynamically based on environment -->
+    <!-- Fallback: Production SDK (will be replaced if test environment is detected) -->
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js" id="cashfree-sdk-fallback"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
