@@ -2890,60 +2890,27 @@ function App() {
         throw new Error("Cashfree order ID not received from server");
       }
 
-      // Wait a bit for Cashfree SDK to load if not already loaded
-      let retries = 0;
-      const maxRetries = 10;
-      while (!window.Cashfree && retries < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        retries++;
-      }
+      // AFTER you receive backend response
+      // paymentData.payment_session_id is confirmed valid
 
-      // Initialize Cashfree checkout (as per official documentation)
-      if (window.Cashfree) {
-        try {
-          console.log("Initializing Cashfree checkout with session:", paymentData.payment_session_id);
-
-          // Initialize Cashfree instance - try different initialization methods
-          let cashfree;
-          if (typeof window.Cashfree === 'function') {
-            // Try constructor pattern first
-            try {
-              cashfree = new window.Cashfree();
-            } catch (e) {
-              // Fallback to function call pattern
-              cashfree = window.Cashfree();
-            }
-          } else {
-            throw new Error("Cashfree SDK not properly loaded");
-          }
-
-          // Use checkout method as per official documentation
-          cashfree.checkout({
-            paymentSessionId: paymentData.payment_session_id,
-            redirectTarget: "_self" // Open in same window
-          });
-        } catch (initErr) {
-          console.error("Cashfree initialization error:", initErr);
-          console.error("Cashfree error details:", {
-            type: typeof window.Cashfree,
-            value: window.Cashfree,
-            error: initErr
-          });
-          alert(
-            `Failed to initialize payment gateway: ${
-              initErr.message || "Unknown error"
-            }`
-          );
-          setPaymentLoading(false);
-        }
-      } else {
-        console.error("Cashfree SDK not loaded after waiting");
-        console.log("Window.Cashfree:", window.Cashfree);
-        alert(
-          "Payment gateway SDK not loaded. Please refresh the page and try again."
-        );
+      if (!window.Cashfree) {
+        console.error("❌ Cashfree SDK not loaded");
+        alert("Payment system failed to load. Please refresh.");
         setPaymentLoading(false);
+        return;
       }
+
+      console.log(
+        "✅ Opening Cashfree checkout with session:",
+        paymentData.payment_session_id
+      );
+
+      const cashfree = window.Cashfree();
+
+      cashfree.checkout({
+        paymentSessionId: paymentData.payment_session_id,
+        redirectTarget: "_self", // same tab
+      });
     } catch (err) {
       console.error("Payment error:", err);
       console.error("Error details:", err.message, err.stack);
