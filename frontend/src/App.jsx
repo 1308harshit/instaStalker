@@ -2920,11 +2920,14 @@ function App() {
         session.payment_session_id
       );
 
-      // Use modal target to avoid full-page redirect
-      cashfree.checkout({
-        paymentSessionId: session.payment_session_id,
-        redirectTarget: "_modal", // Modal target avoids full-page redirect
-      });
+      // Defer checkout to next tick (prevents React async state update issues)
+      // Cashfree cannot be called in the same tick as async state updates
+      setTimeout(() => {
+        cashfree.checkout({
+          paymentSessionId: session.payment_session_id,
+          redirectTarget: "_modal", // Modal target avoids full-page redirect
+        });
+      }, 0);
     } catch (err) {
       console.error("Cashfree error:", err);
       alert(err.message || "Failed to process payment. Please try again.");
