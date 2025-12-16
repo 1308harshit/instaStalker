@@ -54,13 +54,9 @@ const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
 // Cashfree configuration
-// TEMPORARY: Hardcoded for testing (remove after fixing .env)
-const CASHFREE_APP_ID = "1147729692de9b1aedf55a696b09277411";
-const CASHFREE_SECRET_KEY = "cfsk_ma_prod_26bfec1cccfce1b21f9ca96bd38659d0_fa148335";
-
-// Original (commented out for testing):
-// const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
-// const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
+// Cashfree configuration from environment variables
+const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
+const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
 
 // Validate required environment variables
 if (!CASHFREE_APP_ID) {
