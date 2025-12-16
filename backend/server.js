@@ -25,7 +25,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { Cashfree } from "@cashfreepayments/cashfree-pg";
+import { Cashfree } from "cashfree-pg";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
