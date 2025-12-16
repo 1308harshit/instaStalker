@@ -2824,6 +2824,25 @@ function App() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  // Wait for Cashfree SDK to load (eliminates timing issues)
+  const waitForCashfree = () =>
+    new Promise((resolve, reject) => {
+      if (window.Cashfree) return resolve(window.Cashfree);
+
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts++;
+        if (window.Cashfree) {
+          clearInterval(timer);
+          resolve(window.Cashfree);
+        }
+        if (attempts > 20) {
+          clearInterval(timer);
+          reject(new Error("Cashfree SDK not loaded"));
+        }
+      }, 200);
+    });
+
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPaymentLoading(true);
@@ -2875,56 +2894,40 @@ function App() {
         );
       }
 
-      const paymentData = await orderResponse.json();
-      console.log("Cashfree payment session created:", paymentData);
+      const session = await orderResponse.json();
+      console.log("Cashfree payment session created:", session);
 
       // ❌ Purchase event removed from here - it will fire on success page instead
       // Purchase should only fire AFTER payment is confirmed, not when session is created
       // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
 
-      // Store session synchronously in ref (production-safe pattern)
-      paymentSessionRef.current = paymentData.payment_session_id;
-
-      // Check if payment session ID exists
-      if (!paymentSessionRef.current) {
-        throw new Error("Cashfree payment session ID not received from server");
+      if (!session.payment_session_id) {
+        throw new Error("No payment session id");
       }
 
-      if (!paymentData.order_id) {
+      if (!session.order_id) {
         throw new Error("Cashfree order ID not received from server");
       }
 
-      // AFTER you receive backend response
-      // paymentSessionRef.current is confirmed valid
-      // IMMEDIATELY open Cashfree (same call stack - prevents browser blocking)
+      // Wait for Cashfree SDK to load (eliminates timing issues)
+      const Cashfree = await waitForCashfree();
 
-      if (!window.Cashfree) {
-        console.error("❌ Cashfree SDK not loaded");
-        alert("Payment system failed to load. Please refresh.");
-        setPaymentLoading(false);
-        return;
-      }
+      // Initialize Cashfree with production mode
+      const cashfree = new Cashfree({ mode: "production" });
 
       console.log(
         "✅ Opening Cashfree checkout with session:",
-        paymentSessionRef.current
+        session.payment_session_id
       );
 
-      const cashfree = window.Cashfree();
-
+      // Use modal target to avoid full-page redirect
       cashfree.checkout({
-        paymentSessionId: paymentSessionRef.current,
-        redirectTarget: "_self", // same tab
+        paymentSessionId: session.payment_session_id,
+        redirectTarget: "_modal", // Modal target avoids full-page redirect
       });
-
-      // DO NOT set loading false here - let Cashfree redirect
     } catch (err) {
-      console.error("Payment error:", err);
-      console.error("Error details:", err.message, err.stack);
-      // Show more detailed error message
-      const errorMsg =
-        err.message || "Failed to process payment. Please try again.";
-      alert(errorMsg);
+      console.error("Cashfree error:", err);
+      alert(err.message || "Failed to process payment. Please try again.");
     } finally {
       setPaymentLoading(false);
     }
@@ -3147,7 +3150,7 @@ function App() {
 
                 {/* Place Order Button */}
                 <button
-                  type="submit"
+                  type="button"
                   className="place-order-btn"
                   onClick={handlePaymentSubmit}
                   disabled={paymentLoading}
