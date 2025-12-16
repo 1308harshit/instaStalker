@@ -1333,7 +1333,7 @@ function App() {
         </div>
         <div className="inline-card">
           <h3>Who pretends to be your friend</h3>
-          {/* <p>Our AI searches conversations talking about you.</p> */}
+          <p>Our AI searches conversations talking about you.</p>
         </div>
         <div className="inline-card">
           <h3>Who wants you ❤️‍🔥</h3>
