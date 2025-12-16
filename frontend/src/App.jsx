@@ -3013,7 +3013,7 @@ function App() {
       setTimeout(() => {
         cashfree.checkout({
           paymentSessionId: session.payment_session_id,
-          redirectTarget: "_modal", // Modal target avoids full-page redirect
+          redirectTarget: "_self", // Redirect main window so useEffect can detect return URL
         });
       }, 0);
     } catch (err) {
@@ -3295,13 +3295,6 @@ function App() {
 
               </div>
             </div>
-          </div>
-
-          {/* Payment footer ownership/contact */}
-          <div className="payment-page-footer">
-            <div>Site owned by: Pranav Bhandari</div>
-            <div>Contact email: <a href="mailto:velarlunera@gmail.com">velarlunera@gmail.com</a></div>
-            <div>Phone: <a href="tel:7337594957">7337594957</a></div>
           </div>
         </div>
       </section>
