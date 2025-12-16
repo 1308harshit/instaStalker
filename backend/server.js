@@ -76,6 +76,13 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || '');
 };
 
+// Log credentials at startup to verify hardcoded values are being used
+log(`🚀 Cashfree credentials loaded:`);
+log(`   App ID: ${CASHFREE_APP_ID}`);
+log(`   Secret Key length: ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.length : 0}`);
+log(`   Secret Key (first 40 chars): ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.substring(0, 40) + '...' : 'MISSING'}`);
+log(`   Secret Key (last 15 chars): ${CASHFREE_SECRET_KEY ? '...' + CASHFREE_SECRET_KEY.substring(CASHFREE_SECRET_KEY.length - 15) : 'MISSING'}`);
+
 // Cashfree API Configuration
 // Using direct HTTP requests instead of SDK (as per official documentation)
 const CASHFREE_API_BASE_URL = "https://api.cashfree.com/pg";
