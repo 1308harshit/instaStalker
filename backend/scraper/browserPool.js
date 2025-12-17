@@ -1,6 +1,8 @@
 // backend/scraper/browserPool.js
 import { launchBrowser } from "./browser.js";
 
+const MAX_BROWSERS = 4; // Controlled concurrency for 8 vCPU
+
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, data || "");
@@ -8,10 +10,10 @@ const log = (message, data = null) => {
 
 class BrowserPool {
   constructor() {
-    // Array to hold 2 browser instances
-    this.browsers = [null, null];
-    this.isLaunching = [false, false];
-    this.launchPromises = [null, null];
+    // Array to hold MAX_BROWSERS browser instances
+    this.browsers = new Array(MAX_BROWSERS).fill(null);
+    this.isLaunching = new Array(MAX_BROWSERS).fill(false);
+    this.launchPromises = new Array(MAX_BROWSERS).fill(null);
     this.lastActivityTime = Date.now();
     this.watchdogInterval = null;
     this.keepAliveInterval = null;
@@ -72,8 +74,8 @@ class BrowserPool {
    */
   getNextBrowserIndex() {
     const index = this.currentBrowserIndex;
-    // Alternate between 0 and 1
-    this.currentBrowserIndex = (this.currentBrowserIndex + 1) % 2;
+    // Round-robin across all browsers
+    this.currentBrowserIndex = (this.currentBrowserIndex + 1) % MAX_BROWSERS;
     return index;
   }
 
@@ -126,8 +128,8 @@ class BrowserPool {
     this.isCheckingHealth = true;
     
     try {
-      // Check both browsers
-      for (let i = 0; i < 2; i++) {
+      // Check all browsers
+      for (let i = 0; i < MAX_BROWSERS; i++) {
         const isHealthy = await this.checkBrowserHealth(i);
         
         if (!isHealthy) {
@@ -138,7 +140,7 @@ class BrowserPool {
     } catch (err) {
       log("❌ Error checking browser health:", err.message);
       // If health check itself fails, restart all browsers
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < MAX_BROWSERS; i++) {
         await this.forceRestart(i);
       }
     } finally {
@@ -186,8 +188,8 @@ class BrowserPool {
     log("🔥 Keep-alive: Warming up browsers (5 min idle detected)");
 
     try {
-      // Keep both browsers alive
-      for (let i = 0; i < 2; i++) {
+      // Keep all browsers alive
+      for (let i = 0; i < MAX_BROWSERS; i++) {
         if (!this.browsers[i] || !this.browsers[i].isConnected()) {
           // Browser not running, pre-warm it
           await this.getBrowser(i);
@@ -203,7 +205,7 @@ class BrowserPool {
       this.lastActivityTime = Date.now(); // Update activity time
     } catch (err) {
       log("⚠️ Keep-alive failed, restarting browsers:", err.message);
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < MAX_BROWSERS; i++) {
         await this.forceRestart(i);
       }
     }
@@ -218,7 +220,7 @@ class BrowserPool {
     }
 
     this.watchdogInterval = setInterval(() => {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < MAX_BROWSERS; i++) {
         if (this.browsers[i] && this.browsers[i].isConnected()) {
           this.restartBrowserIfFrozen();
           break; // Check once for all browsers
@@ -260,7 +262,7 @@ class BrowserPool {
     }
 
     // Close all browsers
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < MAX_BROWSERS; i++) {
       if (this.browsers[i] && this.browsers[i].isConnected()) {
         log(`🛑 Closing browser instance ${i}...`);
         await this.browsers[i].close();
@@ -273,8 +275,12 @@ class BrowserPool {
    * Check if any browser is available
    */
   isAvailable() {
-    return (this.browsers[0] !== null && this.browsers[0].isConnected()) ||
-           (this.browsers[1] !== null && this.browsers[1].isConnected());
+    for (let i = 0; i < MAX_BROWSERS; i++) {
+      if (this.browsers[i] !== null && this.browsers[i].isConnected()) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
