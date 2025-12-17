@@ -27,7 +27,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
-import { browserPool } from "./scraper/browserPool.js";
+import { browserPool, stats } from "./scraper/browserPool.js";
 import { 
   connectDB, 
   getSnapshotStep, 
@@ -589,26 +589,19 @@ app.get("/api/stalkers", async (req, res) => {
 });
 
 // Get system stats endpoint (browsers, tabs, users)
-app.get("/api/stats", async (req, res) => {
+app.get("/api/stats", (req, res) => {
   try {
-    // Get browser pool stats
-    const browserStats = await browserPool.getStats();
-    
-    // Use tabs as user count (each tab = one active scraping request/user)
-    const activeUsers = browserStats.totalPages;
-    
     res.json({
       browsers: {
-        max: browserStats.maxBrowsers,
-        active: browserStats.activeBrowsers,
-        details: browserStats.browserDetails
+        max: 4, // MAX_BROWSERS
+        active: stats.activeBrowsers
       },
       tabs: {
-        total: browserStats.totalPages
+        active: stats.activeTabs
       },
       users: {
-        active: activeUsers,
-        total: activeUsers
+        active: stats.activeTabs, // Each tab = one active user request
+        total: stats.activeTabs
       },
       timestamp: new Date().toISOString()
     });

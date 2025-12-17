@@ -3,6 +3,12 @@ import { launchBrowser } from "./browser.js";
 
 const MAX_BROWSERS = 4; // Controlled concurrency for 8 vCPU
 
+// Global stats counter (single source of truth)
+export const stats = {
+  activeTabs: 0,
+  activeBrowsers: 0
+};
+
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, data || "");
@@ -34,7 +40,7 @@ class BrowserPool {
     // Update activity time
     this.lastActivityTime = Date.now();
     
-    // If browser exists and is connected, return it
+    // If browser exists and is connected, return it (already counted)
     if (this.browsers[index] && this.browsers[index].isConnected()) {
       return this.browsers[index];
     }
@@ -56,7 +62,16 @@ class BrowserPool {
         this.launchPromises[index] = null;
         this.lastActivityTime = Date.now();
         
-        log(`✅ Browser instance ${index} ready and connected`);
+        // Track browser launch
+        stats.activeBrowsers++;
+        
+        // Track browser disconnect
+        browser.on('disconnected', () => {
+          stats.activeBrowsers--;
+          log(`📉 Browser ${index} disconnected, active browsers: ${stats.activeBrowsers}`);
+        });
+        
+        log(`✅ Browser instance ${index} ready and connected (active browsers: ${stats.activeBrowsers})`);
         return browser;
       })
       .catch((err) => {
@@ -89,7 +104,17 @@ class BrowserPool {
     const browserIndex = this.getNextBrowserIndex();
     const browser = await this.getBrowser(browserIndex);
     const page = await browser.newPage();
-    log(`✅ New page created from browser ${browserIndex} (shared browser)`);
+    
+    // Track tab creation
+    stats.activeTabs++;
+    
+    // Track tab closure
+    page.on('close', () => {
+      stats.activeTabs--;
+      log(`📉 Page closed, active tabs: ${stats.activeTabs}`);
+    });
+    
+    log(`✅ New page created from browser ${browserIndex} (active tabs: ${stats.activeTabs})`);
     return page;
   }
 
@@ -154,6 +179,7 @@ class BrowserPool {
   async forceRestart(index) {
     try {
       if (this.browsers[index] && this.browsers[index].isConnected()) {
+        // Browser close will trigger 'disconnected' event which decrements counter
         await this.browsers[index].close();
       }
     } catch (err) {
@@ -197,6 +223,7 @@ class BrowserPool {
         } else {
           // Browser is running, test it with a simple page
           const testPage = await this.browsers[i].newPage();
+          // Don't track keep-alive test pages in stats (they're temporary)
           await testPage.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 });
           await testPage.close();
           log(`✅ Keep-alive: Browser ${i} is warm and responsive`);
@@ -265,6 +292,7 @@ class BrowserPool {
     for (let i = 0; i < MAX_BROWSERS; i++) {
       if (this.browsers[i] && this.browsers[i].isConnected()) {
         log(`🛑 Closing browser instance ${i}...`);
+        // Browser close will trigger 'disconnected' event which decrements counter
         await this.browsers[i].close();
         this.browsers[i] = null;
       }
