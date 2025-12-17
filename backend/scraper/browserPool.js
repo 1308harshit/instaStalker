@@ -282,6 +282,52 @@ class BrowserPool {
     }
     return false;
   }
+
+  /**
+   * Get statistics about browsers and pages
+   */
+  async getStats() {
+    let activeBrowsers = 0;
+    let totalPages = 0;
+    const browserDetails = [];
+
+    for (let i = 0; i < MAX_BROWSERS; i++) {
+      const browser = this.browsers[i];
+      if (browser && browser.isConnected()) {
+        activeBrowsers++;
+        try {
+          const pages = browser.pages();
+          const pageCount = pages.length;
+          totalPages += pageCount;
+          browserDetails.push({
+            index: i,
+            connected: true,
+            pages: pageCount
+          });
+        } catch (err) {
+          browserDetails.push({
+            index: i,
+            connected: true,
+            pages: 0,
+            error: err.message
+          });
+        }
+      } else {
+        browserDetails.push({
+          index: i,
+          connected: false,
+          pages: 0
+        });
+      }
+    }
+
+    return {
+      maxBrowsers: MAX_BROWSERS,
+      activeBrowsers,
+      totalPages,
+      browserDetails
+    };
+  }
 }
 
 // Export singleton instance

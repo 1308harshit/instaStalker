@@ -588,6 +588,47 @@ app.get("/api/stalkers", async (req, res) => {
   }
 });
 
+// Get system stats endpoint (browsers, tabs, users)
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Get browser pool stats
+    const browserStats = await browserPool.getStats();
+    
+    // Get queue stats (active users)
+    const queueStats = scrapeQueue.getStatus();
+    
+    // Count active users (processing + waiting)
+    const activeUsers = queueStats.processing.length;
+    const waitingUsers = queueStats.waiting.reduce((sum, item) => sum + item.count, 0);
+    const totalUsers = activeUsers + waitingUsers;
+    
+    res.json({
+      browsers: {
+        max: browserStats.maxBrowsers,
+        active: browserStats.activeBrowsers,
+        details: browserStats.browserDetails
+      },
+      tabs: {
+        total: browserStats.totalPages
+      },
+      users: {
+        active: activeUsers,
+        waiting: waitingUsers,
+        total: totalUsers,
+        processing: queueStats.processing,
+        waitingList: queueStats.waiting
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    log(`❌ Error getting stats: ${err.message}`);
+    res.status(500).json({ 
+      error: "Failed to get stats", 
+      details: err.message 
+    });
+  }
+});
+
 // Initialize MongoDB on server start (non-blocking)
 connectDB().catch((err) => {
   log('⚠️ MongoDB connection failed on startup (will retry on first use):', err.message);
