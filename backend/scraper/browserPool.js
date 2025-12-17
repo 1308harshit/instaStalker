@@ -1,13 +1,8 @@
 // backend/scraper/browserPool.js
 import { launchBrowser } from "./browser.js";
+import { redis } from "../utils/redis.js";
 
 const MAX_BROWSERS = 4; // Controlled concurrency for 8 vCPU
-
-// Global stats counter (single source of truth)
-export const stats = {
-  activeTabs: 0,
-  activeBrowsers: 0
-};
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -56,22 +51,32 @@ class BrowserPool {
     log(`🚀 Launching new browser instance ${index}...`);
     
     this.launchPromises[index] = launchBrowser()
-      .then((browser) => {
+      .then(async (browser) => {
         this.browsers[index] = browser;
         this.isLaunching[index] = false;
         this.launchPromises[index] = null;
         this.lastActivityTime = Date.now();
         
-        // Track browser launch
-        stats.activeBrowsers++;
+        // Track browser launch in Redis
+        try {
+          await redis.incr("active_browsers");
+          const browserCount = await redis.get("active_browsers");
+          log(`✅ Browser instance ${index} ready and connected (total browsers: ${browserCount})`);
+        } catch (err) {
+          log(`⚠️ Redis error tracking browser (scraping continues): ${err.message}`);
+        }
         
         // Track browser disconnect
-        browser.on('disconnected', () => {
-          stats.activeBrowsers--;
-          log(`📉 Browser ${index} disconnected, active browsers: ${stats.activeBrowsers}`);
+        browser.on('disconnected', async () => {
+          try {
+            await redis.decr("active_browsers");
+            const browserCount = await redis.get("active_browsers");
+            log(`📉 Browser ${index} disconnected, total browsers: ${browserCount}`);
+          } catch (err) {
+            log(`⚠️ Redis error tracking browser disconnect (scraping continues): ${err.message}`);
+          }
         });
         
-        log(`✅ Browser instance ${index} ready and connected (active browsers: ${stats.activeBrowsers})`);
         return browser;
       })
       .catch((err) => {
@@ -105,16 +110,28 @@ class BrowserPool {
     const browser = await this.getBrowser(browserIndex);
     const page = await browser.newPage();
     
-    // Track tab creation
-    stats.activeTabs++;
+    // Track tab creation in Redis
+    let tabCount = "?";
+    try {
+      await redis.incr("active_tabs");
+      tabCount = await redis.get("active_tabs");
+      log(`📈 Page created, active tabs: ${tabCount}`);
+    } catch (err) {
+      log(`⚠️ Redis error tracking tab (scraping continues): ${err.message}`);
+    }
     
     // Track tab closure
-    page.on('close', () => {
-      stats.activeTabs--;
-      log(`📉 Page closed, active tabs: ${stats.activeTabs}`);
+    page.on('close', async () => {
+      try {
+        await redis.decr("active_tabs");
+        const tabCount = await redis.get("active_tabs");
+        log(`📉 Page closed, active tabs: ${tabCount}`);
+      } catch (err) {
+        log(`⚠️ Redis error tracking tab close (scraping continues): ${err.message}`);
+      }
     });
     
-    log(`✅ New page created from browser ${browserIndex} (active tabs: ${stats.activeTabs})`);
+    log(`✅ New page created from browser ${browserIndex} (active tabs: ${tabCount})`);
     return page;
   }
 

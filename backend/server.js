@@ -27,7 +27,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
-import { browserPool, stats } from "./scraper/browserPool.js";
+import { browserPool } from "./scraper/browserPool.js";
+import { redis } from "./utils/redis.js";
 import { 
   connectDB, 
   getSnapshotStep, 
@@ -589,19 +590,31 @@ app.get("/api/stalkers", async (req, res) => {
 });
 
 // Get system stats endpoint (browsers, tabs, users)
-app.get("/api/stats", (req, res) => {
+app.get("/api/stats", async (req, res) => {
   try {
+    // Get counts from Redis (shared across all PM2 processes)
+    let activeTabs = 0;
+    let activeBrowsers = 0;
+    
+    try {
+      activeTabs = Number(await redis.get("active_tabs") || 0);
+      activeBrowsers = Number(await redis.get("active_browsers") || 0);
+    } catch (err) {
+      log(`⚠️ Redis error reading stats (returning 0): ${err.message}`);
+      // Continue with 0 values if Redis fails
+    }
+    
     res.json({
       browsers: {
         max: 4, // MAX_BROWSERS
-        active: stats.activeBrowsers
+        active: activeBrowsers
       },
       tabs: {
-        active: stats.activeTabs
+        active: activeTabs
       },
       users: {
-        active: stats.activeTabs, // Each tab = one active user request
-        total: stats.activeTabs
+        active: activeTabs, // Each tab = one active user request
+        total: activeTabs
       },
       timestamp: new Date().toISOString()
     });
