@@ -594,13 +594,8 @@ app.get("/api/stats", async (req, res) => {
     // Get browser pool stats
     const browserStats = await browserPool.getStats();
     
-    // Get queue stats (active users)
-    const queueStats = scrapeQueue.getStatus();
-    
-    // Count active users (processing + waiting)
-    const activeUsers = queueStats.processing.length;
-    const waitingUsers = queueStats.waiting.reduce((sum, item) => sum + item.count, 0);
-    const totalUsers = activeUsers + waitingUsers;
+    // Use tabs as user count (each tab = one active scraping request/user)
+    const activeUsers = browserStats.totalPages;
     
     res.json({
       browsers: {
@@ -613,10 +608,7 @@ app.get("/api/stats", async (req, res) => {
       },
       users: {
         active: activeUsers,
-        waiting: waitingUsers,
-        total: totalUsers,
-        processing: queueStats.processing,
-        waitingList: queueStats.waiting
+        total: activeUsers
       },
       timestamp: new Date().toISOString()
     });
