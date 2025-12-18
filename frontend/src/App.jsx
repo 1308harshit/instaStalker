@@ -4101,7 +4101,7 @@ function App() {
               >
                 <div
                   style={{
-                    background: "#111827",
+                    background: "#0f172a",
                     borderRadius: 16,
                     padding: "10px 12px",
                     color: "#f9fafb",
@@ -4124,6 +4124,7 @@ function App() {
                     style={{
                       fontSize: 24,
                       fontWeight: 700,
+                      color: "#f9fafb",
                     }}
                   >
                     {paymentSuccessLast7Summary.profileVisits ?? "–"}
