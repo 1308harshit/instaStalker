@@ -2934,6 +2934,12 @@ function App() {
       }, 200);
     });
 
+  // Demo helper: preview the post-payment success page without making a payment
+  const handlePaymentDemo = () => {
+    console.log("🧪 Demo: Showing payment success screen without actual payment");
+    setScreen(SCREEN.PAYMENT_SUCCESS);
+  };
+
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPaymentLoading(true);
@@ -3269,6 +3275,15 @@ function App() {
                   disabled={paymentLoading}
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
+                </button>
+
+                {/* Demo helper to preview post-payment page without real payment */}
+                <button
+                  type="button"
+                  className="place-order-demo-link"
+                  onClick={handlePaymentDemo}
+                >
+                  Demo
                 </button>
 
                 {/* Disclaimers */}

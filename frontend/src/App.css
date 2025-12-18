@@ -3031,6 +3031,21 @@ body {
   cursor: not-allowed;
 }
 
+.place-order-demo-link {
+  margin-top: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.place-order-demo-link:hover {
+  color: #111827;
+}
+
 .payment-disclaimer-box {
   margin-top: 16px;
   border: 1px solid #e5e7eb;
