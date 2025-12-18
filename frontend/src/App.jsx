@@ -2934,12 +2934,6 @@ function App() {
       }, 200);
     });
 
-  // Demo helper: preview the post-payment success page without making a payment
-  const handlePaymentDemo = () => {
-    console.log("🧪 Demo: Showing payment success screen without actual payment");
-    setScreen(SCREEN.PAYMENT_SUCCESS);
-  };
-
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPaymentLoading(true);
@@ -3172,17 +3166,7 @@ function App() {
                 </form>
               </div>
 
-              {/* Guarantee Section */}
-              <div className="payment-guarantee">
-                <div>✅</div>
-                <div className="guarantee-content">
-                  <h4>14-Day Money-Back Guarantee</h4>
-                  <p>
-                    Try it risk-free. If you're not happy within 14 days, we'll
-                    refund you — no questions asked.
-                  </p>
-                </div>
-              </div>
+              {/* Guarantee Section - removed as per latest design */}
 
               {/* Urgency Countdown */}
               <div className="payment-urgency">
@@ -3275,15 +3259,6 @@ function App() {
                   disabled={paymentLoading}
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
-                </button>
-
-                {/* Demo helper to preview post-payment page without real payment */}
-                <button
-                  type="button"
-                  className="place-order-demo-link"
-                  onClick={handlePaymentDemo}
-                >
-                  Demo
                 </button>
 
                 {/* Disclaimers */}
