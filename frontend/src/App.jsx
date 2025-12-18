@@ -3669,13 +3669,23 @@ function App() {
     return () => clearInterval(interval);
   }, [screen, paymentSuccessCards.length]);
 
-  // Randomize "Last 7 days" small stats on payment success (3–9 range)
+  // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
 
+    const visits = randBetween(1, 5);
+    let screenshots = randBetween(1, 5);
+    if (screenshots === visits) {
+      // Ensure screenshots count is different from visits
+      screenshots = ((screenshots % 5) || 5);
+      if (screenshots === visits) {
+        screenshots = ((screenshots + 1) % 5) || 5;
+      }
+    }
+
     setPaymentSuccessLast7Summary({
-      profileVisits: randBetween(3, 9),
-      screenshots: randBetween(3, 9),
+      profileVisits: visits,
+      screenshots,
     });
   }, [screen]);
 
@@ -4480,6 +4490,16 @@ function App() {
                   color: "#f9fafb",
                 }}
               >
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#b91c1c",
+                    margin: "0 0 6px 0",
+                  }}
+                >
+                  We can&apos;t show the full name of the profile because it&apos;s
+                  restricted by Instagram.
+                </p>
                 <div
                   style={{
                     display: "flex",
