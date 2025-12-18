@@ -4039,36 +4039,6 @@ function App() {
                   ))}
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "#fde68a",
-                    marginBottom: 10,
-                  }}
-                >
-                  +1 remaining report to be generated in 5 days
-                </div>
-                <button
-                  type="button"
-                  style={{
-                    border: "none",
-                    outline: "none",
-                    borderRadius: 999,
-                    padding: "9px 16px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    background:
-                      "linear-gradient(135deg, #f97316 0%, #ea580c 50%, #ea580c 100%)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                  onClick={() => setScreen(SCREEN.FULL_REPORT)}
-                >
-                  Get reports for the whole year
-                </button>
-              </div>
             </div>
 
             {/* Last 7 days small stats */}
@@ -4183,6 +4153,45 @@ function App() {
               </div>
             </div>
           </section>
+
+          {/* Yearly reports CTA block under profile card */}
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "clamp(24px, 5vw, 36px)",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "clamp(13px, 2.5vw, 15px)",
+                color: "#f59e0b",
+                marginBottom: 10,
+                fontWeight: 600,
+                fontStyle: "italic",
+              }}
+            >
+              +1 remaining report to be generated in 5 days
+            </p>
+            <button
+              type="button"
+              onClick={() => setScreen(SCREEN.FULL_REPORT)}
+              style={{
+                border: "none",
+                outline: "none",
+                borderRadius: 999,
+                padding: "clamp(12px, 2.5vw, 16px) clamp(28px, 5vw, 40px)",
+                fontSize: "clamp(14px, 2.5vw, 18px)",
+                fontWeight: 600,
+                background:
+                  "linear-gradient(135deg, #fbbf24 0%, #f59e0b 40%, #ea580c 100%)",
+                color: "#fff",
+                cursor: "pointer",
+                boxShadow: "0 18px 45px rgba(234, 88, 12, 0.45)",
+              }}
+            >
+              Get reports for the whole year
+            </button>
+          </div>
 
           {/* Carousel - Show cards using same logic as result page */}
           {allCards.length > 0 ? (
@@ -4382,7 +4391,9 @@ function App() {
                 </svg>
                 <h3
                   style={{
-                    fontSize: 15,
+                    fontSize: 25,
+                    textAlign: "center",
+  
                     fontWeight: 600,
                     margin: 0,
                     color: "#111827",
