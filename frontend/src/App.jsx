@@ -3271,30 +3271,6 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
-                {/* Demo helper link - view post-payment page without real payment */}
-                <div
-                  style={{
-                    marginTop: 8,
-                    textAlign: "center",
-                    fontSize: 11,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setScreen(SCREEN.PAYMENT_SUCCESS)}
-                    style={{
-                      border: "none",
-                      padding: 0,
-                      background: "none",
-                      color: "#2563eb",
-                      textDecoration: "underline",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Demo
-                  </button>
-                </div>
-
                 {/* Disclaimers */}
                 <div className="payment-disclaimer-box">
                   <div className="payment-disclaimer-header">
