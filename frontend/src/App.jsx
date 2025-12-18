@@ -3882,7 +3882,7 @@ function App() {
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "flex-start",
               marginBottom: "clamp(20px, 4vw, 30px)",
             }}
           >
@@ -3918,23 +3918,6 @@ function App() {
                 </small>
               </div>
             </div>
-            <a
-              href="https://whoviewedmyprofile.in/contact.html"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: "8px 14px",
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                fontSize: 13,
-                fontWeight: 500,
-                color: "#111827",
-                textDecoration: "none",
-                backgroundColor: "#fff",
-              }}
-            >
-              Need help?
-            </a>
           </header>
 
           {/* Disclaimer at the top */}
@@ -4740,14 +4723,6 @@ function App() {
             }}>
               Download your ebook
             </h2>
-            <p style={{
-              fontSize: 'clamp(14px, 2.5vw, 16px)',
-              color: '#666',
-              marginBottom: '24px',
-              lineHeight: '1.6'
-            }}>
-              Get the complete detailed report in PDF format
-            </p>
             <button
               onClick={handleDownloadPDF}
               className="primary-btn"
