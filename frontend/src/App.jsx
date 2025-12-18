@@ -279,6 +279,8 @@ function App() {
   const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] =
     useState({ profileVisits: null, screenshots: null });
   const [paymentSuccessLast7Rows, setPaymentSuccessLast7Rows] = useState([]);
+  const [paymentSuccess90DayVisits, setPaymentSuccess90DayVisits] =
+    useState(null);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
   const [profileStage, setProfileStage] = useState(createProfileStageData());
   const [processingStage, setProcessingStage] = useState(
@@ -293,6 +295,9 @@ function App() {
   const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
   const [paymentSuccessCarouselIndex, setPaymentSuccessCarouselIndex] = useState(0);
   const [paymentSuccessAdditionalUsernames, setPaymentSuccessAdditionalUsernames] = useState([]);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -317,6 +322,8 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
+
+  const isNarrowLayout = viewportWidth < 768;
 
   // Payment page state
   const [paymentForm, setPaymentForm] = useState({
@@ -358,6 +365,19 @@ function App() {
       return null;
     }
   };
+
+  // Track viewport width for responsive layout (stack sections on mobile)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
@@ -3184,7 +3204,7 @@ function App() {
                       cursor: "pointer",
                     }}
                   >
-                    Demo only: open post‑payment page (no real payment)
+                    Demo
                   </button>
                 </div>
 
@@ -3659,6 +3679,14 @@ function App() {
     });
   }, [screen]);
 
+  // Initialize 90-day profile visits stat on payment success (30–45, stable)
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (paymentSuccess90DayVisits === null) {
+      setPaymentSuccess90DayVisits(randBetween(30, 45));
+    }
+  }, [screen, paymentSuccess90DayVisits]);
+
   // Build 7-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
@@ -3929,7 +3957,9 @@ function App() {
           <section
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1.2fr)",
+              gridTemplateColumns: isNarrowLayout
+                ? "minmax(0, 1fr)"
+                : "minmax(0, 2.2fr) minmax(0, 1.2fr)",
               gap: 20,
               alignItems: "stretch",
               marginBottom: "clamp(24px, 5vw, 32px)",
@@ -4366,7 +4396,9 @@ function App() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 2.6fr)",
+                gridTemplateColumns: isNarrowLayout
+                  ? "minmax(0, 1fr)"
+                  : "minmax(0, 1.4fr) minmax(0, 2.6fr)",
                 gap: 18,
                 alignItems: "stretch",
               }}
@@ -4402,7 +4434,7 @@ function App() {
                       color: "#f97316",
                     }}
                   >
-                    {randBetween(28, 65)}
+                    {paymentSuccess90DayVisits ?? "–"}
                   </div>
                 </div>
                 <button
