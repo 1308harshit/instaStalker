@@ -276,6 +276,11 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] =
+    useState({ profileVisits: null, screenshots: null });
+  const [paymentSuccessLast7Rows, setPaymentSuccessLast7Rows] = useState([]);
+  const [paymentSuccess90DayVisits, setPaymentSuccess90DayVisits] =
+    useState(null);
   const [processingStats, setProcessingStats] = useState(DEFAULT_STATS);
   const [profileStage, setProfileStage] = useState(createProfileStageData());
   const [processingStage, setProcessingStage] = useState(
@@ -290,6 +295,9 @@ function App() {
   const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
   const [paymentSuccessCarouselIndex, setPaymentSuccessCarouselIndex] = useState(0);
   const [paymentSuccessAdditionalUsernames, setPaymentSuccessAdditionalUsernames] = useState([]);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -317,6 +325,8 @@ function App() {
   const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
   const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
+
+  const isNarrowLayout = viewportWidth < 768;
 
   // Payment page state
   const [paymentForm, setPaymentForm] = useState({
@@ -358,6 +368,19 @@ function App() {
       return null;
     }
   };
+
+  // Track viewport width for responsive layout (stack sections on mobile)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
@@ -3248,6 +3271,30 @@ function App() {
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
 
+                {/* Demo helper link - view post-payment page without real payment */}
+                <div
+                  style={{
+                    marginTop: 8,
+                    textAlign: "center",
+                    fontSize: 11,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setScreen(SCREEN.PAYMENT_SUCCESS)}
+                    style={{
+                      border: "none",
+                      padding: 0,
+                      background: "none",
+                      color: "#2563eb",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Demo
+                  </button>
+                </div>
+
                 {/* Disclaimers */}
                 <div className="payment-disclaimer-box">
                   <div className="payment-disclaimer-header">
@@ -3702,19 +3749,177 @@ function App() {
     return () => clearInterval(interval);
   }, [screen, paymentSuccessCards.length]);
 
+  // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+
+    const visits = randBetween(1, 5);
+    let screenshots = randBetween(1, 5);
+    if (screenshots === visits) {
+      // Ensure screenshots count is different from visits
+      screenshots = ((screenshots % 5) || 5);
+      if (screenshots === visits) {
+        screenshots = ((screenshots + 1) % 5) || 5;
+      }
+    }
+
+    setPaymentSuccessLast7Summary({
+      profileVisits: visits,
+      screenshots,
+    });
+  }, [screen]);
+
+  // Initialize 90-day profile visits stat on payment success (30–45, stable)
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (paymentSuccess90DayVisits === null) {
+      setPaymentSuccess90DayVisits(randBetween(30, 45));
+    }
+  }, [screen, paymentSuccess90DayVisits]);
+
+  // Build 7-profile list for payment success with highlight rules
+  useEffect(() => {
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+
+    // Prefer clean payment-success cards, fallback to generic cards list
+    const sourceCards =
+      (paymentSuccessCards.length ? paymentSuccessCards : cards).filter(
+        (card) => !card?.isLocked && card?.username
+      );
+
+    if (!sourceCards.length) {
+      setPaymentSuccessLast7Rows([]);
+      return;
+    }
+
+    // Deduplicate by username while preserving order
+    const seen = new Set();
+    const uniqueCards = [];
+    sourceCards.forEach((card) => {
+      const username = (card.username || "").trim();
+      if (!username || seen.has(username)) return;
+      seen.add(username);
+      uniqueCards.push(card);
+    });
+
+    // Shuffle (Fisher–Yates)
+    const shuffled = [...uniqueCards];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
+
+    const TOTAL_ROWS = 7;
+    const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
+
+    // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
+    let fallbackIndex = 0;
+    while (selected.length < TOTAL_ROWS && cards.length > 0 && fallbackIndex < cards.length * 2) {
+      const fallbackCard = cards[fallbackIndex % cards.length];
+      fallbackIndex += 1;
+      const username = (fallbackCard?.username || "").trim();
+      if (!username) continue;
+      if (selected.some((c) => (c.username || "").trim() === username)) continue;
+      selected.push(fallbackCard);
+    }
+
+    // Final padding with generic placeholders if still short
+    while (selected.length < TOTAL_ROWS) {
+      const index = selected.length + 1;
+      selected.push({
+        username: `@profile${index}`,
+        title: "Instagram user",
+        image: null,
+      });
+    }
+
+    const rowCount = selected.length;
+
+    // Choose one row between 3rd–7th (index 2–6) to have screenshots = 1
+    let screenshotRowIndex = null;
+    if (rowCount >= 3) {
+      const minIndex = 2;
+      const maxIndex = Math.min(6, rowCount - 1);
+      screenshotRowIndex = randBetween(minIndex, maxIndex);
+    }
+
+    // 30% chance that 2nd row also has screenshot = 1
+    const secondRowHasScreenshot = rowCount >= 2 && Math.random() < 0.3;
+
+    const rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
+      const username = card.username || "";
+      const name =
+        (card.title || card.name || "").trim() ||
+        username.replace(/^@/, "") ||
+        "Instagram user";
+      const image = card.image || card.avatar || null;
+
+      let visits = 0;
+      let screenshots = 0;
+      let visitsHighlighted = false;
+      let screenshotsHighlighted = false;
+
+      // First two profiles always have visits = 1 highlighted
+      if (index === 0 || index === 1) {
+        visits = 1;
+        visitsHighlighted = true;
+      }
+
+      // Exactly one of the rows 3–7 has screenshots = 1 highlighted
+      if (index === screenshotRowIndex) {
+        screenshots = 1;
+        screenshotsHighlighted = true;
+      }
+
+      // 30% chance that row 2 also has screenshots = 1 highlighted
+      if (index === 1 && secondRowHasScreenshot) {
+        screenshots = 1;
+        screenshotsHighlighted = true;
+      }
+
+      return {
+        id: `${username || "profile"}-${index}`,
+        name,
+        username,
+        image,
+        visits,
+        screenshots,
+        visitsHighlighted,
+        screenshotsHighlighted,
+      };
+    });
+
+    setPaymentSuccessLast7Rows(rows);
+  }, [screen, paymentSuccessCards, cards]);
+
   const renderPaymentSuccess = () => {
     // Use cards from results.html, fallback to cards from state
-    const allCards = paymentSuccessCards.length > 0 
-      ? paymentSuccessCards 
-      : cards.filter(
-          (card) =>
-            !card?.isLocked &&
-            !card?.blurImage &&
-            card?.image &&
-            card?.username
-        ).slice(0, 6);
-    
-    // Profile action texts (one for each of the 6 profiles)
+    const allCards =
+      paymentSuccessCards.length > 0
+        ? paymentSuccessCards
+        : cards
+            .filter(
+              (card) =>
+                !card?.isLocked &&
+                !card?.blurImage &&
+                card?.image &&
+                card?.username
+            )
+            .slice(0, 6);
+
+    // Basic hero/profile info from analysis or fallback to current profile
+    const heroData = analysis?.hero || {};
+    const heroName = heroData.name || profile.name;
+    const heroUsername = profile.username;
+    const heroAvatar = heroData.profileImage || profile.avatar;
+    const heroStats =
+      heroData.stats && heroData.stats.length
+        ? heroData.stats
+        : profileStatsFromState();
+
+    // Profile action texts (one for each of the 6 profiles in carousel)
     const profileActions = [
       "This user took screenshot of your profile earlier and yesterday",
       "This user shared your profile",
@@ -3752,53 +3957,276 @@ function App() {
           margin: '0 auto',
           padding: 'clamp(15px, 3vw, 20px)'
         }}>
+          {/* Top header bar */}
+          <header
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              marginBottom: "clamp(20px, 4vw, 30px)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  backgroundColor: "#f43f3f",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 18,
+                }}
+              >
+                O
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: "#111827",
+                  }}
+                >
+                  Insta Reports
+                </span>
+                <small style={{ fontSize: 12, color: "#6b7280" }}>
+                  Your Instagram visitor insights
+                </small>
+              </div>
+            </div>
+          </header>
+
           {/* Disclaimer at the top */}
-          <div style={{
-            marginBottom: 'clamp(20px, 5vw, 40px)',
-            padding: 'clamp(15px, 3vw, 20px)',
-            background: '#fff3cd',
-            border: '1px solid #ffc107',
-            borderRadius: '12px',
-            textAlign: 'center'
-          }}>
-            <p style={{
-              fontSize: 'clamp(14px, 2.5vw, 16px)',
-              color: '#856404',
-              margin: 0,
-              fontWeight: 'bold',
-              fontStyle: 'italic',
-              lineHeight: '1.6'
-            }}>
-              <strong><em>This report is created by automated AI analysis and may not always be 100% accurate. Instagram does not provide official visitor data, so results are estimates based on engagement signals only.</em></strong>
+          <div
+            style={{
+              marginBottom: "clamp(16px, 4vw, 24px)",
+              padding: "clamp(12px, 3vw, 16px)",
+              background: "#fef3c7",
+              border: "1px solid #facc15",
+              borderRadius: 12,
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "clamp(13px, 2.5vw, 15px)",
+                color: "#92400e",
+                margin: 0,
+                fontWeight: "600",
+                lineHeight: 1.6,
+              }}
+            >
+              This report is created by automated AI analysis and may not always
+              be 100% accurate. Instagram does not provide official visitor
+              data, so results are estimates based on engagement signals only.
             </p>
           </div>
 
-          {/* Success Header */}
-          <div style={{
-            textAlign: 'center',
-            marginBottom: 'clamp(20px, 5vw, 40px)',
-            paddingTop: 'clamp(10px, 3vw, 20px)'
-          }}>
-            <div style={{
-              fontSize: 'clamp(32px, 6vw, 48px)',
-              marginBottom: 'clamp(12px, 3vw, 20px)'
-            }}>✅</div>
-            <h1 style={{
-              fontSize: 'clamp(28px, 5vw, 36px)',
-              fontWeight: '700',
-              color: '#1a1a1a',
-              marginBottom: '12px'
-            }}>
-              Payment Successful!
-            </h1>
-            <p style={{
-              fontSize: 'clamp(16px, 3vw, 18px)',
-              color: '#666',
-              margin: 0
-            }}>
-              Your report is ready. Here are your stalkers:
-            </p>
-          </div>
+          {/* Hero / profile card + Last 7 days small stats */}
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: isNarrowLayout
+                ? "minmax(0, 1fr)"
+                : "minmax(0, 2.2fr) minmax(0, 1.2fr)",
+              gap: 20,
+              alignItems: "stretch",
+              marginBottom: "clamp(24px, 5vw, 32px)",
+            }}
+          >
+            {/* Profile card */}
+            <div
+              style={{
+                background: "#0f172a",
+                color: "#f9fafb",
+                borderRadius: 20,
+                padding: "18px 18px 20px",
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: "50%",
+                  overflow: "hidden",
+                  border: "2px solid #fb923c",
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={heroAvatar}
+                  alt={heroName}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    margin: 0,
+                    marginBottom: 4,
+                    whiteSpace: "nowrap",
+                    textOverflow: "ellipsis",
+                    overflow: "hidden",
+                  }}
+                >
+                  {heroName}
+                </h1>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#e5e7eb",
+                    margin: 0,
+                    marginBottom: 8,
+                  }}
+                >
+                  {heroUsername}
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 16,
+                    fontSize: 12,
+                    color: "#e5e7eb",
+                  }}
+                >
+                  {heroStats.map((stat) => (
+                    <div key={`${stat.label}-${stat.value}`}>
+                      <strong style={{ display: "block", fontSize: 14 }}>
+                        {stat.value}
+                      </strong>
+                      <span style={{ opacity: 0.85 }}>{stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Last 7 days small stats */}
+            <div
+              style={{
+                background: "#f9fafb",
+                borderRadius: 20,
+                padding: 18,
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginBottom: 12,
+                  gap: 8,
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#f97316"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#111827",
+                  }}
+                >
+                  Last 7 days report
+                </span>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    background: "#0f172a",
+                    borderRadius: 16,
+                    padding: "10px 12px",
+                    color: "#f9fafb",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    minHeight: 70,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Profile visits
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 700,
+                      color: "#f9fafb",
+                    }}
+                  >
+                    {paymentSuccessLast7Summary.profileVisits ?? "–"}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    background: "#0f172a",
+                    borderRadius: 16,
+                    padding: "10px 12px",
+                    color: "#f9fafb",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    minHeight: 70,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Screenshots
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 700,
+                      color: "#f9fafb",
+                    }}
+                  >
+                    {paymentSuccessLast7Summary.screenshots ?? "–"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
 
           {/* Carousel - Show cards using same logic as result page */}
           {allCards.length > 0 ? (
@@ -3945,51 +4373,6 @@ function App() {
                 );
               })()}
 
-              {/* Additional 5 Usernames List */}
-              {paymentSuccessAdditionalUsernames.length > 0 && (
-                <div style={{
-                  marginBottom: 'clamp(20px, 5vw, 40px)',
-                  padding: 'clamp(20px, 4vw, 30px)',
-                  background: '#f9f9f9',
-                  borderRadius: '16px',
-                  border: '1px solid #e0e0e0'
-                }}>
-                  <h3 style={{
-                    fontSize: 'clamp(18px, 3.5vw, 22px)',
-                    fontWeight: '700',
-                    color: '#1a1a1a',
-                    marginBottom: 'clamp(15px, 3vw, 20px)',
-                    textAlign: 'center'
-                  }}>
-                    Following users have been visiting your profile:
-                  </h3>
-                  <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 'clamp(10px, 2vw, 15px)',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                  }}>
-                    {paymentSuccessAdditionalUsernames.map((username, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          padding: 'clamp(8px, 1.5vw, 12px) clamp(16px, 3vw, 24px)',
-                          background: '#fff',
-                          border: '1px solid #e0e0e0',
-                          borderRadius: '999px',
-                          fontSize: 'clamp(14px, 2.5vw, 16px)',
-                          fontWeight: '600',
-                          color: '#1a1a1a',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {username}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div style={{
@@ -4001,6 +4384,403 @@ function App() {
               <p>Loading profiles...</p>
             </div>
           )}
+
+          {/* Last 90 days + 7-profile table */}
+          <section
+            style={{
+              marginTop: "clamp(10px, 3vw, 18px)",
+              marginBottom: "clamp(24px, 5vw, 32px)",
+            }}
+          >
+            {/* Last 90 days summary */}
+            <div
+              style={{
+                marginBottom: 18,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#111827"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <h3
+                  style={{
+                    fontSize: 25,
+                    textAlign: "center",
+  
+                    fontWeight: 600,
+                    margin: 0,
+                    color: "#111827",
+                  }}
+                >
+                  Last 90 days report
+                </h3>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isNarrowLayout
+                  ? "minmax(0, 1fr)"
+                  : "minmax(0, 1.4fr) minmax(0, 2.6fr)",
+                gap: 18,
+                alignItems: "stretch",
+              }}
+            >
+              {/* 90 days summary card */}
+              <div
+                style={{
+                  background: "#0f172a",
+                  borderRadius: 20,
+                  padding: 18,
+                  color: "#f9fafb",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: 140,
+                }}
+              >
+                <div style={{ marginBottom: 12 }}>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.8,
+                      display: "block",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Profile visits (Last 90 days)
+                  </span>
+                  <div
+                    style={{
+                      fontSize: 34,
+                      fontWeight: 800,
+                      color: "#f97316",
+                    }}
+                  >
+                    {paymentSuccess90DayVisits ?? "–"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    borderRadius: 999,
+                    border: "none",
+                    padding: "10px 16px",
+                    background:
+                      "linear-gradient(135deg, #fb923c 0%, #f97316 50%, #ea580c 100%)",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                  onClick={() => setScreen(SCREEN.FULL_REPORT)}
+                >
+                  View 90-day history
+                </button>
+              </div>
+
+              {/* Last 7 days table */}
+              <div
+                style={{
+                  background: "#0b1120",
+                  borderRadius: 20,
+                  padding: 16,
+                  color: "#f9fafb",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#b91c1c",
+                    margin: "0 0 6px 0",
+                  }}
+                >
+                  We can&apos;t show the full name of the profile because it&apos;s
+                  restricted by Instagram.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 10,
+                  }}
+                >
+                  <h4
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      margin: 0,
+                    }}
+                  >
+                    Last 7 days
+                  </h4>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#9ca3af",
+                    }}
+                  >
+                    Swipe sideways →
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    width: "100%",
+                    overflowX: "auto",
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      minWidth: 420,
+                      borderCollapse: "collapse",
+                      fontSize: 13,
+                    }}
+                  >
+                    <thead>
+                      <tr
+                        style={{
+                          textAlign: "left",
+                          color: "#9ca3af",
+                          fontSize: 11,
+                          letterSpacing: 0.03,
+                        }}
+                      >
+                        <th
+                          style={{
+                            padding: "6px 4px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Name
+                        </th>
+                        <th
+                          style={{
+                            padding: "6px 4px",
+                            fontWeight: 500,
+                            textAlign: "center",
+                          }}
+                        >
+                          Visits
+                        </th>
+                        <th
+                          style={{
+                            padding: "6px 4px",
+                            fontWeight: 500,
+                            textAlign: "center",
+                          }}
+                        >
+                          Screenshots
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentSuccessLast7Rows.map((row, index) => (
+                        <tr
+                          key={row.id}
+                          style={{
+                            borderTop: "1px solid rgba(148, 163, 184, 0.25)",
+                          }}
+                        >
+                          {/* Name + username */}
+                          <td
+                            style={{
+                              padding: "8px 4px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: "50%",
+                                  overflow: "hidden",
+                                  background:
+                                    "linear-gradient(135deg,#4b5563,#111827)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {row.image ? (
+                                  <img
+                                    src={row.image}
+                                    alt={row.name}
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: 14,
+                                    }}
+                                  >
+                                    👤
+                                  </div>
+                                )}
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                    whiteSpace: "nowrap",
+                                    textOverflow: "ellipsis",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  {row.name}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#9ca3af",
+                                  }}
+                                >
+                                  {row.username}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Visits */}
+                          <td
+                            style={{
+                              padding: "8px 4px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {row.visitsHighlighted ? (
+                              <div
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: "999px",
+                                  border: "1px solid #fbbf24",
+                                  color: "#fbbf24",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {row.visits}
+                              </div>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "#9ca3af",
+                                }}
+                              >
+                                {row.visits}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Screenshots */}
+                          <td
+                            style={{
+                              padding: "8px 4px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {row.screenshotsHighlighted ? (
+                              <div
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: "999px",
+                                  background:
+                                    "linear-gradient(135deg,#f97316,#ea580c)",
+                                  color: "#fff",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {row.screenshots}
+                              </div>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: "#9ca3af",
+                                }}
+                              >
+                                {row.screenshots}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {paymentSuccessLast7Rows.length === 0 && (
+                  <div
+                    style={{
+                      paddingTop: 10,
+                      fontSize: 12,
+                      color: "#9ca3af",
+                    }}
+                  >
+                    Profiles are loading...
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
 
           {/* PDF Download Section */}
           <div style={{
@@ -4023,14 +4803,6 @@ function App() {
             }}>
               Download your ebook
             </h2>
-            <p style={{
-              fontSize: 'clamp(14px, 2.5vw, 16px)',
-              color: '#666',
-              marginBottom: '24px',
-              lineHeight: '1.6'
-            }}>
-              Get the complete detailed report in PDF format
-            </p>
             <button
               onClick={handleDownloadPDF}
               className="primary-btn"
