@@ -4067,7 +4067,7 @@ function App() {
                     fontSize: 18,
                     fontWeight: 700,
                     margin: 0,
-                    marginBottom: 4,
+                    marginBottom: 8,
                     whiteSpace: "nowrap",
                     textOverflow: "ellipsis",
                     overflow: "hidden",
@@ -4075,16 +4075,6 @@ function App() {
                 >
                   {heroName}
                 </h1>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "#e5e7eb",
-                    margin: 0,
-                    marginBottom: 8,
-                  }}
-                >
-                  {heroUsername}
-                </p>
                 <div
                   style={{
                     display: "flex",
@@ -4376,136 +4366,21 @@ function App() {
             </div>
           )}
 
-          {/* Last 90 days + 7-profile table */}
+          {/* Last 7 days 7-profile table (keep, remove 90-day summary) */}
           <section
             style={{
               marginTop: "clamp(10px, 3vw, 18px)",
               marginBottom: "clamp(24px, 5vw, 32px)",
             }}
           >
-            {/* Last 90 days summary */}
             <div
               style={{
-                marginBottom: 18,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: 12,
+                background: "#0b1120",
+                borderRadius: 20,
+                padding: 16,
+                color: "#f9fafb",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#111827"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                <h3
-                  style={{
-                    fontSize: 25,
-                    textAlign: "center",
-  
-                    fontWeight: 600,
-                    margin: 0,
-                    color: "#111827",
-                  }}
-                >
-                  Last 90 days report
-                </h3>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isNarrowLayout
-                  ? "minmax(0, 1fr)"
-                  : "minmax(0, 1.4fr) minmax(0, 2.6fr)",
-                gap: 18,
-                alignItems: "stretch",
-              }}
-            >
-              {/* 90 days summary card */}
-              <div
-                style={{
-                  background: "#0f172a",
-                  borderRadius: 20,
-                  padding: 18,
-                  color: "#f9fafb",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  minHeight: 140,
-                }}
-              >
-                <div style={{ marginBottom: 12 }}>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      opacity: 0.8,
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Profile visits (Last 90 days)
-                  </span>
-                  <div
-                    style={{
-                      fontSize: 34,
-                      fontWeight: 800,
-                      color: "#f97316",
-                    }}
-                  >
-                    {paymentSuccess90DayVisits ?? "–"}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  style={{
-                    borderRadius: 999,
-                    border: "none",
-                    padding: "10px 16px",
-                    background:
-                      "linear-gradient(135deg, #fb923c 0%, #f97316 50%, #ea580c 100%)",
-                    color: "#fff",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                  }}
-                  onClick={() => setScreen(SCREEN.FULL_REPORT)}
-                >
-                  View 90-day history
-                </button>
-              </div>
-
-              {/* Last 7 days table */}
-              <div
-                style={{
-                  background: "#0b1120",
-                  borderRadius: 20,
-                  padding: 16,
-                  color: "#f9fafb",
-                }}
-              >
                 <p
                   style={{
                     fontSize: 11,
@@ -4769,7 +4644,6 @@ function App() {
                     Profiles are loading...
                   </div>
                 )}
-              </div>
             </div>
           </section>
 
