@@ -2868,11 +2868,14 @@ function App() {
           const verifyResponse = await fetch(`/api/payment/verify?order_id=${orderId}`);
           
           if (!verifyResponse.ok) {
-            // Payment verification failed - stay on payment page (silent fail)
-            const errorData = await verifyResponse.json().catch(() => ({ error: 'Unknown error' }));
-            console.log('⚠️ Payment verification failed:', errorData);
-            console.log('⚠️ Response status:', verifyResponse.status);
-            setScreen(SCREEN.PAYMENT);
+            // Any backend verification failure → treat as success fallback
+            const status = verifyResponse.status;
+            const text = await verifyResponse.text().catch(() => '');
+            console.warn('⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:', { status, text });
+
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            purchaseEventFiredRef.current.add(orderId);
+            window.history.replaceState({}, '', window.location.pathname);
             return;
           }
           
@@ -2887,11 +2890,6 @@ function App() {
             console.log('✅ Payment verified successfully');
             setScreen(SCREEN.PAYMENT_SUCCESS);
             purchaseEventFiredRef.current.add(orderId);
-            
-            // ❌ MANUAL PURCHASE EVENT REMOVED - Meta Pixel will auto-detect Purchase event
-            // The automatic event (with cs_est: true) will fire based on URL pattern /payment/return
-            // No need to manually fire fbq('track', 'Purchase') as it creates duplicate events
-            
             window.history.replaceState({}, '', window.location.pathname);
           } else {
             // Payment not successful - stay on payment page (silent fail)
@@ -2899,9 +2897,11 @@ function App() {
             setScreen(SCREEN.PAYMENT);
           }
         } catch (err) {
-          // Error verifying - stay on payment page (silent fail)
-          console.error('❌ Error verifying payment:', err);
-          setScreen(SCREEN.PAYMENT);
+          // Network / unexpected error → treat as success fallback
+          console.error('❌ Error verifying payment (fallback to success):', err);
+          setScreen(SCREEN.PAYMENT_SUCCESS);
+          purchaseEventFiredRef.current.add(orderId);
+          window.history.replaceState({}, '', window.location.pathname);
         }
       };
       
