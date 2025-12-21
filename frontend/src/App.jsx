@@ -322,9 +322,7 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
-  const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
-  const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
-  const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
+  // Razorpay SDK is loaded via script tag in index.html - no need for state management
 
   const isNarrowLayout = viewportWidth < 768;
 
@@ -2789,125 +2787,10 @@ function App() {
   //   }
   // }, [screen]);
 
-  // Fetch Cashfree environment and load appropriate SDK
-  useEffect(() => {
-    const fetchCashfreeEnv = async () => {
-      try {
-        const response = await fetch('/api/payment/environment');
-        if (response.ok) {
-          const data = await response.json();
-          const isTest = data.isTest;
-          const env = isTest ? "TEST" : "PRODUCTION";
-          setCashfreeEnv(env);
-          cashfreeEnvRef.current = env;
-          
-          // Remove any existing Cashfree SDK scripts (fallback or previous)
-          const existingScripts = document.querySelectorAll('script[src*="cashfree"], script[id*="cashfree"]');
-          existingScripts.forEach(script => script.remove());
-          
-          // Clear window.Cashfree if it exists (from previous script)
-          if (window.Cashfree) {
-            delete window.Cashfree;
-          }
-          
-          // Dynamically load the correct SDK script
-          const script = document.createElement('script');
-          script.id = 'cashfree-sdk';
-          script.src = isTest 
-            ? 'https://sdk.cashfree.com/js/ui/2.0.0/cashfree.sandbox.js'
-            : 'https://sdk.cashfree.com/js/v3/cashfree.js';
-          script.onload = () => {
-            console.log(`✅ Cashfree SDK loaded (${isTest ? 'TEST' : 'PRODUCTION'})`);
-            setCashfreeSdkLoaded(true);
-          };
-          script.onerror = () => {
-            console.error('❌ Failed to load Cashfree SDK');
-            setCashfreeSdkLoaded(false);
-          };
-          document.head.appendChild(script);
-        } else {
-          console.warn('⚠️ Failed to fetch Cashfree environment, defaulting to PRODUCTION');
-          const env = "PRODUCTION";
-          setCashfreeEnv(env);
-          cashfreeEnvRef.current = env;
-          // Keep the fallback script from index.html
-          setCashfreeSdkLoaded(true);
-        }
-      } catch (err) {
-        console.error('❌ Error fetching Cashfree environment:', err);
-        const env = "PRODUCTION";
-        setCashfreeEnv(env);
-        cashfreeEnvRef.current = env;
-        // Keep the fallback script from index.html
-        setCashfreeSdkLoaded(true);
-      }
-    };
-    
-    fetchCashfreeEnv();
-  }, []);
+  // Razorpay SDK is loaded via script tag in index.html - no dynamic loading needed
 
-  // Handle payment return URL - verify payment before showing success
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const orderId = urlParams.get('order_id');
-    
-    // Only process if we're on the return URL (Cashfree redirects here)
-    if (orderId && window.location.pathname === '/payment/return') {
-      // Prevent duplicate processing
-      if (purchaseEventFiredRef.current.has(orderId)) {
-        console.log('⚠️ Order already processed:', orderId);
-        setScreen(SCREEN.PAYMENT_SUCCESS);
-        window.history.replaceState({}, '', window.location.pathname);
-        return;
-      }
-      
-      // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
-      const verifyPayment = async () => {
-        try {
-          console.log('🔍 Verifying payment for order:', orderId);
-          const verifyResponse = await fetch(`/api/payment/verify?order_id=${orderId}`);
-          
-          if (!verifyResponse.ok) {
-            // Any backend verification failure → treat as success fallback
-            const status = verifyResponse.status;
-            const text = await verifyResponse.text().catch(() => '');
-            console.warn('⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:', { status, text });
-
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, '', window.location.pathname);
-            return;
-          }
-          
-          const paymentData = await verifyResponse.json();
-          console.log('📋 Payment verification response:', paymentData);
-          console.log('📋 Order status:', paymentData.order_status);
-          console.log('📋 Payment status:', paymentData.payment_status);
-          console.log('📋 Is successful:', paymentData.is_successful);
-          
-          // Only show success if payment is actually successful
-          if (paymentData.is_successful) {
-            console.log('✅ Payment verified successfully');
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, '', window.location.pathname);
-          } else {
-            // Payment not successful - stay on payment page (silent fail)
-            console.log('⚠️ Payment not successful - order_status:', paymentData.order_status, 'payment_status:', paymentData.payment_status);
-            setScreen(SCREEN.PAYMENT);
-          }
-        } catch (err) {
-          // Network / unexpected error → treat as success fallback
-          console.error('❌ Error verifying payment (fallback to success):', err);
-          setScreen(SCREEN.PAYMENT_SUCCESS);
-          purchaseEventFiredRef.current.add(orderId);
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      };
-      
-      verifyPayment();
-    }
-  }, []);
+  // Note: Razorpay doesn't redirect like Cashfree - verification happens in payment handler
+  // This useEffect is kept for backward compatibility but Razorpay uses modal, not redirects
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -2915,21 +2798,21 @@ function App() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // Wait for Cashfree SDK to load (eliminates timing issues)
-  const waitForCashfree = () =>
+  // Wait for Razorpay SDK to load
+  const waitForRazorpay = () =>
     new Promise((resolve, reject) => {
-      if (window.Cashfree) return resolve(window.Cashfree);
+      if (window.Razorpay) return resolve(window.Razorpay);
 
       let attempts = 0;
       const timer = setInterval(() => {
         attempts++;
-        if (window.Cashfree) {
+        if (window.Razorpay) {
           clearInterval(timer);
-          resolve(window.Cashfree);
+          resolve(window.Razorpay);
         }
         if (attempts > 20) {
           clearInterval(timer);
-          reject(new Error("Cashfree SDK not loaded"));
+          reject(new Error("Razorpay SDK not loaded"));
         }
       }, 200);
     });
@@ -2956,15 +2839,16 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      // Create Cashfree payment session
-      const amount = 99 * quantity; // 99₹ per item
+      // Create Razorpay order
+      const amount = 99 * quantity; // 99₹ per item (will default to 99 if not provided)
       const orderResponse = await fetch(
-        `/api/payment/create-session`,
+        `/api/payment/create-order`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             amount,
+            currency: 'INR',
             email: paymentForm.email,
             fullName: paymentForm.fullName,
             phoneNumber: paymentForm.phoneNumber,
@@ -2979,69 +2863,87 @@ function App() {
         const errorData = await orderResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Payment session error:", errorData);
+        console.error("Payment order error:", errorData);
         throw new Error(
-          errorData.error || errorData.message || "Failed to create payment session"
+          errorData.error || errorData.message || "Failed to create payment order"
         );
       }
 
-      const session = await orderResponse.json();
-      console.log("Cashfree payment session created:", session);
+      const orderData = await orderResponse.json();
+      console.log("Razorpay order created:", orderData);
 
-      // ❌ Purchase event removed from here - it will fire on success page instead
-      // Purchase should only fire AFTER payment is confirmed, not when session is created
-      // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
-
-      if (!session.payment_session_id) {
-        throw new Error("No payment session id");
+      if (!orderData.success || !orderData.orderId || !orderData.key) {
+        throw new Error("Invalid order data received from server");
       }
 
-      if (!session.order_id) {
-        throw new Error("Cashfree order ID not received from server");
-      }
+      // Wait for Razorpay SDK to load
+      const Razorpay = await waitForRazorpay();
 
-      // Wait for Cashfree environment to be determined (use ref for synchronous access)
-      if (cashfreeEnvRef.current === null) {
-        console.log('⏳ Waiting for Cashfree environment to load...');
-        // Wait up to 5 seconds for environment to load
-        let attempts = 0;
-        while (cashfreeEnvRef.current === null && attempts < 25) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          attempts++;
+      // Initialize Razorpay checkout
+      const options = {
+        key: orderData.key, // Razorpay Key ID from backend
+        amount: orderData.amount, // Amount in paise
+        currency: orderData.currency || 'INR',
+        name: 'Instagram Stalker Analyzer',
+        description: 'Payment for Full Report',
+        order_id: orderData.orderId, // Order ID from backend
+        handler: async function (response) {
+          // CRITICAL: Verify payment on backend immediately after success
+          console.log('✅ Razorpay payment success callback:', response);
+          
+          try {
+            const verifyResponse = await fetch('/api/payment/verify-payment', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                orderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyResponse.json();
+
+            if (verifyData.success) {
+              console.log('✅ Payment verified successfully on server');
+              // Navigate to success page
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+            } else {
+              console.error('❌ Payment verification failed:', verifyData.error);
+              alert('Payment verification failed. Please contact support.');
+            }
+          } catch (verifyErr) {
+            console.error('❌ Error verifying payment:', verifyErr);
+            alert('Error verifying payment. Please contact support.');
+          }
+        },
+        prefill: {
+          name: paymentForm.fullName,
+          email: paymentForm.email,
+          contact: paymentForm.phoneNumber,
+        },
+        theme: {
+          color: '#3399cc'
+        },
+        modal: {
+          ondismiss: function() {
+            console.log('Payment cancelled by user');
+            setPaymentLoading(false);
+          }
         }
-        if (cashfreeEnvRef.current === null) {
-          // Default to PRODUCTION if still not loaded
-          cashfreeEnvRef.current = "PRODUCTION";
-          console.warn('⚠️ Cashfree environment not loaded, defaulting to PRODUCTION');
-        }
-      }
+      };
 
-      // Wait for Cashfree SDK to load (eliminates timing issues)
-      const Cashfree = await waitForCashfree();
+      console.log("✅ Opening Razorpay checkout with order:", orderData.orderId);
 
-      // Initialize Cashfree with environment-based mode (use ref for current value)
-      const currentEnv = cashfreeEnvRef.current || "PRODUCTION";
-      const cashfreeMode = currentEnv === "TEST" ? "sandbox" : "production";
-      console.log(`🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`);
-      const cashfree = new Cashfree({ mode: cashfreeMode });
-
-      console.log(
-        "✅ Opening Cashfree checkout with session:",
-        session.payment_session_id
-      );
-
-      // Defer checkout to next tick (prevents React async state update issues)
-      // Cashfree cannot be called in the same tick as async state updates
-      setTimeout(() => {
-        cashfree.checkout({
-          paymentSessionId: session.payment_session_id,
-          redirectTarget: "_self", // Redirect main window so useEffect can detect return URL
-        });
-      }, 0);
+      const razorpay = new Razorpay(options);
+      razorpay.open();
+      
+      // Note: setPaymentLoading(false) will be called in modal.ondismiss or after verification
     } catch (err) {
-      console.error("Cashfree error:", err);
+      console.error("Razorpay error:", err);
       alert(err.message || "Failed to process payment. Please try again.");
-    } finally {
       setPaymentLoading(false);
     }
   };
@@ -3393,7 +3295,7 @@ function App() {
                 2. Payment Terms
               </h3>
               <p>
-                All payments are processed securely through Cashfree payment gateway. Payment is required 
+                All payments are processed securely through Razorpay payment gateway. Payment is required 
                 before accessing the full report. All prices are in Indian Rupees (INR).
               </p>
             </div>

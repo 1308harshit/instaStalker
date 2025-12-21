@@ -35,6 +35,8 @@ import {
   getRecentSnapshot,
   closeDB 
 } from "./utils/mongodb.js";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 
 const app = express();
 app.use(cors({
@@ -54,25 +56,25 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Cashfree configuration
-// Cashfree configuration from environment variables
-const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
-const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
+// Razorpay configuration
 
-// Check CASHFREE_ENV and set base URL accordingly
-const CASHFREE_ENV = process.env.CASHFREE_ENV || "PRODUCTION";
-const CASHFREE_API_BASE_URL = CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
-  ? "https://sandbox.cashfree.com/pg"  // Test environment
-  : "https://api.cashfree.com/pg";     // Production environment
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 // Validate required environment variables
-if (!CASHFREE_APP_ID) {
-  throw new Error("❌ CASHFREE_APP_ID environment variable is required. Please set it in .env file or Railway environment variables.");
+if (!RAZORPAY_KEY_ID) {
+  throw new Error("❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables.");
 }
 
-if (!CASHFREE_SECRET_KEY) {
-  throw new Error("❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
+if (!RAZORPAY_KEY_SECRET) {
+  throw new Error("❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables.");
 }
+
+// Initialize Razorpay instance
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET,
+});
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -80,23 +82,10 @@ const log = (message, data = null) => {
 };
 
 // Log credentials at startup to verify environment configuration
-log(`🚀 Cashfree credentials loaded:`);
-log(`   Environment: ${CASHFREE_ENV}`);
-log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
-log(`   App ID: ${CASHFREE_APP_ID}`);
-log(`   Secret Key length: ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.length : 0}`);
-log(`   Secret Key (first 40 chars): ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.substring(0, 40) + '...' : 'MISSING'}`);
-log(`   Secret Key (last 15 chars): ${CASHFREE_SECRET_KEY ? '...' + CASHFREE_SECRET_KEY.substring(CASHFREE_SECRET_KEY.length - 15) : 'MISSING'}`);
-
-// Cashfree API Configuration
-// Using direct HTTP requests instead of SDK (as per official documentation)
-const CASHFREE_API_VERSION = "2023-08-01";
-
-log(`🔧 Cashfree configured for direct API calls:`);
-log(`   App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
-log(`   Secret Key: ${CASHFREE_SECRET_KEY ? 'Present (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'MISSING'}`);
-log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
-log(`   API Version: ${CASHFREE_API_VERSION}`);
+log(`🚀 Razorpay credentials loaded:`);
+log(`   Key ID: ${RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + '...' : 'MISSING'}`);
+log(`   Key Secret length: ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.length : 0}`);
+log(`   Key Secret (first 20 chars): ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.substring(0, 20) + '...' : 'MISSING'}`);
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
@@ -145,20 +134,19 @@ app.post("/api/payment/save-user", async (req, res) => {
   }
 });
 
-// Create Cashfree payment session
-app.post("/api/payment/create-session", async (req, res) => {
+// Create Razorpay order
+app.post("/api/payment/create-order", async (req, res) => {
   try {
-    const { amount, email, fullName, phoneNumber } = req.body;
+    const { amount, currency = 'INR', receipt, notes, email, fullName, phoneNumber } = req.body;
     
-    log(`📥 Create session request: amount=${amount}, email=${email}`);
+    // Hardcode amount to 99 INR if not provided or invalid
+    const orderAmount = (amount && amount > 0) ? amount : 99; // Default to 99 INR
     
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "Amount is required and must be greater than 0" });
-    }
+    log(`📥 Create order request: amount=${orderAmount}, email=${email}`);
 
-    // Verify Cashfree is configured correctly
-    if (!CASHFREE_APP_ID || !CASHFREE_SECRET_KEY) {
-      throw new Error("Cashfree not configured properly");
+    // Verify Razorpay is configured correctly
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+      throw new Error("Razorpay not configured properly");
     }
     
     // Format phone number
@@ -167,84 +155,34 @@ app.post("/api/payment/create-session", async (req, res) => {
       phone = phone.slice(-10);
     }
     
-    // Generate unique order ID
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate unique receipt ID if not provided
+    const receiptId = receipt || `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
-    // Generate safe customer ID (never use email)
-    const customerId = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
-    log(`💰 Creating payment session: ₹${amount} (Order ID: ${orderId})`);
-    log(`🔑 Using App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : 'MISSING'}`);
-    
-    // Create Cashfree payment session
-    const orderRequest = {
-      order_id: orderId,
-      order_amount: amount, // Cashfree uses rupees, not paise
-      order_currency: "INR",
-      customer_details: {
-        customer_id: customerId, // Safe ID, never email
-        customer_name: fullName || "Customer",
-        customer_email: email || "", // Email only here
-        customer_phone: phone || "",
-      },
-      order_meta: {
-        return_url: `https://whoviewedmyprofile.in/payment/return?order_id={order_id}`,
-        notify_url: `https://whoviewedmyprofile.in/api/payment/webhook`,
-      },
+    // Prepare notes with customer info
+    const orderNotes = {
+      ...notes,
+      customer_email: email || "",
+      customer_name: fullName || "",
+      customer_phone: phone || "",
     };
     
-    log(`📤 Calling Cashfree API: POST ${CASHFREE_API_BASE_URL}/orders`);
-    log(`📦 Order Request: ${JSON.stringify(orderRequest)}`);
+    log(`💰 Creating Razorpay order: ₹${orderAmount} (Receipt: ${receiptId})`);
     
-    // Make direct HTTP request to Cashfree API (as per official documentation)
-    // Headers: x-client-id, x-client-secret, x-api-version
-    const apiUrl = `${CASHFREE_API_BASE_URL}/orders`;
-    log(`🔍 Making POST request to: ${apiUrl}`);
-    log(`📋 Headers: x-client-id, x-client-secret, x-api-version: ${CASHFREE_API_VERSION}`);
+    // Create Razorpay order
+    // Amount should be in paise (smallest currency unit)
+    const options = {
+      amount: Math.round(orderAmount * 100), // Convert rupees to paise
+      currency: currency,
+      receipt: receiptId,
+      notes: orderNotes,
+    };
     
-    // Debug: Log credentials being sent (first 20 chars of secret for security)
-    log(`🔑 Credentials check:`);
-    log(`   x-client-id: ${CASHFREE_APP_ID}`);
-    log(`   x-client-secret (first 30 chars): ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.substring(0, 30) + '...' : 'MISSING'}`);
-    log(`   x-client-secret length: ${CASHFREE_SECRET_KEY ? CASHFREE_SECRET_KEY.length : 0}`);
-    log(`   x-client-secret ends with: ${CASHFREE_SECRET_KEY ? '...' + CASHFREE_SECRET_KEY.substring(CASHFREE_SECRET_KEY.length - 10) : 'MISSING'}`);
+    log(`📤 Creating Razorpay order with options: ${JSON.stringify(options)}`);
     
-    // Expected values from curl command (for comparison):
-    // x-client-id: 1147729692de9b1aedf55a696b09277411
-    // x-client-secret: cfsk_ma_prod_26bfec1cccfce1b21f9ca96bd38659d0_fa148335 (length: 67)
+    const order = await razorpay.orders.create(options);
     
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
-        "x-api-version": CASHFREE_API_VERSION,
-      },
-      body: JSON.stringify(orderRequest),
-    });
-    
-    // Check if response is OK
-    if (!response.ok) {
-      const errorData = await response.text();
-      log(`❌ API call failed with status ${response.status}`);
-      log(`📋 Error response: ${errorData}`);
-      throw new Error(`Cashfree API error: ${response.status} - ${errorData}`);
-    }
-    
-    const responseData = await response.json();
-    log(`✅ Cashfree API call successful`);
-    log(`📋 Response: ${JSON.stringify(responseData)}`);
-    
-    // Extract payment session ID from response
-    if (!responseData || !responseData.payment_session_id) {
-      log(`⚠️ Warning: Unexpected response structure: ${JSON.stringify(responseData)}`);
-      throw new Error("Payment session ID not found in response");
-    }
-    
-    const paymentSessionId = responseData.payment_session_id;
-    log(`✅ Cashfree payment session created: ${paymentSessionId}`);
-    log(`📡 Order ID: ${orderId}, Amount: ₹${amount}`);
+    log(`✅ Razorpay order created: ${order.id}`);
+    log(`📡 Order ID: ${order.id}, Amount: ₹${orderAmount} (${order.amount} paise)`);
     
     // Save order to MongoDB (optional, don't fail if DB is unavailable)
     if (email && fullName && phoneNumber) {
@@ -254,193 +192,163 @@ app.post("/api/payment/create-session", async (req, res) => {
           const collection = database.collection(COLLECTION_NAME);
           
           await collection.insertOne({
-            orderId: orderId,
-            paymentSessionId: paymentSessionId,
+            orderId: order.id,
             email,
             fullName,
             phoneNumber: phone,
-            amount: amount,
+            amount: orderAmount,
+            razorpayOrderId: order.id,
             status: "created",
             createdAt: new Date(),
           });
-          log(`✅ Order saved to MongoDB: ${orderId}`);
+          log(`✅ Order saved to MongoDB: ${order.id}`);
         }
       } catch (dbErr) {
         log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
       }
     }
     
-    // Return payment session data for frontend
-    res.json({
-      order_id: orderId,
-      payment_session_id: paymentSessionId,
-      order_amount: amount,
-      order_currency: "INR",
-    });
-  } catch (err) {
-    log('❌ Error creating Cashfree payment session:', err.message);
-    console.error('Full Cashfree error:', err);
-    
-    // Check if it's an authentication error
-    if (err.statusCode === 401 || err.response?.status === 401) {
-      log('⚠️ Cashfree authentication failed. Please check your API keys.');
-      log(`🔑 App ID present: ${CASHFREE_APP_ID ? 'Yes (starts with ' + CASHFREE_APP_ID.substring(0, 8) + '...)' : 'No'}`);
-      log(`🔑 Secret Key present: ${CASHFREE_SECRET_KEY ? 'Yes (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'No'}`);
-    }
-    
-    res.status(500).json({ 
-      error: "Failed to create Cashfree payment session", 
-      details: err.message,
-      statusCode: err.statusCode || err.response?.status,
-      cashfreeError: err.response?.data || null
-    });
-  }
-});
-
-// Get Cashfree environment (for frontend to determine which SDK to load)
-app.get("/api/payment/environment", async (req, res) => {
-  try {
-    res.json({ 
-      environment: CASHFREE_ENV,
-      isTest: CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
-    });
-  } catch (err) {
-    log(`❌ Error getting environment: ${err.message}`);
-    res.status(500).json({ error: "Failed to get environment" });
-  }
-});
-
-// Verify payment status endpoint
-app.get("/api/payment/verify", async (req, res) => {
-  try {
-    const { order_id } = req.query;
-    
-    if (!order_id) {
-      return res.status(400).json({ error: "order_id is required" });
-    }
-    
-    log(`🔍 Verifying payment status for order: ${order_id}`);
-    
-    // Fetch order status from Cashfree
-    const apiUrl = `${CASHFREE_API_BASE_URL}/orders/${order_id}`;
-    const response = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
-        "x-api-version": CASHFREE_API_VERSION,
-      },
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      log(`❌ Payment verification failed: Status ${response.status} - ${errorData}`);
-      return res.status(response.status).json({ 
-        error: `Payment verification failed: ${response.status}`,
-        details: errorData 
-      });
-    }
-    
-    const orderData = await response.json();
-    log(`✅ Payment verification response: ${JSON.stringify(orderData)}`);
-    
-    // Check if payment is successful - Cashfree status values
-    // order_status can be: ACTIVE, PAID, EXPIRED, CANCELLED
-    // payment_status can be: SUCCESS, FAILED, PENDING, NOT_ATTEMPTED, USER_DROPPED, VOID, CANCELLED, AUTHENTICATION_FAILED, AUTHORIZATION_FAILED
-    const orderStatus = orderData.order_status?.toUpperCase();
-    const paymentStatus = orderData.payment_status?.toUpperCase();
-    
-    log(`🔍 Order status: ${orderStatus}, Payment status: ${paymentStatus}`);
-    
-    const isSuccessful = orderStatus === "PAID" || 
-                        paymentStatus === "SUCCESS" ||
-                        paymentStatus === "PAID" ||
-                        (orderStatus === "ACTIVE" && paymentStatus === "SUCCESS");
-    
-    log(`✅ Payment is successful: ${isSuccessful}`);
-    
-    res.json({
-      order_id: orderData.order_id,
-      order_status: orderData.order_status,
-      payment_status: orderData.payment_status,
-      is_successful: isSuccessful,
-      order_amount: orderData.order_amount,
-      order_currency: orderData.order_currency,
-      // Include raw data for debugging
-      raw_data: orderData,
-    });
-  } catch (err) {
-    log(`❌ Error verifying payment: ${err.message}`);
-    res.status(500).json({ error: "Failed to verify payment", details: err.message });
-  }
-});
-
-// Test Cashfree credentials endpoint (for debugging)
-app.get("/api/payment/test-credentials", async (req, res) => {
-  try {
-    log('🧪 Testing Cashfree credentials...');
-    
-    // Try to create a minimal test payment session
-    const testOrderId = `test_${Date.now()}`;
-    // Generate safe customer ID for test (never use email)
-    const testCustomerId = `cust_test_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
-    const testOrderRequest = {
-      order_id: testOrderId,
-      order_amount: 1, // 1 rupee
-      order_currency: "INR",
-      customer_details: {
-        customer_id: testCustomerId, // Safe ID, never email
-        customer_name: "Test Customer",
-        customer_email: "[email protected]",
-        customer_phone: "9999999999",
-      },
-      order_meta: {
-        return_url: `https://whoviewedmyprofile.in/payment/return?order_id={order_id}`,
-      },
-    };
-    
-    // Make direct HTTP request to Cashfree API
-    const apiUrl = `${CASHFREE_API_BASE_URL}/orders`;
-    log(`🔍 Test: Making POST request to: ${apiUrl}`);
-    
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
-        "x-api-version": CASHFREE_API_VERSION,
-      },
-      body: JSON.stringify(testOrderRequest),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      log(`❌ Test order error: Status ${response.status} - ${errorData}`);
-      throw new Error(`Cashfree API error: ${response.status} - ${errorData}`);
-    }
-    
-    const responseData = await response.json();
-    log(`✅ Test payment session created successfully: ${responseData.payment_session_id}`);
-    
+    // Return order data for frontend
     res.json({
       success: true,
-      message: "Cashfree credentials are valid",
-      testOrderId: testOrderId,
-      testPaymentSessionId: responseData.payment_session_id,
-      appIdLength: CASHFREE_APP_ID?.length || 0,
-      secretKeyLength: CASHFREE_SECRET_KEY?.length || 0,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key: RAZORPAY_KEY_ID,
+      receipt: order.receipt,
     });
   } catch (err) {
-    log('❌ Test payment session failed:', err.message);
-    res.status(500).json({
+    log('❌ Error creating Razorpay order:', err.message);
+    console.error('Full Razorpay error:', err);
+    
+    res.status(500).json({ 
       success: false,
-      error: err.message,
-      statusCode: err.statusCode || err.response?.status,
-      cashfreeError: err.response?.data || null,
-      appIdLength: CASHFREE_APP_ID?.length || 0,
-      secretKeyLength: CASHFREE_SECRET_KEY?.length || 0,
+      error: "Failed to create Razorpay order", 
+      details: err.message,
+      statusCode: err.statusCode || err.status,
+    });
+  }
+});
+
+// Verify payment signature endpoint
+app.post("/api/payment/verify-payment", async (req, res) => {
+  try {
+    const { orderId, paymentId, signature } = req.body;
+
+    if (!orderId || !paymentId || !signature) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Missing required payment verification parameters' 
+      });
+    }
+
+    log(`🔍 Verifying payment: orderId=${orderId}, paymentId=${paymentId}`);
+
+    // Create the signature string
+    const text = `${orderId}|${paymentId}`;
+    
+    // Generate the expected signature
+    const expectedSignature = crypto
+      .createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .update(text)
+      .digest('hex');
+
+    // Compare signatures
+    if (expectedSignature === signature) {
+      log(`✅ Payment verified successfully: ${paymentId}`);
+      
+      // Update database after successful verification
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          
+          const updateResult = await collection.updateOne(
+            { razorpayOrderId: orderId },
+            { 
+              $set: { 
+                status: "paid", 
+                paymentId: paymentId,
+                verifiedAt: new Date()
+              } 
+            }
+          );
+          
+          if (updateResult.matchedCount > 0) {
+            log(`✅ Database updated: Order ${orderId} marked as paid`);
+          } else {
+            log(`⚠️ Order ${orderId} not found in database (may have been created without user data)`);
+          }
+        } else {
+          log(`⚠️ MongoDB not available, skipping database update`);
+        }
+      } catch (dbErr) {
+        log(`⚠️ Failed to update database (payment still verified): ${dbErr.message}`);
+        // Don't fail the verification if DB update fails
+      }
+      
+      res.json({
+        success: true,
+        message: 'Payment verified successfully',
+        orderId,
+        paymentId,
+      });
+    } else {
+      log(`❌ Payment verification failed - Invalid signature`);
+      res.status(400).json({
+        success: false,
+        error: 'Payment verification failed - Invalid signature',
+      });
+    }
+  } catch (error) {
+    log(`❌ Error verifying payment: ${error.message}`);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to verify payment' 
+    });
+  }
+});
+
+// Get payment details endpoint
+app.get("/api/payment/payment/:paymentId", async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    log(`🔍 Fetching payment details: ${paymentId}`);
+    
+    const payment = await razorpay.payments.fetch(paymentId);
+    
+    log(`✅ Payment details fetched: ${paymentId}`);
+    res.json({
+      success: true,
+      payment,
+    });
+  } catch (error) {
+    log(`❌ Error fetching payment: ${error.message}`);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to fetch payment details' 
+    });
+  }
+});
+
+// Get order details endpoint
+app.get("/api/payment/order/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    log(`🔍 Fetching order details: ${orderId}`);
+    
+    const order = await razorpay.orders.fetch(orderId);
+    
+    log(`✅ Order details fetched: ${orderId}`);
+    res.json({
+      success: true,
+      order,
+    });
+  } catch (error) {
+    log(`❌ Error fetching order: ${error.message}`);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to fetch order details' 
     });
   }
 });
@@ -652,7 +560,7 @@ app.listen(PORT, () => {
   log(`🚀 API server started on port ${PORT}`);
   log(`📍 Endpoint: http://localhost:${PORT}/api/stalkers?username=<instagram_username>`);
   log(`📍 Snapshot Endpoint: http://localhost:${PORT}/api/snapshots/:snapshotId/:stepName`);
-  log(`📍 Payment Endpoint: http://localhost:${PORT}/api/payment/create-session`);
+  log(`📍 Payment Endpoint: http://localhost:${PORT}/api/payment/create-order`);
   log('⏱️  Expected response time: 30-60 seconds per request');
   log('🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)');
 });
