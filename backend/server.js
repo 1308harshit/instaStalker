@@ -76,6 +76,67 @@ const razorpay = new Razorpay({
   key_secret: RAZORPAY_KEY_SECRET,
 });
 
+// Meta Conversions API configuration (optional but recommended for accurate tracking)
+const META_PIXEL_ID = process.env.META_PIXEL_ID || '1752528628790870'; // Your pixel ID
+const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN; // Get from Meta Business Settings
+
+// Helper function to send Meta Conversions API (CAPI) event
+async function sendMetaCAPIEvent(eventName, eventData, userData = {}) {
+  if (!META_ACCESS_TOKEN) {
+    log('⚠️ META_ACCESS_TOKEN not configured - skipping server-side event tracking');
+    return null;
+  }
+
+  try {
+    const url = `https://graph.facebook.com/v18.0/${META_PIXEL_ID}/events`;
+    
+    const payload = {
+      data: [{
+        event_name: eventName,
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: eventData.event_id, // Must match frontend eventID for deduplication
+        event_source_url: eventData.event_source_url || 'https://whoviewedmyprofile.in',
+        action_source: 'website',
+        user_data: {
+          em: userData.email ? crypto.createHash('sha256').update(userData.email.toLowerCase().trim()).digest('hex') : undefined,
+          ph: userData.phone ? crypto.createHash('sha256').update(userData.phone.replace(/\D/g, '')).digest('hex') : undefined,
+          client_ip_address: userData.ip,
+          client_user_agent: userData.userAgent,
+        },
+        custom_data: {
+          currency: eventData.currency,
+          value: eventData.value,
+          content_name: eventData.content_name,
+          content_type: eventData.content_type,
+          num_items: eventData.num_items,
+          order_id: eventData.order_id,
+          transaction_id: eventData.transaction_id,
+        },
+      }],
+      access_token: META_ACCESS_TOKEN,
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    
+    if (response.ok && result.events_received > 0) {
+      log(`✅ Meta CAPI: ${eventName} event sent successfully (${result.events_received} events received)`);
+      return result;
+    } else {
+      log(`⚠️ Meta CAPI: ${eventName} event failed:`, result);
+      return null;
+    }
+  } catch (err) {
+    log(`❌ Meta CAPI error:`, err.message);
+    return null;
+  }
+}
+
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, data || '');
@@ -257,6 +318,10 @@ app.post("/api/payment/verify-payment", async (req, res) => {
     if (expectedSignature === signature) {
       log(`✅ Payment verified successfully: ${paymentId}`);
       
+      // Get user data from database for Meta CAPI
+      let userData = {};
+      let orderAmount = 99; // Default amount
+      
       // Update database after successful verification
       try {
         const database = await connectDB();
@@ -276,6 +341,18 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           
           if (updateResult.matchedCount > 0) {
             log(`✅ Database updated: Order ${orderId} marked as paid`);
+            
+            // Retrieve user data for Meta CAPI
+            const order = await collection.findOne({ razorpayOrderId: orderId });
+            if (order) {
+              userData = {
+                email: order.email,
+                phone: order.phoneNumber,
+                ip: req.ip || req.connection.remoteAddress,
+                userAgent: req.headers['user-agent'],
+              };
+              orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
+            }
           } else {
             log(`⚠️ Order ${orderId} not found in database (may have been created without user data)`);
           }
@@ -285,6 +362,27 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       } catch (dbErr) {
         log(`⚠️ Failed to update database (payment still verified): ${dbErr.message}`);
         // Don't fail the verification if DB update fails
+      }
+      
+      // Send Meta Conversions API (CAPI) Purchase event - Server-side tracking
+      // This is CRITICAL for UPI flows where users may close browser before client-side pixel fires
+      try {
+        const metaEventId = `purchase_${orderId}_${Date.now()}`; // Must match frontend eventID for deduplication
+        await sendMetaCAPIEvent('Purchase', {
+          event_id: metaEventId,
+          currency: 'INR',
+          value: orderAmount,
+          content_name: 'Instagram Stalker Report',
+          content_type: 'product',
+          num_items: 1,
+          order_id: orderId,
+          transaction_id: paymentId,
+          event_source_url: 'https://whoviewedmyprofile.in',
+        }, userData);
+        log(`✅ Meta CAPI Purchase event sent for order: ${orderId}`);
+      } catch (metaErr) {
+        log(`⚠️ Meta CAPI event failed (payment still verified):`, metaErr.message);
+        // Don't fail payment verification if Meta tracking fails
       }
       
       res.json({

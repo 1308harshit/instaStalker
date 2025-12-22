@@ -2729,17 +2729,27 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       
-      // META PIXEL: Track InitiateCheckout event
+      // META PIXEL: Track InitiateCheckout event (fires when payment page loads)
       const amount = 99 * quantity;
+      const eventID = `initiate_checkout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       if (typeof window.fbq === 'function') {
         window.fbq('track', 'InitiateCheckout', {
           currency: 'INR',
           value: amount,
           content_name: 'Instagram Stalker Report',
           content_category: 'product',
+          content_type: 'product',
           num_items: quantity
+        }, {
+          eventID: eventID // For CAPI deduplication
         });
-        console.log('✅ Meta Pixel: InitiateCheckout event fired', { value: amount, currency: 'INR', quantity });
+        console.log('✅ Meta Pixel: InitiateCheckout event fired', { 
+          value: amount, 
+          currency: 'INR', 
+          quantity,
+          eventID 
+        });
       } else {
         console.warn('⚠️ Meta Pixel (fbq) not loaded yet');
       }
@@ -2924,19 +2934,44 @@ function App() {
             if (verifyData.success) {
               console.log('✅ Payment verified successfully on server');
               
-              // META PIXEL: Track Purchase conversion event
-              const purchaseAmount = 99 * quantity;
-              if (typeof window.fbq === 'function') {
-                window.fbq('track', 'Purchase', {
-                  currency: 'INR',
-                  value: purchaseAmount,
-                  content_name: 'Instagram Stalker Report',
-                  content_type: 'product',
-                  num_items: quantity
-                });
-                console.log('✅ Meta Pixel: Purchase event fired', { value: purchaseAmount, currency: 'INR', quantity });
+              const orderId = response.razorpay_order_id;
+              const paymentId = response.razorpay_payment_id;
+              
+              // Prevent duplicate Purchase events (critical for accurate tracking)
+              if (!purchaseEventFiredRef.current.has(orderId)) {
+                // META PIXEL: Track Purchase conversion event
+                const purchaseAmount = 99 * quantity;
+                const eventID = `purchase_${orderId}_${Date.now()}`; // Unique event ID for CAPI deduplication
+                
+                if (typeof window.fbq === 'function') {
+                  window.fbq('track', 'Purchase', {
+                    currency: 'INR',
+                    value: purchaseAmount,
+                    content_name: 'Instagram Stalker Report',
+                    content_type: 'product',
+                    num_items: quantity,
+                    content_ids: [orderId], // Track which order this is
+                    order_id: orderId, // Razorpay order ID
+                    transaction_id: paymentId // Razorpay payment ID
+                  }, {
+                    eventID: eventID // Critical for Meta Conversions API (CAPI) deduplication
+                  });
+                  console.log('✅ Meta Pixel: Purchase event fired', { 
+                    value: purchaseAmount, 
+                    currency: 'INR', 
+                    quantity,
+                    orderId,
+                    paymentId,
+                    eventID 
+                  });
+                  
+                  // Mark this order as tracked to prevent duplicates
+                  purchaseEventFiredRef.current.add(orderId);
+                } else {
+                  console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
+                }
               } else {
-                console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
+                console.log('⚠️ Purchase event already fired for order:', orderId, '(prevented duplicate)');
               }
               
               // Navigate to success page
