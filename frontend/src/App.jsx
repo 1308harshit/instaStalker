@@ -2913,9 +2913,51 @@ function App() {
         description: 'Payment for Full Report',
         order_id: orderData.orderId, // Order ID from backend
         handler: async function (response) {
-          // CRITICAL: Verify payment on backend immediately after success
           console.log('✅ Razorpay payment success callback:', response);
           
+          const orderId = response.razorpay_order_id;
+          const paymentId = response.razorpay_payment_id;
+          
+          // 🚀 FIRE META PIXEL IMMEDIATELY (don't wait for backend verification)
+          // This ensures fast signal to Meta (1-2 seconds instead of 15-30 minutes for UPI)
+          if (!purchaseEventFiredRef.current.has(orderId)) {
+            const purchaseAmount = 99 * quantity;
+            const eventID = `purchase_${orderId}`; // Simple eventID (no timestamp) for backend matching
+            
+            if (typeof window.fbq === 'function') {
+              window.fbq('track', 'Purchase', {
+                currency: 'INR',
+                value: purchaseAmount,
+                content_name: 'Instagram Stalker Report',
+                content_type: 'product',
+                num_items: quantity,
+                content_ids: [orderId],
+                order_id: orderId,
+                transaction_id: paymentId
+              }, {
+                eventID: eventID // Backend CAPI will use same eventID for deduplication
+              });
+              console.log('✅ Meta Pixel: Purchase event fired IMMEDIATELY', { 
+                value: purchaseAmount, 
+                currency: 'INR', 
+                quantity,
+                orderId,
+                paymentId,
+                eventID,
+                timing: 'instant (browser-side)'
+              });
+              
+              // Mark as tracked to prevent duplicates
+              purchaseEventFiredRef.current.add(orderId);
+            } else {
+              console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
+            }
+          } else {
+            console.log('⚠️ Purchase event already fired for order:', orderId, '(prevented duplicate)');
+          }
+          
+          // THEN verify payment on backend (async - doesn't block pixel)
+          // Backend will also send CAPI event as backup (auto-deduplicated by Meta)
           try {
             const verifyResponse = await fetch('/api/payment/verify-payment', {
               method: 'POST',
@@ -2932,57 +2974,18 @@ function App() {
             const verifyData = await verifyResponse.json();
 
             if (verifyData.success) {
-              console.log('✅ Payment verified successfully on server');
-              
-              const orderId = response.razorpay_order_id;
-              const paymentId = response.razorpay_payment_id;
-              
-              // Prevent duplicate Purchase events (critical for accurate tracking)
-              if (!purchaseEventFiredRef.current.has(orderId)) {
-                // META PIXEL: Track Purchase conversion event
-                const purchaseAmount = 99 * quantity;
-                const eventID = `purchase_${orderId}_${Date.now()}`; // Unique event ID for CAPI deduplication
-                
-                if (typeof window.fbq === 'function') {
-                  window.fbq('track', 'Purchase', {
-                    currency: 'INR',
-                    value: purchaseAmount,
-                    content_name: 'Instagram Stalker Report',
-                    content_type: 'product',
-                    num_items: quantity,
-                    content_ids: [orderId], // Track which order this is
-                    order_id: orderId, // Razorpay order ID
-                    transaction_id: paymentId // Razorpay payment ID
-                  }, {
-                    eventID: eventID // Critical for Meta Conversions API (CAPI) deduplication
-                  });
-                  console.log('✅ Meta Pixel: Purchase event fired', { 
-                    value: purchaseAmount, 
-                    currency: 'INR', 
-                    quantity,
-                    orderId,
-                    paymentId,
-                    eventID 
-                  });
-                  
-                  // Mark this order as tracked to prevent duplicates
-                  purchaseEventFiredRef.current.add(orderId);
-                } else {
-                  console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
-                }
-              } else {
-                console.log('⚠️ Purchase event already fired for order:', orderId, '(prevented duplicate)');
-              }
-              
-              // Navigate to success page
+              console.log('✅ Payment verified on server (backend CAPI sent as backup)');
               setScreen(SCREEN.PAYMENT_SUCCESS);
             } else {
               console.error('❌ Payment verification failed:', verifyData.error);
-              alert('Payment verification failed. Please contact support.');
+              // Pixel already fired, but verification failed
+              alert('Payment verification failed. Please contact support with order ID: ' + orderId);
             }
           } catch (verifyErr) {
             console.error('❌ Error verifying payment:', verifyErr);
-            alert('Error verifying payment. Please contact support.');
+            // Pixel already fired, Razorpay confirmed payment, so show success
+            console.log('⚠️ Backend verification failed but payment succeeded on Razorpay - showing success');
+            setScreen(SCREEN.PAYMENT_SUCCESS);
           }
         },
         prefill: {

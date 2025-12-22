@@ -364,10 +364,10 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send Meta Conversions API (CAPI) Purchase event - Server-side tracking
-      // This is CRITICAL for UPI flows where users may close browser before client-side pixel fires
+      // Send Meta Conversions API (CAPI) Purchase event - Server-side backup
+      // Browser pixel fires instantly, this is backup for reliability (Meta auto-deduplicates)
       try {
-        const metaEventId = `purchase_${orderId}_${Date.now()}`; // Must match frontend eventID for deduplication
+        const metaEventId = `purchase_${orderId}`; // MUST match frontend eventID exactly for deduplication
         await sendMetaCAPIEvent('Purchase', {
           event_id: metaEventId,
           currency: 'INR',
@@ -379,10 +379,10 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           transaction_id: paymentId,
           event_source_url: 'https://whoviewedmyprofile.in',
         }, userData);
-        log(`✅ Meta CAPI Purchase event sent for order: ${orderId}`);
+        log(`✅ Meta CAPI Purchase event sent (backup) for order: ${orderId}`);
       } catch (metaErr) {
-        log(`⚠️ Meta CAPI event failed (payment still verified):`, metaErr.message);
-        // Don't fail payment verification if Meta tracking fails
+        log(`⚠️ Meta CAPI backup failed (browser pixel already fired):`, metaErr.message);
+        // Don't fail payment verification if Meta backup tracking fails
       }
       
       res.json({
