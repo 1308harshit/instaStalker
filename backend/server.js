@@ -364,26 +364,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send Meta Conversions API (CAPI) Purchase event - Server-side backup
-      // Browser pixel fires instantly, this is backup for reliability (Meta auto-deduplicates)
-      try {
-        const metaEventId = `purchase_${orderId}`; // MUST match frontend eventID exactly for deduplication
-        await sendMetaCAPIEvent('Purchase', {
-          event_id: metaEventId,
-          currency: 'INR',
-          value: orderAmount,
-          content_name: 'Instagram Stalker Report',
-          content_type: 'product',
-          num_items: 1,
-          order_id: orderId,
-          transaction_id: paymentId,
-          event_source_url: 'https://whoviewedmyprofile.in',
-        }, userData);
-        log(`✅ Meta CAPI Purchase event sent (backup) for order: ${orderId}`);
-      } catch (metaErr) {
-        log(`⚠️ Meta CAPI backup failed (browser pixel already fired):`, metaErr.message);
-        // Don't fail payment verification if Meta backup tracking fails
-      }
+      // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
       
       res.json({
         success: true,
