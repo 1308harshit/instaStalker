@@ -2729,6 +2729,21 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       
+      // META PIXEL: Track InitiateCheckout event
+      const amount = 99 * quantity;
+      if (typeof window.fbq === 'function') {
+        window.fbq('track', 'InitiateCheckout', {
+          currency: 'INR',
+          value: amount,
+          content_name: 'Instagram Stalker Report',
+          content_category: 'product',
+          num_items: quantity
+        });
+        console.log('✅ Meta Pixel: InitiateCheckout event fired', { value: amount, currency: 'INR', quantity });
+      } else {
+        console.warn('⚠️ Meta Pixel (fbq) not loaded yet');
+      }
+      
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
       // const amount = 99 * quantity;
       // console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
@@ -2908,6 +2923,22 @@ function App() {
 
             if (verifyData.success) {
               console.log('✅ Payment verified successfully on server');
+              
+              // META PIXEL: Track Purchase conversion event
+              const purchaseAmount = 99 * quantity;
+              if (typeof window.fbq === 'function') {
+                window.fbq('track', 'Purchase', {
+                  currency: 'INR',
+                  value: purchaseAmount,
+                  content_name: 'Instagram Stalker Report',
+                  content_type: 'product',
+                  num_items: quantity
+                });
+                console.log('✅ Meta Pixel: Purchase event fired', { value: purchaseAmount, currency: 'INR', quantity });
+              } else {
+                console.warn('⚠️ Meta Pixel (fbq) not available for Purchase event');
+              }
+              
               // Navigate to success page
               setScreen(SCREEN.PAYMENT_SUCCESS);
             } else {
