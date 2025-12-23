@@ -102,11 +102,29 @@ const emailTransporter = nodemailer.createTransport({
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
   if (!EMAIL_USER || !EMAIL_PASS) {
-    log('⚠️ Email not configured - skipping email send');
+    log(`⚠️ Email not configured - EMAIL_USER: ${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS: ${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
     return null;
   }
 
   try {
+    log(`📧 Preparing to send email to ${email} from ${EMAIL_USER}`);
+    log(`📧 Post-purchase link: ${postPurchaseLink}`);
+    
+    // Verify transporter is configured
+    if (!emailTransporter) {
+      log(`❌ Email transporter not initialized`);
+      return null;
+    }
+    
+    // Verify transporter connection
+    try {
+      await emailTransporter.verify();
+      log(`✅ Email transporter verified successfully`);
+    } catch (verifyErr) {
+      log(`❌ Email transporter verification failed: ${verifyErr.message}`);
+      return null;
+    }
+
     const mailOptions = {
       from: `"Insta Reports" <${EMAIL_USER}>`,
       to: email,
@@ -140,11 +158,17 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
       `,
     };
 
+    log(`📧 Sending email...`);
     const info = await emailTransporter.sendMail(mailOptions);
-    log(`✅ Post-purchase email sent to ${email}: ${info.messageId}`);
+    log(`✅ Post-purchase email sent successfully to ${email}: ${info.messageId}`);
+    log(`✅ Email response: ${JSON.stringify(info.response)}`);
     return info;
   } catch (err) {
-    log(`❌ Error sending email: ${err.message}`);
+    log(`❌ Error sending email to ${email}: ${err.message}`);
+    log(`❌ Email error stack: ${err.stack}`);
+    if (err.response) {
+      log(`❌ Email error response: ${JSON.stringify(err.response)}`);
+    }
     return null;
   }
 }
@@ -362,6 +386,7 @@ app.post("/api/payment/create-order", async (req, res) => {
 
 // Verify payment signature endpoint
 app.post("/api/payment/verify-payment", async (req, res) => {
+  // Ensure we always return JSON, even on errors
   try {
     const { orderId, paymentId, signature } = req.body;
 
@@ -485,26 +510,44 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       
       // Send post-purchase email (non-blocking, don't fail payment if email fails)
       if (userEmail) {
+        log(`📧 Attempting to send email to: ${userEmail}`);
+        log(`📧 Email config check: EMAIL_USER=${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS=${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+        
         sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink)
-          .then(() => {
-            // Update emailSent flag in database
-            connectDB().then((database) => {
-              if (database) {
-                const collection = database.collection(COLLECTION_NAME);
-                collection.updateOne(
-                  { razorpayOrderId: orderId },
-                  { $set: { emailSent: true, emailSentAt: new Date() } }
-                ).catch(() => {});
-              }
-            }).catch(() => {});
+          .then((emailResult) => {
+            if (emailResult) {
+              log(`✅ Email sent successfully to ${userEmail}`);
+              // Update emailSent flag in database
+              connectDB().then((database) => {
+                if (database) {
+                  const collection = database.collection(COLLECTION_NAME);
+                  collection.updateOne(
+                    { razorpayOrderId: orderId },
+                    { $set: { emailSent: true, emailSentAt: new Date() } }
+                  ).then(() => {
+                    log(`✅ Email sent flag updated in database for order ${orderId}`);
+                  }).catch((dbErr) => {
+                    log(`⚠️ Failed to update emailSent flag: ${dbErr.message}`);
+                  });
+                }
+              }).catch((dbErr) => {
+                log(`⚠️ Failed to connect to database for emailSent update: ${dbErr.message}`);
+              });
+            } else {
+              log(`⚠️ Email sending returned null (likely not configured)`);
+            }
           })
           .catch((emailErr) => {
-            log(`⚠️ Email sending failed (payment still verified): ${emailErr.message}`);
+            log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
+            log(`❌ Email error details:`, emailErr);
           });
+      } else {
+        log(`⚠️ No user email found, skipping email send`);
       }
       
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
       
+      // Always send JSON response, even if email fails
       res.json({
         success: true,
         message: 'Payment verified successfully',
@@ -521,9 +564,12 @@ app.post("/api/payment/verify-payment", async (req, res) => {
     }
   } catch (error) {
     log(`❌ Error verifying payment: ${error.message}`);
-    res.status(500).json({ 
+    log(`❌ Error stack: ${error.stack}`);
+    // Always return JSON, never HTML - ensure proper error handling
+    return res.status(500).json({ 
       success: false,
-      error: error.message || 'Failed to verify payment' 
+      error: error.message || 'Failed to verify payment',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
