@@ -398,6 +398,42 @@ function App() {
     }
   }, []);
 
+  // Handle post-purchase link access
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    // Only process if we're on the post-purchase route
+    if (token && order && window.location.pathname === '/post-purchase') {
+      const validatePostPurchase = async () => {
+        try {
+          console.log('🔍 Validating post-purchase link:', { order, token: token.substring(0, 10) + '...' });
+          const validateResponse = await fetch(`${API_BASE}/api/payment/post-purchase?token=${token}&order=${order}`);
+          
+          if (!validateResponse.ok) {
+            console.error('❌ Invalid post-purchase link');
+            // Stay on landing page or show error
+            return;
+          }
+          
+          const validateData = await validateResponse.json();
+          
+          if (validateData.success) {
+            console.log('✅ Post-purchase link validated, showing payment success screen');
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            // Clean URL params
+            window.history.replaceState({}, '', '/post-purchase');
+          }
+        } catch (err) {
+          console.error('❌ Error validating post-purchase link:', err);
+        }
+      };
+      
+      validatePostPurchase();
+    }
+  }, []);
+
   // Fetch HTML content for a snapshot
   const fetchSnapshotHtml = async (stepName, htmlPath) => {
     const url = buildSnapshotUrl(htmlPath);
@@ -3280,8 +3316,8 @@ function App() {
           <div style={{ marginBottom: '20px' }}>
             <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Email:</div>
             <div style={{ color: '#666', fontSize: '16px' }}>
-              <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', textDecoration: 'none' }}>
-                support@whoviewedmyprofile.in
+              <a href="mailto:velarlunera@gmail.com" style={{ color: '#f43f3f', textDecoration: 'none' }}>
+                velarlunera@gmail.com
               </a>
             </div>
           </div>
@@ -3367,7 +3403,7 @@ function App() {
               <p>
                 For any queries, complaints, or support, please contact us at:
                 <br />
-                Email: <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f' }}>support@whoviewedmyprofile.in</a>
+                Email: <a href="mailto:velarlunera@gmail.com" style={{ color: '#f43f3f' }}>velarlunera@gmail.com</a>
                 <br />
                 Address: #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
               </p>
@@ -3435,8 +3471,8 @@ function App() {
           </h2>
           <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
             Have a question or need support? Send us an email at{' '}
-            <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', fontWeight: '600' }}>
-              support@whoviewedmyprofile.in
+            <a href="mailto:velarlunera@gmail.com" style={{ color: '#f43f3f', fontWeight: '600' }}>
+              velarlunera@gmail.com
             </a>
           </p>
           <p style={{ fontSize: '14px', color: '#666' }}>

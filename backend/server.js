@@ -37,6 +37,7 @@ import {
 } from "./utils/mongodb.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 const app = express();
 app.use(cors({
@@ -79,6 +80,74 @@ const razorpay = new Razorpay({
 // Meta Conversions API configuration (optional but recommended for accurate tracking)
 const META_PIXEL_ID = process.env.META_PIXEL_ID || '1752528628790870'; // Your pixel ID
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN; // Get from Meta Business Settings
+
+// Email configuration
+const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
+const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
+const BASE_URL = process.env.BASE_URL || 'https://whoviewedmyprofile.in';
+
+// Create email transporter
+const emailTransporter = nodemailer.createTransport({
+  host: EMAIL_HOST,
+  port: EMAIL_PORT,
+  secure: EMAIL_PORT === 465,
+  auth: EMAIL_USER && EMAIL_PASS ? {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS,
+  } : undefined,
+});
+
+// Helper function to send post-purchase email
+async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
+  if (!EMAIL_USER || !EMAIL_PASS) {
+    log('⚠️ Email not configured - skipping email send');
+    return null;
+  }
+
+  try {
+    const mailOptions = {
+      from: `"Insta Reports" <${EMAIL_USER}>`,
+      to: email,
+      subject: 'Your report link',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
+          <p>Hi ${fullName || 'there'},</p>
+          <p>Your payment is confirmed. Access your report anytime:</p>
+          <div style="margin: 30px 0;">
+            <a href="${postPurchaseLink}" 
+               style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Open my report
+            </a>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            You can bookmark this link or keep this email.
+          </p>
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
+            <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
+              Important Notice:
+            </p>
+            <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
+              This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
+            </p>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            Support: <a href="mailto:velarlunera@gmail.com" style="color: #f43f3f;">velarlunera@gmail.com</a>
+          </p>
+        </div>
+      `,
+    };
+
+    const info = await emailTransporter.sendMail(mailOptions);
+    log(`✅ Post-purchase email sent to ${email}: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    log(`❌ Error sending email: ${err.message}`);
+    return null;
+  }
+}
 
 // Helper function to send Meta Conversions API (CAPI) event
 async function sendMetaCAPIEvent(eventName, eventData, userData = {}) {
@@ -321,6 +390,12 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       // Get user data from database for Meta CAPI
       let userData = {};
       let orderAmount = 99; // Default amount
+      let userEmail = '';
+      let userFullName = '';
+      
+      // Generate unique post-purchase link
+      const accessToken = crypto.randomBytes(32).toString('hex');
+      const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
       
       // Update database after successful verification
       try {
@@ -334,7 +409,10 @@ app.post("/api/payment/verify-payment", async (req, res) => {
               $set: { 
                 status: "paid", 
                 paymentId: paymentId,
-                verifiedAt: new Date()
+                verifiedAt: new Date(),
+                postPurchaseLink: postPurchaseLink,
+                accessToken: accessToken,
+                emailSent: false
               } 
             }
           );
@@ -342,7 +420,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           if (updateResult.matchedCount > 0) {
             log(`✅ Database updated: Order ${orderId} marked as paid`);
             
-            // Retrieve user data for Meta CAPI
+            // Retrieve user data for Meta CAPI and email
             const order = await collection.findOne({ razorpayOrderId: orderId });
             if (order) {
               userData = {
@@ -351,6 +429,8 @@ app.post("/api/payment/verify-payment", async (req, res) => {
                 ip: req.ip || req.connection.remoteAddress,
                 userAgent: req.headers['user-agent'],
               };
+              userEmail = order.email;
+              userFullName = order.fullName || 'Customer';
               orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
             }
           } else {
@@ -364,6 +444,26 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
+      // Send post-purchase email (non-blocking, don't fail payment if email fails)
+      if (userEmail) {
+        sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink)
+          .then(() => {
+            // Update emailSent flag in database
+            connectDB().then((database) => {
+              if (database) {
+                const collection = database.collection(COLLECTION_NAME);
+                collection.updateOne(
+                  { razorpayOrderId: orderId },
+                  { $set: { emailSent: true, emailSentAt: new Date() } }
+                ).catch(() => {});
+              }
+            }).catch(() => {});
+          })
+          .catch((emailErr) => {
+            log(`⚠️ Email sending failed (payment still verified): ${emailErr.message}`);
+          });
+      }
+      
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
       
       res.json({
@@ -371,6 +471,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         message: 'Payment verified successfully',
         orderId,
         paymentId,
+        postPurchaseLink, // Return link in response (optional, for frontend use)
       });
     } else {
       log(`❌ Payment verification failed - Invalid signature`);
@@ -384,6 +485,67 @@ app.post("/api/payment/verify-payment", async (req, res) => {
     res.status(500).json({ 
       success: false,
       error: error.message || 'Failed to verify payment' 
+    });
+  }
+});
+
+// Validate post-purchase link endpoint
+app.get("/api/payment/post-purchase", async (req, res) => {
+  try {
+    const { token, order } = req.query;
+    
+    if (!token || !order) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing token or order parameter'
+      });
+    }
+    
+    log(`🔍 Validating post-purchase link: order=${order}`);
+    
+    try {
+      const database = await connectDB();
+      if (!database) {
+        return res.status(500).json({
+          success: false,
+          error: 'Database not available'
+        });
+      }
+      
+      const collection = database.collection(COLLECTION_NAME);
+      const orderDoc = await collection.findOne({
+        razorpayOrderId: order,
+        accessToken: token,
+        status: 'paid'
+      });
+      
+      if (!orderDoc) {
+        log(`❌ Invalid post-purchase link: order=${order}, token=${token.substring(0, 10)}...`);
+        return res.status(404).json({
+          success: false,
+          error: 'Invalid or expired link'
+        });
+      }
+      
+      log(`✅ Post-purchase link validated: order=${order}`);
+      res.json({
+        success: true,
+        orderId: orderDoc.razorpayOrderId,
+        email: orderDoc.email,
+        fullName: orderDoc.fullName
+      });
+    } catch (dbErr) {
+      log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to validate link'
+      });
+    }
+  } catch (error) {
+    log(`❌ Error validating post-purchase link: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to validate link'
     });
   }
 });
