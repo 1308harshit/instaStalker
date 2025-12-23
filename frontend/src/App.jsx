@@ -384,6 +384,16 @@ function App() {
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
+    // Don't restore from localStorage if we're accessing via post-purchase link
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    if (token && order) {
+      // Post-purchase link will load data from backend, skip localStorage
+      return;
+    }
+    
     const restored = loadLastRun();
     if (!restored) return;
 
@@ -397,6 +407,57 @@ function App() {
 
     if (restored.profile) {
       setProfile((prev) => ({ ...prev, ...restored.profile }));
+    }
+  }, []);
+
+  // Handle post-purchase link access - load order-specific data
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    // If we have token and order params, fetch order data
+    if (token && order) {
+      const loadOrderData = async () => {
+        try {
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const validateResponse = await fetch(apiUrl);
+          
+          if (validateResponse.ok) {
+            const validateData = await validateResponse.json();
+            
+            if (validateData.success) {
+              console.log('✅ Post-purchase link validated, loading order data');
+              
+              // Load order-specific data from backend (not localStorage)
+              if (validateData.cards && Array.isArray(validateData.cards) && validateData.cards.length > 0) {
+                setCards(validateData.cards);
+                setPaymentSuccessCards(validateData.cards);
+              }
+              
+              if (validateData.profile) {
+                setProfile((prev) => ({ ...prev, ...validateData.profile }));
+              }
+              
+              if (validateData.username) {
+                setUsernameInput(validateData.username.replace('@', ''));
+              }
+              
+              // Show payment success screen
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+              
+              // Clean URL but keep /post-purchase path
+              window.history.replaceState({}, '', '/post-purchase');
+            }
+          }
+        } catch (err) {
+          console.error('Error loading order data:', err);
+        }
+      };
+      
+      loadOrderData();
     }
   }, []);
 
@@ -2861,49 +2922,62 @@ function App() {
         return;
       }
       
-      // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
-      const verifyPayment = async () => {
-        try {
-          console.log('🔍 Verifying payment for order:', orderId);
-          const verifyResponse = await fetch(`/api/payment/verify?order_id=${orderId}`);
-          
-          if (!verifyResponse.ok) {
-            // Any backend verification failure → treat as success fallback
-            const status = verifyResponse.status;
-            const text = await verifyResponse.text().catch(() => '');
-            console.warn('⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:', { status, text });
+          // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
+          const verifyPayment = async () => {
+            try {
+              console.log('🔍 Verifying payment for order:', orderId);
+              
+              // Send profile data with verification (POST request)
+              const verifyResponse = await fetch(`/api/payment/verify`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  order_id: orderId,
+                  username: profile.username,
+                  cards: cards,
+                  profile: profile
+                })
+              });
+              
+              if (!verifyResponse.ok) {
+                // Any backend verification failure → treat as success fallback
+                const status = verifyResponse.status;
+                const text = await verifyResponse.text().catch(() => '');
+                console.warn('⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:', { status, text });
 
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, '', window.location.pathname);
-            return;
-          }
-          
-          const paymentData = await verifyResponse.json();
-          console.log('📋 Payment verification response:', paymentData);
-          console.log('📋 Order status:', paymentData.order_status);
-          console.log('📋 Payment status:', paymentData.payment_status);
-          console.log('📋 Is successful:', paymentData.is_successful);
-          
-          // Only show success if payment is actually successful
-          if (paymentData.is_successful) {
-            console.log('✅ Payment verified successfully');
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, '', window.location.pathname);
-          } else {
-            // Payment not successful - stay on payment page (silent fail)
-            console.log('⚠️ Payment not successful - order_status:', paymentData.order_status, 'payment_status:', paymentData.payment_status);
-            setScreen(SCREEN.PAYMENT);
-          }
-        } catch (err) {
-          // Network / unexpected error → treat as success fallback
-          console.error('❌ Error verifying payment (fallback to success):', err);
-          setScreen(SCREEN.PAYMENT_SUCCESS);
-          purchaseEventFiredRef.current.add(orderId);
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      };
+                setScreen(SCREEN.PAYMENT_SUCCESS);
+                purchaseEventFiredRef.current.add(orderId);
+                window.history.replaceState({}, '', window.location.pathname);
+                return;
+              }
+              
+              const paymentData = await verifyResponse.json();
+              console.log('📋 Payment verification response:', paymentData);
+              console.log('📋 Order status:', paymentData.order_status);
+              console.log('📋 Payment status:', paymentData.payment_status);
+              console.log('📋 Is successful:', paymentData.is_successful);
+              
+              // Only show success if payment is actually successful
+              if (paymentData.is_successful) {
+                console.log('✅ Payment verified successfully');
+                setScreen(SCREEN.PAYMENT_SUCCESS);
+                purchaseEventFiredRef.current.add(orderId);
+                window.history.replaceState({}, '', window.location.pathname);
+              } else {
+                // Payment not successful - stay on payment page (silent fail)
+                console.log('⚠️ Payment not successful - order_status:', paymentData.order_status, 'payment_status:', paymentData.payment_status);
+                setScreen(SCREEN.PAYMENT);
+              }
+            } catch (err) {
+              // Network / unexpected error → treat as success fallback
+              console.error('❌ Error verifying payment (fallback to success):', err);
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+              purchaseEventFiredRef.current.add(orderId);
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          };
       
       verifyPayment();
     }

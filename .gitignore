@@ -3,3 +3,4 @@ node_modules/
 *.log
 id_ed25519
 .pub
+.env.local

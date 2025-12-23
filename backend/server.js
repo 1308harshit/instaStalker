@@ -35,6 +35,8 @@ import {
   getRecentSnapshot,
   closeDB 
 } from "./utils/mongodb.js";
+import nodemailer from "nodemailer";
+import crypto from "crypto";
 
 const app = express();
 app.use(cors({
@@ -97,6 +99,74 @@ log(`   App ID: ${CASHFREE_APP_ID ? CASHFREE_APP_ID.substring(0, 12) + '...' : '
 log(`   Secret Key: ${CASHFREE_SECRET_KEY ? 'Present (length: ' + CASHFREE_SECRET_KEY.length + ')' : 'MISSING'}`);
 log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   API Version: ${CASHFREE_API_VERSION}`);
+
+// Email configuration
+const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
+const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
+const BASE_URL = process.env.BASE_URL || 'https://whoviewedmyprofile.in';
+
+// Create email transporter
+const emailTransporter = nodemailer.createTransport({
+  host: EMAIL_HOST,
+  port: EMAIL_PORT,
+  secure: EMAIL_PORT === 465,
+  auth: EMAIL_USER && EMAIL_PASS ? {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS,
+  } : undefined,
+});
+
+// Helper function to send post-purchase email
+async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
+  if (!EMAIL_USER || !EMAIL_PASS) {
+    log('⚠️ Email not configured - skipping email send');
+    return null;
+  }
+
+  try {
+    const mailOptions = {
+      from: `"Insta Reports" <${EMAIL_USER}>`,
+      to: email,
+      subject: 'Your report link',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
+          <p>Hi ${fullName || 'there'},</p>
+          <p>Your payment is confirmed. Access your report anytime:</p>
+          <div style="margin: 30px 0;">
+            <a href="${postPurchaseLink}" 
+               style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Open my report
+            </a>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            You can bookmark this link or keep this email.
+          </p>
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
+            <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
+              Important Notice:
+            </p>
+            <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
+              This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
+            </p>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            Support: <a href="mailto:velarlunera@gmail.com" style="color: #f43f3f;">velarlunera@gmail.com</a>
+          </p>
+        </div>
+      `,
+    };
+
+    const info = await emailTransporter.sendMail(mailOptions);
+    log(`✅ Post-purchase email sent to ${email}: ${info.messageId}`);
+    return info;
+  } catch (err) {
+    log(`❌ Error sending email: ${err.message}`);
+    return null;
+  }
+}
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
@@ -310,7 +380,7 @@ app.get("/api/payment/environment", async (req, res) => {
   }
 });
 
-// Verify payment status endpoint
+// Verify payment status endpoint (GET for backward compatibility)
 app.get("/api/payment/verify", async (req, res) => {
   try {
     const { order_id } = req.query;
@@ -372,6 +442,190 @@ app.get("/api/payment/verify", async (req, res) => {
   } catch (err) {
     log(`❌ Error verifying payment: ${err.message}`);
     res.status(500).json({ error: "Failed to verify payment", details: err.message });
+  }
+});
+
+// Verify payment and save profile data endpoint (POST)
+app.post("/api/payment/verify", async (req, res) => {
+  try {
+    const { order_id, username, cards, profile } = req.body;
+    
+    if (!order_id) {
+      return res.status(400).json({ error: "order_id is required" });
+    }
+    
+    log(`🔍 Verifying payment status for order: ${order_id}`);
+    
+    // Fetch order status from Cashfree
+    const apiUrl = `${CASHFREE_API_BASE_URL}/orders/${order_id}`;
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        "x-client-id": CASHFREE_APP_ID,
+        "x-client-secret": CASHFREE_SECRET_KEY,
+        "x-api-version": CASHFREE_API_VERSION,
+      },
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      log(`❌ Payment verification failed: Status ${response.status} - ${errorData}`);
+      return res.status(response.status).json({ 
+        error: `Payment verification failed: ${response.status}`,
+        details: errorData 
+      });
+    }
+    
+    const orderData = await response.json();
+    log(`✅ Payment verification response: ${JSON.stringify(orderData)}`);
+    
+    // Check if payment is successful
+    const orderStatus = orderData.order_status?.toUpperCase();
+    const paymentStatus = orderData.payment_status?.toUpperCase();
+    
+    log(`🔍 Order status: ${orderStatus}, Payment status: ${paymentStatus}`);
+    
+    const isSuccessful = orderStatus === "PAID" || 
+                        paymentStatus === "SUCCESS" ||
+                        paymentStatus === "PAID" ||
+                        (orderStatus === "ACTIVE" && paymentStatus === "SUCCESS");
+    
+    log(`✅ Payment is successful: ${isSuccessful}`);
+    
+    // If payment is successful, save profile data and generate post-purchase link
+    if (isSuccessful) {
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          
+          // Generate unique post-purchase link
+          const accessToken = crypto.randomBytes(32).toString('hex');
+          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${order_id}`;
+          
+          const updateData = {
+            status: "paid",
+            verifiedAt: new Date(),
+            postPurchaseLink: postPurchaseLink,
+            accessToken: accessToken,
+            emailSent: false
+          };
+          
+          // Add profile data if provided
+          if (username) updateData.username = username;
+          if (cards && Array.isArray(cards)) updateData.cards = cards;
+          if (profile) updateData.profile = profile;
+          
+          const updateResult = await collection.updateOne(
+            { orderId: order_id },
+            { $set: updateData }
+          );
+          
+          if (updateResult.matchedCount > 0) {
+            log(`✅ Database updated: Order ${order_id} marked as paid with profile data`);
+            
+            // Get order details for email
+            const order = await collection.findOne({ orderId: order_id });
+            if (order && order.email) {
+              // Send email (non-blocking)
+              sendPostPurchaseEmail(order.email, order.fullName || 'Customer', postPurchaseLink)
+                .then(() => {
+                  // Update emailSent flag
+                  collection.updateOne(
+                    { orderId: order_id },
+                    { $set: { emailSent: true, emailSentAt: new Date() } }
+                  ).catch(() => {});
+                })
+                .catch((emailErr) => {
+                  log(`⚠️ Email sending failed: ${emailErr.message}`);
+                });
+            }
+          } else {
+            log(`⚠️ Order ${order_id} not found in database`);
+          }
+        }
+      } catch (dbErr) {
+        log(`⚠️ Failed to update database: ${dbErr.message}`);
+        // Don't fail payment verification if DB update fails
+      }
+    }
+    
+    res.json({
+      order_id: orderData.order_id,
+      order_status: orderData.order_status,
+      payment_status: orderData.payment_status,
+      is_successful: isSuccessful,
+      order_amount: orderData.order_amount,
+      order_currency: orderData.order_currency,
+    });
+  } catch (err) {
+    log(`❌ Error verifying payment: ${err.message}`);
+    res.status(500).json({ error: "Failed to verify payment", details: err.message });
+  }
+});
+
+// Validate post-purchase link endpoint
+app.get("/api/payment/post-purchase", async (req, res) => {
+  try {
+    const { token, order } = req.query;
+    
+    if (!token || !order) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing token or order parameter'
+      });
+    }
+    
+    log(`🔍 Validating post-purchase link: order=${order}`);
+    
+    try {
+      const database = await connectDB();
+      if (!database) {
+        return res.status(500).json({
+          success: false,
+          error: 'Database not available'
+        });
+      }
+      
+      const collection = database.collection(COLLECTION_NAME);
+      const orderDoc = await collection.findOne({
+        orderId: order,
+        accessToken: token,
+        status: 'paid'
+      });
+      
+      if (!orderDoc) {
+        log(`❌ Invalid post-purchase link: order=${order}, token=${token.substring(0, 10)}...`);
+        return res.status(404).json({
+          success: false,
+          error: 'Invalid or expired link'
+        });
+      }
+      
+      log(`✅ Post-purchase link validated: order=${order}`);
+      res.json({
+        success: true,
+        orderId: orderDoc.orderId,
+        email: orderDoc.email,
+        fullName: orderDoc.fullName,
+        // Return stored profile data
+        username: orderDoc.username || null,
+        cards: orderDoc.cards || [],
+        profile: orderDoc.profile || null
+      });
+    } catch (dbErr) {
+      log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to validate link'
+      });
+    }
+  } catch (error) {
+    log(`❌ Error validating post-purchase link: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to validate link'
+    });
   }
 });
 
