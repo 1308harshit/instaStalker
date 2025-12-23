@@ -44,7 +44,7 @@ app.use(cors({
   origin: ["https://whoviewedmyprofile.in", "http://localhost:5173", "http://localhost:3000"],
   credentials: true
 }));
-app.use(express.json()); // For parsing JSON request bodies
+app.use(express.json({ limit: '10mb' })); // For parsing JSON request bodies (increased limit for pageState)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Keep static serving for backward compatibility (if files exist)
@@ -244,6 +244,11 @@ log(`🚀 Razorpay credentials loaded:`);
 log(`   Key ID: ${RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + '...' : 'MISSING'}`);
 log(`   Key Secret length: ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.length : 0}`);
 log(`   Key Secret (first 20 chars): ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.substring(0, 20) + '...' : 'MISSING'}`);
+
+log(`📧 Email configuration:`);
+log(`   EMAIL_USER: ${EMAIL_USER ? EMAIL_USER : '❌ NOT SET - EMAILS WILL NOT BE SENT!'}`);
+log(`   EMAIL_PASS: ${EMAIL_PASS ? '✅ SET' : '❌ NOT SET - EMAILS WILL NOT BE SENT!'}`);
+log(`   BASE_URL: ${BASE_URL}`);
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
@@ -517,6 +522,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       }
       
       // Send report email IMMEDIATELY after payment verification
+      let emailSent = false;
       if (userEmail && reportUrl) {
         log(`📧 Sending email immediately to: ${userEmail}`);
         log(`📧 Report link: ${reportUrl}`);
@@ -527,6 +533,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           
           if (emailResult) {
             log(`✅ Email sent successfully to ${userEmail}: ${emailResult.messageId}`);
+            emailSent = true;
             
             // Update emailSent flag in database
             try {
@@ -543,14 +550,15 @@ app.post("/api/payment/verify-payment", async (req, res) => {
               log(`⚠️ Failed to update emailSent flag: ${dbErr.message}`);
             }
           } else {
-            log(`⚠️ Email sending returned null - check email configuration`);
+            log(`❌ Email sending returned null - EMAIL NOT CONFIGURED!`);
+            log(`❌ Set EMAIL_USER and EMAIL_PASS in .env file!`);
           }
         } catch (emailErr) {
           log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
           log(`❌ Email error stack: ${emailErr.stack}`);
         }
       } else {
-        log(`⚠️ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, reportUrl: ${reportUrl ? 'SET' : 'NOT SET'}`);
+        log(`❌ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, reportUrl: ${reportUrl ? 'SET' : 'NOT SET'}`);
         log(`⚠️ Order ID: ${orderId}`);
       }
       
@@ -563,6 +571,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         orderId,
         paymentId,
         reportUrl, // Return link in response (optional, for frontend use)
+        emailSent, // Let frontend know if email was sent
       });
     } else {
       log(`❌ Payment verification failed - Invalid signature`);

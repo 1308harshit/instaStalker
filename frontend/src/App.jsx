@@ -3273,7 +3273,7 @@ function App() {
             return [];
           };
           
-          // Prepare complete page state
+          // Prepare complete page state (optimized - no heavy HTML)
           const completePageState = {
             username: profile.username,
             cards: cards,
@@ -3286,7 +3286,8 @@ function App() {
               ? paymentSuccessAdditionalUsernames 
               : [],
             analysis: analysis || null,
-            snapshots: snapshots.length > 0 ? snapshots : []
+            // Don't send snapshots (too large) - only metadata needed
+            snapshots: [] 
           };
           
           console.log('🎉 RAZORPAY PAYMENT SUCCESS!');
@@ -3317,9 +3318,17 @@ function App() {
             return data;
           })
           .then(data => {
-            console.log('✅ Payment verified and email sent:', data);
+            console.log('✅ Payment verified:', data);
             if (data.reportUrl) {
               console.log('📧 Report URL:', data.reportUrl);
+              
+              // If email wasn't sent, show the URL to user
+              if (!data.emailSent) {
+                console.warn('⚠️ Email not sent! Showing URL to user.');
+                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.reportUrl}`);
+              } else {
+                console.log('✅ Email sent successfully to your inbox!');
+              }
             }
           })
           .catch(err => {
