@@ -4170,6 +4170,105 @@ function App() {
                     {paymentSuccessLast7Summary.screenshots ?? "–"}
                   </span>
                 </div>
+                <div
+                  style={{
+                    background: "#0f172a",
+                    borderRadius: 16,
+                    padding: "10px 12px",
+                    color: "#f9fafb",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    minHeight: 70,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: "#22c55e",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.8,
+                      }}
+                    >
+                      Trend
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 700,
+                      color: "#22c55e",
+                    }}
+                  >
+                    +86%
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.7,
+                      marginTop: 4,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    Increase in visits vs. previous period
+                  </span>
+                </div>
+                <div
+                  style={{
+                    background: "#0f172a",
+                    borderRadius: 16,
+                    padding: "10px 12px",
+                    color: "#f9fafb",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    minHeight: 70,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Activity Peak
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 700,
+                      color: "#3b82f6",
+                    }}
+                  >
+                    6:30pm
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.7,
+                      marginTop: 4,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    Peak hours for visits
+                  </span>
+                </div>
               </div>
             </div>
           </section>
