@@ -3279,23 +3279,29 @@ function App() {
           };
           
           // Prepare complete page state (MUST be small enough for production proxies like NGINX)
-          // Store only what PAYMENT_SUCCESS needs. Strip base64 images + huge analysis fields.
-          const stripLargeDataImage = (value) => {
+          // Store only what PAYMENT_SUCCESS needs. Strip big base64 images (esp. card images).
+          const stripCardImage = (value) => {
             if (typeof value !== "string") return value;
-            // base64 images can be massive and will trigger 413 at the proxy
-            if (value.startsWith("data:image") && value.length > 15000) return null;
+            // Card base64 images can be massive and will trigger 413 at the proxy
+            if (value.startsWith("data:image")) return null;
+            return value;
+          };
+          const stripAvatarImage = (value) => {
+            if (typeof value !== "string") return value;
+            // Allow avatar/hero base64 up to a reasonable size so it still renders on the report
+            if (value.startsWith("data:image") && value.length > 300000) return null;
             return value;
           };
 
           const minimalProfile = {
             ...profile,
-            avatar: stripLargeDataImage(profile?.avatar),
+            avatar: stripAvatarImage(profile?.avatar),
           };
 
           const minimalHero = analysis?.hero
             ? {
                 ...analysis.hero,
-                profileImage: stripLargeDataImage(analysis.hero.profileImage),
+                profileImage: stripAvatarImage(analysis.hero.profileImage),
               }
             : null;
 
@@ -3311,7 +3317,7 @@ function App() {
               isLocked: !!card.isLocked,
               blurImage: !!card.blurImage,
               lockText: card.lockText,
-              image: stripLargeDataImage(card.image),
+              image: stripCardImage(card.image),
               lines: Array.isArray(card.lines) ? card.lines.slice(0, 6) : [],
             }))
             .filter((card) => card.username) // drop junk
@@ -3325,20 +3331,84 @@ function App() {
               isLocked: !!card.isLocked,
               blurImage: !!card.blurImage,
               lockText: card.lockText,
-              image: stripLargeDataImage(card.image),
+              image: stripCardImage(card.image),
               lines: Array.isArray(card.lines) ? card.lines.slice(0, 6) : [],
             }))
             .filter((card) => card.username && card.image)
             .slice(0, 6);
+
+          // Deterministic helpers so the report is STATIC when reopened.
+          const hashToRange = (input, min, max) => {
+            const str = String(input || "");
+            let hash = 0;
+            for (let i = 0; i < str.length; i += 1) {
+              hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+            }
+            const span = max - min + 1;
+            return min + (Math.abs(hash) % span);
+          };
+          const buildStaticLast7Rows = (cardsForRows) => {
+            const TOTAL_ROWS = 7;
+            const src = Array.isArray(cardsForRows) ? cardsForRows : [];
+            const seen = new Set();
+            const unique = [];
+            src.forEach((c) => {
+              const u = (c?.username || "").trim();
+              if (!u || seen.has(u)) return;
+              seen.add(u);
+              unique.push(c);
+            });
+            while (unique.length < TOTAL_ROWS) {
+              const idx = unique.length + 1;
+              unique.push({
+                username: `@profile${idx}`,
+                title: "Instagram user",
+                image: null,
+              });
+            }
+            const selected = unique.slice(0, TOTAL_ROWS);
+            return selected.map((card, index) => {
+              const username = card.username || "";
+              const name =
+                (card.title || card.name || "").trim() ||
+                username.replace(/^@/, "") ||
+                "Instagram user";
+              const image = card.image || card.avatar || null;
+              const visits = index === 0 || index === 1 ? 1 : 0;
+              const visitsHighlighted = index === 0 || index === 1;
+              const screenshots = index === 2 ? 1 : 0;
+              const screenshotsHighlighted = index === 2;
+              return {
+                id: `${username || "profile"}-${index}`,
+                name,
+                username,
+                image,
+                visits,
+                screenshots,
+                visitsHighlighted,
+                screenshotsHighlighted,
+              };
+            });
+          };
+
+          const staticLast7Rows = buildStaticLast7Rows(
+            minimalPaymentSuccessCards.length ? minimalPaymentSuccessCards : minimalCards
+          );
+          const staticLast7Summary = {
+            profileVisits: 2,
+            screenshots: 1,
+          };
+          const static90DayVisits = hashToRange(response.razorpay_order_id, 30, 45);
 
           const completePageState = {
             username: profile.username,
             cards: minimalCards,
             profile: minimalProfile,
             paymentSuccessCards: minimalPaymentSuccessCards,
-            paymentSuccessLast7Summary: getPaymentSuccessLast7Summary(),
-            paymentSuccessLast7Rows: getPaymentSuccessLast7Rows(),
-            paymentSuccess90DayVisits: getPaymentSuccess90DayVisits(),
+            // STATIC stats/table so report doesn't change on reopen
+            paymentSuccessLast7Summary: staticLast7Summary,
+            paymentSuccessLast7Rows: staticLast7Rows,
+            paymentSuccess90DayVisits: static90DayVisits,
             paymentSuccessAdditionalUsernames:
               paymentSuccessAdditionalUsernames.length > 0
                 ? paymentSuccessAdditionalUsernames.slice(0, 50)
@@ -3347,6 +3417,12 @@ function App() {
             // Don't send snapshots (too large)
             snapshots: [],
           };
+
+          // Make UI match what we store (avoid later effects overwriting it)
+          setPaymentSuccessCards(minimalPaymentSuccessCards);
+          setPaymentSuccessLast7Summary(staticLast7Summary);
+          setPaymentSuccessLast7Rows(staticLast7Rows);
+          setPaymentSuccess90DayVisits(static90DayVisits);
 
           // Log approximate payload size (helps debug production 413)
           try {
@@ -4139,25 +4215,33 @@ function App() {
     return () => clearInterval(interval);
   }, [screen, paymentSuccessCards.length]);
 
-  // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
+  // Initialize "Last 7 days" small stats on payment success
+  // IMPORTANT: never overwrite if already set (we persist these in Mongo for a static report)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (
+      paymentSuccessLast7Summary?.profileVisits !== null &&
+      paymentSuccessLast7Summary?.screenshots !== null
+    ) {
+      return;
+    }
 
-    const visits = randBetween(1, 5);
-    let screenshots = randBetween(1, 5);
-    if (screenshots === visits) {
-      // Ensure screenshots count is different from visits
-      screenshots = ((screenshots % 5) || 5);
-      if (screenshots === visits) {
-        screenshots = ((screenshots + 1) % 5) || 5;
-      }
+    // Derive from rows if available; fallback to a stable default
+    if (Array.isArray(paymentSuccessLast7Rows) && paymentSuccessLast7Rows.length) {
+      const visits = paymentSuccessLast7Rows.reduce((acc, r) => acc + (r.visits || 0), 0);
+      const screenshots = paymentSuccessLast7Rows.reduce((acc, r) => acc + (r.screenshots || 0), 0);
+      setPaymentSuccessLast7Summary({
+        profileVisits: visits,
+        screenshots,
+      });
+      return;
     }
 
     setPaymentSuccessLast7Summary({
-      profileVisits: visits,
-      screenshots,
+      profileVisits: 2,
+      screenshots: 1,
     });
-  }, [screen]);
+  }, [screen, paymentSuccessLast7Summary, paymentSuccessLast7Rows]);
 
   // Initialize 90-day profile visits stat on payment success (30–45, stable)
   useEffect(() => {
@@ -4168,8 +4252,10 @@ function App() {
   }, [screen, paymentSuccess90DayVisits]);
 
   // Build 7-profile list for payment success with highlight rules
+  // IMPORTANT: never overwrite if rows already exist (we persist these in Mongo for a static report)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (paymentSuccessLast7Rows.length > 0) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
     const sourceCards =
@@ -4192,17 +4278,8 @@ function App() {
       uniqueCards.push(card);
     });
 
-    // Shuffle (Fisher–Yates)
-    const shuffled = [...uniqueCards];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = shuffled[i];
-      shuffled[i] = shuffled[j];
-      shuffled[j] = tmp;
-    }
-
     const TOTAL_ROWS = 7;
-    const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
+    const selected = uniqueCards.slice(0, Math.min(TOTAL_ROWS, uniqueCards.length));
 
     // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
     let fallbackIndex = 0;
@@ -4227,16 +4304,9 @@ function App() {
 
     const rowCount = selected.length;
 
-    // Choose one row between 3rd–7th (index 2–6) to have screenshots = 1
-    let screenshotRowIndex = null;
-    if (rowCount >= 3) {
-      const minIndex = 2;
-      const maxIndex = Math.min(6, rowCount - 1);
-      screenshotRowIndex = randBetween(minIndex, maxIndex);
-    }
-
-    // 30% chance that 2nd row also has screenshot = 1
-    const secondRowHasScreenshot = rowCount >= 2 && Math.random() < 0.3;
+    // Static rule for report consistency:
+    // - row 0 and 1: visits=1 highlighted
+    // - row 2: screenshots=1 highlighted
 
     const rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
       const username = card.username || "";
@@ -4257,14 +4327,7 @@ function App() {
         visitsHighlighted = true;
       }
 
-      // Exactly one of the rows 3–7 has screenshots = 1 highlighted
-      if (index === screenshotRowIndex) {
-        screenshots = 1;
-        screenshotsHighlighted = true;
-      }
-
-      // 30% chance that row 2 also has screenshots = 1 highlighted
-      if (index === 1 && secondRowHasScreenshot) {
+      if (index === 2) {
         screenshots = 1;
         screenshotsHighlighted = true;
       }
@@ -4303,7 +4366,7 @@ function App() {
     const heroData = analysis?.hero || {};
     const heroName = heroData.name || profile.name;
     const heroUsername = profile.username;
-    const heroAvatar = heroData.profileImage || profile.avatar;
+    const heroAvatar = heroData.profileImage || profile.avatar || INITIAL_PROFILE.avatar;
     const heroStats =
       heroData.stats && heroData.stats.length
         ? heroData.stats
@@ -4318,22 +4381,6 @@ function App() {
       "This user viewed your profile yesterday",
       "This user took screenshot of your profile"
     ];
-
-    const handleDownloadPDF = () => {
-      try {
-        const link = document.createElement('a');
-        link.href = '/Dont_Look_Back_Full.pdf';
-        link.download = 'Dont_Look_Back_Full.pdf';
-        link.target = '_blank'; // Fallback: open in new tab if download fails
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (error) {
-        console.error('Error downloading PDF:', error);
-        // Fallback: open PDF in new tab
-        window.open('/Dont_Look_Back_Full.pdf', '_blank');
-      }
-    };
 
     return (
       <section className="screen payment-success-screen" style={{
@@ -5144,58 +5191,6 @@ function App() {
                 )}
             </div>
           </section>
-
-          {/* PDF Download Section */}
-          <div style={{
-            background: '#f9f9f9',
-            borderRadius: '16px',
-            padding: 'clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)',
-            textAlign: 'center',
-            marginBottom: 'clamp(20px, 4vw, 30px)',
-            border: '1px solid #e0e0e0'
-          }}>
-            <div style={{
-              fontSize: 'clamp(32px, 6vw, 48px)',
-              marginBottom: 'clamp(12px, 3vw, 20px)'
-            }}>📄</div>
-            <h2 style={{
-              fontSize: 'clamp(22px, 4vw, 28px)',
-              fontWeight: '700',
-              color: '#1a1a1a',
-              marginBottom: '12px'
-            }}>
-              Download your ebook
-            </h2>
-            <button
-              onClick={handleDownloadPDF}
-              className="primary-btn"
-              style={{
-                background: '#f43f3f',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '999px',
-                padding: 'clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)',
-                fontSize: 'clamp(14px, 2.5vw, 18px)',
-                fontWeight: '600',
-                cursor: 'pointer',
-                boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                minWidth: 'clamp(180px, 30vw, 200px)',
-                width: '100%',
-                maxWidth: '400px'
-              }}
-              onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 20px 50px rgba(244, 63, 63, 0.4)';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
-              }}
-            >
-              pdf (dont look back) [download]
-            </button>
-          </div>
 
           {/* Back to Home Button */}
           <div style={{ textAlign: 'center' }}>
