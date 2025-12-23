@@ -390,11 +390,15 @@ app.post("/api/payment/create-order", async (req, res) => {
 
 // Verify payment signature endpoint
 app.post("/api/payment/verify-payment", async (req, res) => {
+  log(`🔔 Payment verification endpoint called`);
+  log(`📦 Request body: ${JSON.stringify(req.body)}`);
+  
   // Ensure we always return JSON, even on errors
   try {
     const { orderId, paymentId, signature } = req.body;
 
     if (!orderId || !paymentId || !signature) {
+      log(`❌ Missing parameters: orderId=${!!orderId}, paymentId=${!!paymentId}, signature=${!!signature}`);
       return res.status(400).json({ 
         success: false,
         error: 'Missing required payment verification parameters' 
