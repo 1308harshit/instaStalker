@@ -3149,32 +3149,27 @@ function App() {
             snapshots: snapshots.length > 0 ? snapshots : []
           };
           
-          console.log('🎉 RAZORPAY PAYMENT SUCCESS - Sending to backend...');
+          console.log('🎉 RAZORPAY PAYMENT SUCCESS!');
           
           // Show success page IMMEDIATELY
           setScreen(SCREEN.PAYMENT_SUCCESS);
           
-          // Send verification to backend (fire and forget - email will be sent in background)
-          fetch(`/api/payment/verify-payment`, {
+          // Send email in background (simple, no verification)
+          fetch(`/api/payment/send-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              // Send complete page state
               pageState: completePageState
             }),
           })
           .then(res => res.json())
           .then(data => {
-            console.log('✅ Backend response:', data);
-            if (data.postPurchaseLink) {
-              console.log('📧 Email will be sent to user');
-            }
+            console.log('✅ Email sent:', data);
           })
           .catch(err => {
-            console.error('❌ Background verification error (non-blocking):', err);
+            console.error('❌ Email error:', err);
           });
         },
         prefill: {

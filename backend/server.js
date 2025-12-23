@@ -388,7 +388,92 @@ app.post("/api/payment/create-order", async (req, res) => {
   }
 });
 
-// Verify payment signature endpoint
+// Simple endpoint: just send email after payment
+app.post("/api/payment/send-email", async (req, res) => {
+  const { orderId, paymentId, pageState } = req.body;
+  
+  log(`📧 Send email request: orderId=${orderId}, paymentId=${paymentId}`);
+  
+  try {
+    const database = await connectDB();
+    if (!database) {
+      log('❌ Database not available');
+      return res.json({ success: false, error: 'Database not available' });
+    }
+    
+    const collection = database.collection(COLLECTION_NAME);
+    
+    // Get user info from database
+    const order = await collection.findOne({ razorpayOrderId: orderId });
+    if (!order) {
+      log(`❌ Order not found: ${orderId}`);
+      return res.json({ success: false, error: 'Order not found' });
+    }
+    
+    if (!order.email) {
+      log(`❌ Email not found for order: ${orderId}`);
+      return res.json({ success: false, error: 'Email not found' });
+    }
+    
+    log(`✅ Found order for: ${order.email}`);
+    
+    // Generate post-purchase link
+    const accessToken = crypto.randomBytes(32).toString('hex');
+    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
+    
+    log(`📝 Generated post-purchase link: ${postPurchaseLink}`);
+    
+    // Update database with payment info and page state
+    await collection.updateOne(
+      { razorpayOrderId: orderId },
+      { 
+        $set: { 
+          status: "paid",
+          paymentId: paymentId,
+          postPurchaseLink: postPurchaseLink,
+          accessToken: accessToken,
+          pageState: pageState,
+          paidAt: new Date(),
+          emailSent: false
+        } 
+      }
+    );
+    
+    log(`✅ Database updated for order: ${orderId}`);
+    
+    // Send email immediately
+    log(`📧 Sending email to: ${order.email}`);
+    const emailResult = await sendPostPurchaseEmail(order.email, order.fullName || 'Customer', postPurchaseLink);
+    
+    if (emailResult) {
+      log(`✅ Email sent successfully to ${order.email}`);
+      // Update emailSent flag
+      await collection.updateOne(
+        { razorpayOrderId: orderId },
+        { $set: { emailSent: true, emailSentAt: new Date() } }
+      );
+      
+      return res.json({ 
+        success: true, 
+        message: 'Email sent successfully',
+        postPurchaseLink: postPurchaseLink
+      });
+    } else {
+      log(`⚠️ Email sending failed for ${order.email}`);
+      return res.json({ 
+        success: false, 
+        error: 'Email sending failed'
+      });
+    }
+    
+  } catch (err) {
+    log(`❌ Error in send-email: ${err.message}`);
+    log(`❌ Stack: ${err.stack}`);
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+// Verify payment signature endpoint (OLD - keeping for backward compatibility)
 app.post("/api/payment/verify-payment", async (req, res) => {
   log(`🔔 Payment verification endpoint called`);
   log(`📦 Request body: ${JSON.stringify(req.body)}`);
