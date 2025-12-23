@@ -416,7 +416,7 @@ function App() {
       
       const loadReportData = async () => {
         try {
-          const apiUrl = `/api/report/${token}`;
+          const apiUrl = `${API_BASE}/api/report/${token}`;
           console.log('📡 Fetching report data from:', apiUrl);
           
           const response = await fetch(apiUrl);
@@ -521,7 +521,7 @@ function App() {
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -656,11 +656,6 @@ function App() {
 
   // Restore last successful scrape when returning from payment (only if NOT report/post-purchase link)
   useEffect(() => {
-    // If we're on /post-purchase, data comes from MongoDB; never load from localStorage here
-    if (typeof window !== "undefined" && window.location.pathname === "/post-purchase") {
-      return;
-    }
-
     // Skip if we're on report link
     const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
     if (reportMatch) {
@@ -3324,13 +3319,13 @@ function App() {
           })
           .then(data => {
             console.log('✅ Payment verified:', data);
-            if (data.postPurchaseLink) {
-              console.log('📧 Post-purchase link:', data.postPurchaseLink);
+            if (data.reportUrl) {
+              console.log('📧 Report URL:', data.reportUrl);
               
               // If email wasn't sent, show the URL to user
               if (!data.emailSent) {
                 console.warn('⚠️ Email not sent! Showing URL to user.');
-                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.postPurchaseLink}`);
+                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.reportUrl}`);
               } else {
                 console.log('✅ Email sent successfully to your inbox!');
               }
@@ -4250,22 +4245,6 @@ function App() {
       "This user took screenshot of your profile"
     ];
 
-    const handleDownloadPDF = () => {
-      try {
-        const link = document.createElement('a');
-        link.href = '/Dont_Look_Back_Full.pdf';
-        link.download = 'Dont_Look_Back_Full.pdf';
-        link.target = '_blank'; // Fallback: open in new tab if download fails
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (error) {
-        console.error('Error downloading PDF:', error);
-        // Fallback: open PDF in new tab
-        window.open('/Dont_Look_Back_Full.pdf', '_blank');
-      }
-    };
-
     return (
       <section className="screen payment-success-screen" style={{
         maxWidth: '100%',
@@ -5075,58 +5054,6 @@ function App() {
                 )}
             </div>
           </section>
-
-          {/* PDF Download Section */}
-          <div style={{
-            background: '#f9f9f9',
-            borderRadius: '16px',
-            padding: 'clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)',
-            textAlign: 'center',
-            marginBottom: 'clamp(20px, 4vw, 30px)',
-            border: '1px solid #e0e0e0'
-          }}>
-            <div style={{
-              fontSize: 'clamp(32px, 6vw, 48px)',
-              marginBottom: 'clamp(12px, 3vw, 20px)'
-            }}>📄</div>
-            <h2 style={{
-              fontSize: 'clamp(22px, 4vw, 28px)',
-              fontWeight: '700',
-              color: '#1a1a1a',
-              marginBottom: '12px'
-            }}>
-              Download your ebook
-            </h2>
-            <button
-              onClick={handleDownloadPDF}
-              className="primary-btn"
-              style={{
-                background: '#f43f3f',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '999px',
-                padding: 'clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)',
-                fontSize: 'clamp(14px, 2.5vw, 18px)',
-                fontWeight: '600',
-                cursor: 'pointer',
-                boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                minWidth: 'clamp(180px, 30vw, 200px)',
-                width: '100%',
-                maxWidth: '400px'
-              }}
-              onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 20px 50px rgba(244, 63, 63, 0.4)';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
-              }}
-            >
-              pdf (dont look back) [download]
-            </button>
-          </div>
 
           {/* Back to Home Button */}
           <div style={{ textAlign: 'center' }}>
