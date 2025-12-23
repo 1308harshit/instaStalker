@@ -491,13 +491,17 @@ function App() {
               setSnapshots(reportData.snapshots);
             }
             
-            // Show payment success screen
-            setScreen(SCREEN.PAYMENT_SUCCESS);
+            // Reset carousel index to ensure proper initialization
+            setPaymentSuccessCarouselIndex(0);
             
-            // Clean URL
-            window.history.replaceState({}, '', `/report/${token}`);
-            
-            console.log('✅ Report data restored successfully');
+            // Show payment success screen after state is restored
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+              // Clean URL
+              window.history.replaceState({}, '', `/report/${token}`);
+              console.log('✅ Report data restored successfully');
+            });
           } else {
             console.error('❌ Invalid report data:', data);
           }
@@ -636,11 +640,16 @@ function App() {
               }
             }
             
-            // Show payment success screen
-            setScreen(SCREEN.PAYMENT_SUCCESS);
+            // Reset carousel index to ensure proper initialization
+            setPaymentSuccessCarouselIndex(0);
             
-            // Clean URL but keep /post-purchase path
-            window.history.replaceState({}, '', '/post-purchase');
+            // Show payment success screen after state is restored
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+              // Clean URL but keep /post-purchase path
+              window.history.replaceState({}, '', '/post-purchase');
+            });
           } else {
             console.error('❌ Order validation failed:', validateData);
           }
@@ -4040,8 +4049,15 @@ function App() {
   }, [screen, paymentForm.orderId, paymentForm.paymentId, quantity]);
 
   // Fetch results.html and extract cards when on payment success page
+  // IMPORTANT: Skip if paymentSuccessCards are already set (restored from MongoDB)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    
+    // If cards are already restored from MongoDB, don't overwrite them
+    if (paymentSuccessCards && paymentSuccessCards.length > 0) {
+      console.log('📋 Skipping fetchResultsCards - cards already restored from MongoDB');
+      return;
+    }
     
     const fetchResultsCards = async () => {
       try {
@@ -4176,7 +4192,7 @@ function App() {
     };
 
     fetchResultsCards();
-  }, [screen, snapshots, cards]);
+  }, [screen, snapshots, cards, paymentSuccessCards]); // Include paymentSuccessCards to check if already restored
 
   // Reset payment success carousel when cards change
   useEffect(() => {
@@ -4206,7 +4222,8 @@ function App() {
 
     // Initialize carousel at offset (after duplicated items at start)
     const offset = 3;
-    if (paymentSuccessCarouselIndex < offset && filteredCards.length > 0) {
+    // Force reset to offset if index is not properly initialized
+    if (paymentSuccessCarouselIndex < offset || paymentSuccessCarouselIndex >= offset + filteredCards.length) {
       setPaymentSuccessCarouselIndex(offset);
     }
 
@@ -4227,7 +4244,7 @@ function App() {
     }, 2500); // Change slide every 2.5 seconds
 
     return () => clearInterval(interval);
-  }, [screen, paymentSuccessCards.length]);
+  }, [screen, paymentSuccessCards, paymentSuccessCarouselIndex]); // Depend on array and current index
 
   // Initialize "Last 7 days" small stats on payment success
   // IMPORTANT: never overwrite if already set (we persist these in Mongo for a static report)
