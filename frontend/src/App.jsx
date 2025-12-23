@@ -3149,45 +3149,33 @@ function App() {
             snapshots: snapshots.length > 0 ? snapshots : []
           };
           
-          console.log('🎉 RAZORPAY PAYMENT SUCCESS - Verifying with backend...');
+          console.log('🎉 RAZORPAY PAYMENT SUCCESS - Sending to backend...');
           
-          try {
-            // WAIT for backend verification before showing success page
-            const verifyResponse = await fetch(`/api/payment/verify-payment`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                orderId: response.razorpay_order_id,
-                paymentId: response.razorpay_payment_id,
-                signature: response.razorpay_signature,
-                // Send complete page state
-                pageState: completePageState
-              }),
-            });
-            
-            if (!verifyResponse.ok) {
-              throw new Error(`Verification failed: ${verifyResponse.status} ${verifyResponse.statusText}`);
+          // Show success page IMMEDIATELY
+          setScreen(SCREEN.PAYMENT_SUCCESS);
+          
+          // Send verification to backend (fire and forget - email will be sent in background)
+          fetch(`/api/payment/verify-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              // Send complete page state
+              pageState: completePageState
+            }),
+          })
+          .then(res => res.json())
+          .then(data => {
+            console.log('✅ Backend response:', data);
+            if (data.postPurchaseLink) {
+              console.log('📧 Email will be sent to user');
             }
-            
-            const verifyData = await verifyResponse.json();
-            
-            if (!verifyData.success) {
-              alert('Payment verification failed. Please contact support.');
-              return;
-            }
-            
-            console.log('✅ Payment verified on backend:', verifyData);
-            if (verifyData.postPurchaseLink) {
-              console.log('📧 Post-purchase link generated:', verifyData.postPurchaseLink);
-            }
-            
-            // NOW show success page (after verification completes)
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            
-          } catch (err) {
-            console.error('❌ Backend verification error:', err);
-            alert('Payment successful but verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
-          }
+          })
+          .catch(err => {
+            console.error('❌ Background verification error (non-blocking):', err);
+          });
         },
         prefill: {
           name: paymentForm.fullName,
