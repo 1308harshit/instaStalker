@@ -432,6 +432,23 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
           
+          // FIRST: Retrieve user data BEFORE updating (to get email)
+          const order = await collection.findOne({ razorpayOrderId: orderId });
+          if (order) {
+            userData = {
+              email: order.email,
+              phone: order.phoneNumber,
+              ip: req.ip || req.connection.remoteAddress,
+              userAgent: req.headers['user-agent'],
+            };
+            userEmail = order.email;
+            userFullName = order.fullName || 'Customer';
+            orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
+            log(`✅ Retrieved user data from database: email=${userEmail}, name=${userFullName}`);
+          } else {
+            log(`⚠️ Order ${orderId} not found in database`);
+          }
+          
           // Get complete page state from request body (frontend will send it)
           const { 
             username, 
@@ -480,30 +497,12 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           
           log(`💾 Updating order ${orderId} with page state data`);
           
-          const updateResult = await collection.updateOne(
+          await collection.updateOne(
             { razorpayOrderId: orderId },
             { $set: updateData }
           );
           
-          if (updateResult.matchedCount > 0) {
-            log(`✅ Database updated: Order ${orderId} marked as paid with profile data`);
-            
-            // Retrieve user data for Meta CAPI and email
-            const order = await collection.findOne({ razorpayOrderId: orderId });
-            if (order) {
-              userData = {
-                email: order.email,
-                phone: order.phoneNumber,
-                ip: req.ip || req.connection.remoteAddress,
-                userAgent: req.headers['user-agent'],
-              };
-              userEmail = order.email;
-              userFullName = order.fullName || 'Customer';
-              orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
-            }
-          } else {
-            log(`⚠️ Order ${orderId} not found in database (may have been created without user data)`);
-          }
+          log(`✅ Database updated: Order ${orderId} marked as paid with profile data`);
         } else {
           log(`⚠️ MongoDB not available, skipping database update`);
         }
@@ -512,42 +511,42 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send post-purchase email (MANDATORY - ensure it's called)
+      // Send post-purchase email IMMEDIATELY after payment verification
       if (userEmail && postPurchaseLink) {
-        log(`📧 Calling sendPostPurchaseEmail for: ${userEmail}`);
+        log(`📧 Sending email immediately to: ${userEmail}`);
         log(`📧 Post-purchase link: ${postPurchaseLink}`);
         
-        // Call email function - ensure it executes
-        sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink)
-          .then((emailResult) => {
-            if (emailResult) {
-              log(`✅ Email sent successfully to ${userEmail}`);
-              // Update emailSent flag in database
-              connectDB().then((database) => {
-                if (database) {
-                  const collection = database.collection(COLLECTION_NAME);
-                  collection.updateOne(
-                    { razorpayOrderId: orderId },
-                    { $set: { emailSent: true, emailSentAt: new Date() } }
-                  ).then(() => {
-                    log(`✅ Email sent flag updated in database for order ${orderId}`);
-                  }).catch((dbErr) => {
-                    log(`⚠️ Failed to update emailSent flag: ${dbErr.message}`);
-                  });
-                }
-              }).catch((dbErr) => {
-                log(`⚠️ Failed to connect to database for emailSent update: ${dbErr.message}`);
-              });
-            } else {
-              log(`⚠️ Email sending returned null - check email configuration`);
+        try {
+          // Send email and wait for it to complete
+          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink);
+          
+          if (emailResult) {
+            log(`✅ Email sent successfully to ${userEmail}: ${emailResult.messageId}`);
+            
+            // Update emailSent flag in database
+            try {
+              const database = await connectDB();
+              if (database) {
+                const collection = database.collection(COLLECTION_NAME);
+                await collection.updateOne(
+                  { razorpayOrderId: orderId },
+                  { $set: { emailSent: true, emailSentAt: new Date() } }
+                );
+                log(`✅ Email sent flag updated in database for order ${orderId}`);
+              }
+            } catch (dbErr) {
+              log(`⚠️ Failed to update emailSent flag: ${dbErr.message}`);
             }
-          })
-          .catch((emailErr) => {
-            log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
-            log(`❌ Email error stack: ${emailErr.stack}`);
-          });
+          } else {
+            log(`⚠️ Email sending returned null - check email configuration`);
+          }
+        } catch (emailErr) {
+          log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
+          log(`❌ Email error stack: ${emailErr.stack}`);
+        }
       } else {
-        log(`⚠️ Missing email or postPurchaseLink - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
+        log(`⚠️ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
+        log(`⚠️ Order ID: ${orderId}`);
       }
       
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
