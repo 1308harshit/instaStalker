@@ -411,7 +411,7 @@ function App() {
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -3015,7 +3015,7 @@ function App() {
 
     try {
       // Save user data to MongoDB
-      const saveResponse = await fetch(`${API_BASE}/api/payment/save-user`, {
+      const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
@@ -3034,7 +3034,7 @@ function App() {
       // Create Razorpay order
       const amount = 99 * quantity; // 99₹ per item (will default to 99 if not provided)
       const orderResponse = await fetch(
-        `${API_BASE}/api/payment/create-order`,
+        `/api/payment/create-order`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3153,7 +3153,7 @@ function App() {
           
           try {
             // WAIT for backend verification before showing success page
-            const verifyResponse = await fetch(`${API_BASE}/api/payment/verify-payment`, {
+            const verifyResponse = await fetch(`/api/payment/verify-payment`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
