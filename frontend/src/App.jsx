@@ -416,7 +416,7 @@ function App() {
       
       const loadReportData = async () => {
         try {
-          const apiUrl = `${API_BASE}/api/report/${token}`;
+          const apiUrl = `/api/report/${token}`;
           console.log('📡 Fetching report data from:', apiUrl);
           
           const response = await fetch(apiUrl);
@@ -521,7 +521,7 @@ function App() {
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -656,6 +656,11 @@ function App() {
 
   // Restore last successful scrape when returning from payment (only if NOT report/post-purchase link)
   useEffect(() => {
+    // If we're on /post-purchase, data comes from MongoDB; never load from localStorage here
+    if (typeof window !== "undefined" && window.location.pathname === "/post-purchase") {
+      return;
+    }
+
     // Skip if we're on report link
     const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
     if (reportMatch) {
@@ -3273,22 +3278,91 @@ function App() {
             return [];
           };
           
-          // Prepare complete page state (optimized - no heavy HTML)
+          // Prepare complete page state (MUST be small enough for production proxies like NGINX)
+          // Store only what PAYMENT_SUCCESS needs. Strip base64 images + huge analysis fields.
+          const stripLargeDataImage = (value) => {
+            if (typeof value !== "string") return value;
+            // base64 images can be massive and will trigger 413 at the proxy
+            if (value.startsWith("data:image") && value.length > 15000) return null;
+            return value;
+          };
+
+          const minimalProfile = {
+            ...profile,
+            avatar: stripLargeDataImage(profile?.avatar),
+          };
+
+          const minimalHero = analysis?.hero
+            ? {
+                ...analysis.hero,
+                profileImage: stripLargeDataImage(analysis.hero.profileImage),
+              }
+            : null;
+
+          const minimalAnalysis = minimalHero ? { hero: minimalHero } : null;
+
+          // Keep cards lean: PAYMENT_SUCCESS only needs a small subset (and image+username)
+          const minimalCards = cards
+            .filter((card) => card && typeof card === "object")
+            .map((card) => ({
+              username: card.username,
+              title: card.title,
+              badge: card.badge,
+              isLocked: !!card.isLocked,
+              blurImage: !!card.blurImage,
+              lockText: card.lockText,
+              image: stripLargeDataImage(card.image),
+              lines: Array.isArray(card.lines) ? card.lines.slice(0, 6) : [],
+            }))
+            .filter((card) => card.username) // drop junk
+            .slice(0, 50); // hard cap to avoid huge payloads
+
+          const minimalPaymentSuccessCards = getPaymentSuccessCards()
+            .map((card) => ({
+              username: card.username,
+              title: card.title,
+              badge: card.badge,
+              isLocked: !!card.isLocked,
+              blurImage: !!card.blurImage,
+              lockText: card.lockText,
+              image: stripLargeDataImage(card.image),
+              lines: Array.isArray(card.lines) ? card.lines.slice(0, 6) : [],
+            }))
+            .filter((card) => card.username && card.image)
+            .slice(0, 6);
+
           const completePageState = {
             username: profile.username,
-            cards: cards,
-            profile: profile,
-            paymentSuccessCards: getPaymentSuccessCards(),
+            cards: minimalCards,
+            profile: minimalProfile,
+            paymentSuccessCards: minimalPaymentSuccessCards,
             paymentSuccessLast7Summary: getPaymentSuccessLast7Summary(),
             paymentSuccessLast7Rows: getPaymentSuccessLast7Rows(),
             paymentSuccess90DayVisits: getPaymentSuccess90DayVisits(),
-            paymentSuccessAdditionalUsernames: paymentSuccessAdditionalUsernames.length > 0 
-              ? paymentSuccessAdditionalUsernames 
-              : [],
-            analysis: analysis || null,
-            // Don't send snapshots (too large) - only metadata needed
-            snapshots: [] 
+            paymentSuccessAdditionalUsernames:
+              paymentSuccessAdditionalUsernames.length > 0
+                ? paymentSuccessAdditionalUsernames.slice(0, 50)
+                : [],
+            analysis: minimalAnalysis,
+            // Don't send snapshots (too large)
+            snapshots: [],
           };
+
+          // Log approximate payload size (helps debug production 413)
+          try {
+            const approxKb =
+              (JSON.stringify({
+                orderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+                pageState: completePageState,
+              }).length /
+                1024) |
+              0;
+            console.log(`📦 verify-payment payload ~${approxKb}kb`);
+          } catch (e) {
+            // ignore
+          }
           
           console.log('🎉 RAZORPAY PAYMENT SUCCESS!');
           
@@ -3319,13 +3393,13 @@ function App() {
           })
           .then(data => {
             console.log('✅ Payment verified:', data);
-            if (data.reportUrl) {
-              console.log('📧 Report URL:', data.reportUrl);
+            if (data.postPurchaseLink) {
+              console.log('📧 Post-purchase link:', data.postPurchaseLink);
               
               // If email wasn't sent, show the URL to user
               if (!data.emailSent) {
                 console.warn('⚠️ Email not sent! Showing URL to user.');
-                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.reportUrl}`);
+                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.postPurchaseLink}`);
               } else {
                 console.log('✅ Email sent successfully to your inbox!');
               }
@@ -4245,6 +4319,22 @@ function App() {
       "This user took screenshot of your profile"
     ];
 
+    const handleDownloadPDF = () => {
+      try {
+        const link = document.createElement('a');
+        link.href = '/Dont_Look_Back_Full.pdf';
+        link.download = 'Dont_Look_Back_Full.pdf';
+        link.target = '_blank'; // Fallback: open in new tab if download fails
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error downloading PDF:', error);
+        // Fallback: open PDF in new tab
+        window.open('/Dont_Look_Back_Full.pdf', '_blank');
+      }
+    };
+
     return (
       <section className="screen payment-success-screen" style={{
         maxWidth: '100%',
@@ -5054,6 +5144,58 @@ function App() {
                 )}
             </div>
           </section>
+
+          {/* PDF Download Section */}
+          <div style={{
+            background: '#f9f9f9',
+            borderRadius: '16px',
+            padding: 'clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)',
+            textAlign: 'center',
+            marginBottom: 'clamp(20px, 4vw, 30px)',
+            border: '1px solid #e0e0e0'
+          }}>
+            <div style={{
+              fontSize: 'clamp(32px, 6vw, 48px)',
+              marginBottom: 'clamp(12px, 3vw, 20px)'
+            }}>📄</div>
+            <h2 style={{
+              fontSize: 'clamp(22px, 4vw, 28px)',
+              fontWeight: '700',
+              color: '#1a1a1a',
+              marginBottom: '12px'
+            }}>
+              Download your ebook
+            </h2>
+            <button
+              onClick={handleDownloadPDF}
+              className="primary-btn"
+              style={{
+                background: '#f43f3f',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '999px',
+                padding: 'clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)',
+                fontSize: 'clamp(14px, 2.5vw, 18px)',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                minWidth: 'clamp(180px, 30vw, 200px)',
+                width: '100%',
+                maxWidth: '400px'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 20px 50px rgba(244, 63, 63, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
+              }}
+            >
+              pdf (dont look back) [download]
+            </button>
+          </div>
 
           {/* Back to Home Button */}
           <div style={{ textAlign: 'center' }}>

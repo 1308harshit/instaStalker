@@ -44,25 +44,25 @@ app.use(cors({
   origin: ["https://whoviewedmyprofile.in", "http://localhost:5173", "http://localhost:3000"],
   credentials: true
 }));
-// Body parsing (pageState can be large in production)
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+// For parsing JSON request bodies (pageState can be large)
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Always return JSON for body-parser errors (prevents frontend JSON parse failures)
+// Always return JSON for body parse errors (prevents HTML responses that break frontend JSON parsing)
 app.use((err, req, res, next) => {
   if (!err) return next();
-  if (err.type === 'entity.too.large') {
+  if (err.type === "entity.too.large") {
     return res.status(413).json({
       success: false,
-      error: 'Payload too large',
-      code: 'PAYLOAD_TOO_LARGE',
+      error: "Payload too large",
+      code: "PAYLOAD_TOO_LARGE",
     });
   }
-  if (err instanceof SyntaxError && 'body' in err) {
+  if (err instanceof SyntaxError && "body" in err) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid JSON payload',
-      code: 'INVALID_JSON',
+      error: "Invalid JSON payload",
+      code: "INVALID_JSON",
     });
   }
   return next(err);
@@ -418,21 +418,26 @@ app.post("/api/payment/create-order", async (req, res) => {
 // Verify payment signature endpoint - DOES EVERYTHING (verify + save + email) in ONE call
 app.post("/api/payment/verify-payment", async (req, res) => {
   log(`🔔 Payment verification endpoint called`);
-  // Avoid logging full body (pageState can be huge). Log only keys/metadata.
+  // Don't log full body (pageState can be huge); log only a safe summary
   try {
-    const bodyKeys = req.body ? Object.keys(req.body) : [];
-    log(`📦 Request body keys: ${bodyKeys.join(", ")}`);
-    if (req.body?.pageState) {
-      const ps = req.body.pageState;
-      log(`📦 pageState meta: cards=${ps?.cards?.length || 0}, hasProfile=${!!ps?.profile}, hasAnalysis=${!!ps?.analysis}`);
-    }
-  } catch {
+    const body = req.body || {};
+    log(`📦 Request body summary:`, {
+      hasOrderId: !!body.orderId,
+      hasPaymentId: !!body.paymentId,
+      hasSignature: !!body.signature,
+      hasPageState: !!body.pageState,
+      pageStateKeys:
+        body.pageState && typeof body.pageState === "object"
+          ? Object.keys(body.pageState).slice(0, 25)
+          : [],
+    });
+  } catch (e) {
     // ignore logging errors
   }
   
   // Ensure we always return JSON, even on errors
   try {
-    const { orderId, paymentId, signature, pageState } = req.body;
+    const { orderId, paymentId, signature } = req.body;
 
     if (!orderId || !paymentId || !signature) {
       log(`❌ Missing parameters: orderId=${!!orderId}, paymentId=${!!paymentId}, signature=${!!signature}`);
@@ -463,9 +468,9 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       let userEmail = '';
       let userFullName = '';
       
-      // Generate unique report link
+      // Generate unique post-purchase link (token + order)
       const accessToken = crypto.randomBytes(32).toString('hex');
-      const reportUrl = `${BASE_URL}/report/${accessToken}`;
+      const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
       
       // Update database after successful verification
       try {
@@ -484,21 +489,25 @@ app.post("/api/payment/verify-payment", async (req, res) => {
             };
             userEmail = order.email;
             userFullName = order.fullName || 'Customer';
-            // amount is stored in rupees in MongoDB
-            orderAmount = order.amount || 99;
+            orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
             log(`✅ Retrieved user data from database: email=${userEmail}, name=${userFullName}`);
           } else {
             log(`⚠️ Order ${orderId} not found in database`);
           }
           
           // Get complete page state from request body (frontend will send it)
-          const { username, cards, profile } = req.body;
+          const { 
+            username, 
+            cards, 
+            profile,
+            pageState // Complete page state object
+          } = req.body;
           
           const updateData = {
             status: "paid",
             paymentId: paymentId,
             verifiedAt: new Date(),
-            reportUrl: reportUrl,
+            postPurchaseLink: postPurchaseLink,
             accessToken: accessToken,
             emailSent: false,
             expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year expiry
@@ -551,13 +560,13 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       
       // Send report email IMMEDIATELY after payment verification
       let emailSent = false;
-      if (userEmail && reportUrl) {
+      if (userEmail && postPurchaseLink) {
         log(`📧 Sending email immediately to: ${userEmail}`);
-        log(`📧 Report link: ${reportUrl}`);
+        log(`📧 Post-purchase link: ${postPurchaseLink}`);
         
         try {
           // Send email and wait for it to complete
-          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, reportUrl);
+          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink);
           
           if (emailResult) {
             log(`✅ Email sent successfully to ${userEmail}: ${emailResult.messageId}`);
@@ -586,7 +595,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           log(`❌ Email error stack: ${emailErr.stack}`);
         }
       } else {
-        log(`❌ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, reportUrl: ${reportUrl ? 'SET' : 'NOT SET'}`);
+        log(`❌ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
         log(`⚠️ Order ID: ${orderId}`);
       }
       
@@ -598,7 +607,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         message: 'Payment verified successfully',
         orderId,
         paymentId,
-        reportUrl, // Return link in response (optional, for frontend use)
+        postPurchaseLink, // Return link in response (optional, for frontend use)
         emailSent, // Let frontend know if email was sent
       });
     } else {
@@ -717,6 +726,24 @@ app.get("/api/payment/post-purchase", async (req, res) => {
       }
       
       log(`✅ Post-purchase link validated: order=${order}`);
+
+      // Expiry check (if expiresAt exists)
+      if (orderDoc.expiresAt && new Date(orderDoc.expiresAt) < new Date()) {
+        return res.status(410).json({
+          success: false,
+          error: "This report has expired"
+        });
+      }
+
+      // Best-effort lastAccessedAt update
+      try {
+        await collection.updateOne(
+          { razorpayOrderId: order, accessToken: token },
+          { $set: { lastAccessedAt: new Date() } }
+        );
+      } catch (updateErr) {
+        log(`⚠️ Failed to update lastAccessedAt: ${updateErr.message}`);
+      }
       
       // Return complete page state if available (preferred)
       if (orderDoc.pageState && typeof orderDoc.pageState === 'object') {
@@ -1012,3 +1039,4 @@ app.listen(PORT, () => {
   log('⏱️  Expected response time: 30-60 seconds per request');
   log('🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)');
 });
+
