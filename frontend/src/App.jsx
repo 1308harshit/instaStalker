@@ -426,7 +426,14 @@ function App() {
             return;
           }
           
-          const data = await response.json();
+          const text = await response.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            console.error('❌ Server returned non-JSON:', text);
+            return;
+          }
           console.log('📋 Report data received:', {
             success: data.success,
             hasReportData: !!data.reportData
@@ -524,7 +531,14 @@ function App() {
             return;
           }
           
-          const validateData = await validateResponse.json();
+          const text = await validateResponse.text();
+          let validateData;
+          try {
+            validateData = JSON.parse(text);
+          } catch {
+            console.error('❌ Server returned non-JSON:', text);
+            return;
+          }
           console.log('📋 Order data received:', {
             success: validateData.success,
             hasPageState: !!validateData.pageState,
@@ -3134,9 +3148,14 @@ function App() {
       });
 
       if (!saveResponse.ok) {
-        const errorData = await saveResponse
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
+        const text = await saveResponse.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch {
+          console.error('❌ Server returned non-JSON:', text);
+          errorData = { error: "Unknown error" };
+        }
         throw new Error(errorData.error || "Failed to save user data");
       }
 
@@ -3161,16 +3180,28 @@ function App() {
       });
 
       if (!orderResponse.ok) {
-        const errorData = await orderResponse
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
+        const text = await orderResponse.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch {
+          console.error('❌ Server returned non-JSON:', text);
+          errorData = { error: "Unknown error" };
+        }
         console.error("Payment order error:", errorData);
         throw new Error(
           errorData.error || errorData.message || "Failed to create payment order"
         );
       }
 
-      const orderData = await orderResponse.json();
+      const text = await orderResponse.text();
+      let orderData;
+      try {
+        orderData = JSON.parse(text);
+      } catch {
+        console.error('❌ Server returned non-JSON:', text);
+        throw new Error('Invalid response from payment server');
+      }
       console.log("Razorpay order created:", orderData);
 
       if (!orderData.success || !orderData.orderId || !orderData.key) {
@@ -3273,7 +3304,17 @@ function App() {
               pageState: completePageState
             }),
           })
-          .then(res => res.json())
+          .then(async (res) => {
+            const text = await res.text();
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              console.error('❌ Server returned non-JSON:', text);
+              throw new Error('Invalid server response');
+            }
+            return data;
+          })
           .then(data => {
             console.log('✅ Email sent:', data);
           })
