@@ -416,7 +416,7 @@ function App() {
       
       const loadReportData = async () => {
         try {
-          const apiUrl = `${API_BASE}/api/report/${token}`;
+          const apiUrl = `/api/report/${token}`;
           console.log('📡 Fetching report data from:', apiUrl);
           
           const response = await fetch(apiUrl);
@@ -521,7 +521,7 @@ function App() {
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -656,6 +656,11 @@ function App() {
 
   // Restore last successful scrape when returning from payment (only if NOT report/post-purchase link)
   useEffect(() => {
+    // If we're on /post-purchase, data comes from MongoDB; never load from localStorage here
+    if (typeof window !== "undefined" && window.location.pathname === "/post-purchase") {
+      return;
+    }
+
     // Skip if we're on report link
     const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
     if (reportMatch) {
@@ -3319,13 +3324,13 @@ function App() {
           })
           .then(data => {
             console.log('✅ Payment verified:', data);
-            if (data.reportUrl) {
-              console.log('📧 Report URL:', data.reportUrl);
+            if (data.postPurchaseLink) {
+              console.log('📧 Post-purchase link:', data.postPurchaseLink);
               
               // If email wasn't sent, show the URL to user
               if (!data.emailSent) {
                 console.warn('⚠️ Email not sent! Showing URL to user.');
-                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.reportUrl}`);
+                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.postPurchaseLink}`);
               } else {
                 console.log('✅ Email sent successfully to your inbox!');
               }
