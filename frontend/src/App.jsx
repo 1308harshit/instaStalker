@@ -433,7 +433,25 @@ function App() {
           if (validateResponse.ok) {
             const validateData = await validateResponse.json();
             if (validateData.success) {
+              console.log('✅ Post-purchase link validated, loading order data');
+              
+              // Load order-specific data from backend (not localStorage)
+              if (validateData.cards && Array.isArray(validateData.cards) && validateData.cards.length > 0) {
+                setCards(validateData.cards);
+                setPaymentSuccessCards(validateData.cards);
+              }
+              
+              if (validateData.profile) {
+                setProfile((prev) => ({ ...prev, ...validateData.profile }));
+              }
+              
+              if (validateData.username) {
+                setUsernameInput(validateData.username.replace('@', ''));
+              }
+              
+              // Show payment success screen
               setScreen(SCREEN.PAYMENT_SUCCESS);
+              
               // Clean URL but keep /post-purchase path
               window.history.replaceState({}, '', '/post-purchase');
             }
@@ -2985,6 +3003,10 @@ function App() {
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
+              // Send current user's profile data
+              username: profile.username,
+              cards: cards,
+              profile: profile
             }),
           }).catch(err => console.log('Background verification:', err));
         },

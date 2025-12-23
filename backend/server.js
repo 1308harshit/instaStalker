@@ -403,18 +403,26 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
           
+          // Get profile data from request body (frontend will send it)
+          const { username, cards, profile } = req.body;
+          
+          const updateData = {
+            status: "paid",
+            paymentId: paymentId,
+            verifiedAt: new Date(),
+            postPurchaseLink: postPurchaseLink,
+            accessToken: accessToken,
+            emailSent: false
+          };
+          
+          // Add profile data if provided (store directly, not snapshotId)
+          if (username) updateData.username = username;
+          if (cards && Array.isArray(cards)) updateData.cards = cards;
+          if (profile) updateData.profile = profile;
+          
           const updateResult = await collection.updateOne(
             { razorpayOrderId: orderId },
-            { 
-              $set: { 
-                status: "paid", 
-                paymentId: paymentId,
-                verifiedAt: new Date(),
-                postPurchaseLink: postPurchaseLink,
-                accessToken: accessToken,
-                emailSent: false
-              } 
-            }
+            { $set: updateData }
           );
           
           if (updateResult.matchedCount > 0) {
@@ -532,7 +540,11 @@ app.get("/api/payment/post-purchase", async (req, res) => {
         success: true,
         orderId: orderDoc.razorpayOrderId,
         email: orderDoc.email,
-        fullName: orderDoc.fullName
+        fullName: orderDoc.fullName,
+        // Return stored profile data
+        username: orderDoc.username || null,
+        cards: orderDoc.cards || [],
+        profile: orderDoc.profile || null
       });
     } catch (dbErr) {
       log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
