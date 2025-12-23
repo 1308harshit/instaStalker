@@ -268,7 +268,24 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
 };
 
 function App() {
-  const [screen, setScreen] = useState(SCREEN.LANDING);
+  // Check for post-purchase link on initial mount (before setting screen state)
+  const getInitialScreen = () => {
+    if (typeof window === "undefined") return SCREEN.LANDING;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    // If we're on post-purchase route with token and order, start with LANDING
+    // but useEffect will handle validation and switch to PAYMENT_SUCCESS
+    if (token && order && window.location.pathname === '/post-purchase') {
+      return SCREEN.LANDING; // Start with LANDING, useEffect will change it
+    }
+    
+    return SCREEN.LANDING;
+  };
+  
+  const [screen, setScreen] = useState(getInitialScreen);
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [usernameInput, setUsernameInput] = useState("");
   const [cards, setCards] = useState([]);
@@ -398,35 +415,31 @@ function App() {
     }
   }, []);
 
-  // Handle post-purchase link access
+  // Handle post-purchase link access - check URL params on mount
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const order = urlParams.get('order');
     
-    // Only process if we're on the post-purchase route
-    if (token && order && window.location.pathname === '/post-purchase') {
+    // If we have token and order params, validate and show success screen
+    if (token && order) {
       const validatePostPurchase = async () => {
         try {
-          console.log('🔍 Validating post-purchase link:', { order, token: token.substring(0, 10) + '...' });
-          const validateResponse = await fetch(`${API_BASE}/api/payment/post-purchase?token=${token}&order=${order}`);
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const validateResponse = await fetch(apiUrl);
           
-          if (!validateResponse.ok) {
-            console.error('❌ Invalid post-purchase link');
-            // Stay on landing page or show error
-            return;
-          }
-          
-          const validateData = await validateResponse.json();
-          
-          if (validateData.success) {
-            console.log('✅ Post-purchase link validated, showing payment success screen');
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            // Clean URL params
-            window.history.replaceState({}, '', '/post-purchase');
+          if (validateResponse.ok) {
+            const validateData = await validateResponse.json();
+            if (validateData.success) {
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+              // Clean URL but keep /post-purchase path
+              window.history.replaceState({}, '', '/post-purchase');
+            }
           }
         } catch (err) {
-          console.error('❌ Error validating post-purchase link:', err);
+          console.error('Error validating post-purchase link:', err);
         }
       };
       
