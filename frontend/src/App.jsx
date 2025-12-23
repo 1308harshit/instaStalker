@@ -268,10 +268,17 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
 };
 
 function App() {
-  // Check for post-purchase link on initial mount (before setting screen state)
+  // Check for report/post-purchase link on initial mount (before setting screen state)
   const getInitialScreen = () => {
     if (typeof window === "undefined") return SCREEN.LANDING;
     
+    // Check for /report/:token route
+    const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
+    if (reportMatch) {
+      return SCREEN.LANDING; // Start with LANDING, useEffect will load report and change it
+    }
+    
+    // Check for legacy post-purchase link
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const order = urlParams.get('order');
@@ -397,21 +404,117 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Handle post-purchase link access FIRST - check URL params on mount
+  // Handle report link access FIRST - check URL path on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
     
+    // Check for new /report/:token format
+    const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
+    if (reportMatch) {
+      const token = reportMatch[1];
+      console.log('🔍 Report link detected, loading from MongoDB...');
+      
+      const loadReportData = async () => {
+        try {
+          const apiUrl = `${API_BASE}/api/report/${token}`;
+          console.log('📡 Fetching report data from:', apiUrl);
+          
+          const response = await fetch(apiUrl);
+          
+          if (!response.ok) {
+            console.error('❌ Failed to fetch report:', response.status);
+            return;
+          }
+          
+          const data = await response.json();
+          console.log('📋 Report data received:', {
+            success: data.success,
+            hasReportData: !!data.reportData
+          });
+          
+          if (data.success && data.reportData) {
+            const reportData = data.reportData;
+            
+            // Clear localStorage
+            try {
+              localStorage.removeItem(LAST_RUN_KEY);
+            } catch (e) {}
+            
+            // Restore complete page state
+            if (reportData.cards && Array.isArray(reportData.cards)) {
+              console.log(`📋 Restoring ${reportData.cards.length} cards`);
+              setCards(reportData.cards);
+            }
+            
+            if (reportData.profile) {
+              console.log(`📋 Restoring profile: ${reportData.profile.username}`);
+              setProfile((prev) => ({ ...prev, ...reportData.profile }));
+            }
+            
+            if (reportData.username) {
+              setUsernameInput(reportData.username.replace('@', ''));
+            }
+            
+            if (reportData.paymentSuccessCards && Array.isArray(reportData.paymentSuccessCards)) {
+              console.log(`📋 Restoring ${reportData.paymentSuccessCards.length} payment success cards`);
+              setPaymentSuccessCards(reportData.paymentSuccessCards);
+            }
+            
+            if (reportData.paymentSuccessLast7Summary) {
+              setPaymentSuccessLast7Summary(reportData.paymentSuccessLast7Summary);
+            }
+            
+            if (reportData.paymentSuccessLast7Rows && Array.isArray(reportData.paymentSuccessLast7Rows)) {
+              setPaymentSuccessLast7Rows(reportData.paymentSuccessLast7Rows);
+            }
+            
+            if (typeof reportData.paymentSuccess90DayVisits === 'number') {
+              setPaymentSuccess90DayVisits(reportData.paymentSuccess90DayVisits);
+            }
+            
+            if (reportData.paymentSuccessAdditionalUsernames && Array.isArray(reportData.paymentSuccessAdditionalUsernames)) {
+              setPaymentSuccessAdditionalUsernames(reportData.paymentSuccessAdditionalUsernames);
+            }
+            
+            if (reportData.analysis) {
+              setAnalysis(reportData.analysis);
+            }
+            
+            if (reportData.snapshots && Array.isArray(reportData.snapshots)) {
+              setSnapshots(reportData.snapshots);
+            }
+            
+            // Show payment success screen
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            
+            // Clean URL
+            window.history.replaceState({}, '', `/report/${token}`);
+            
+            console.log('✅ Report data restored successfully');
+          } else {
+            console.error('❌ Invalid report data:', data);
+          }
+        } catch (err) {
+          console.error('❌ Error loading report:', err);
+        }
+      };
+      
+      loadReportData();
+      return;
+    }
+    
+    // Check for legacy post-purchase link (backward compatibility)
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const order = urlParams.get('order');
     
     // If we have token and order params, load from backend (skip localStorage)
     if (token && order) {
-      console.log('🔍 Post-purchase link detected, loading from MongoDB...');
+      console.log('🔍 Legacy post-purchase link detected, loading from MongoDB...');
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -537,9 +640,15 @@ function App() {
     }
   }, []);
 
-  // Restore last successful scrape when returning from payment (only if NOT post-purchase link)
+  // Restore last successful scrape when returning from payment (only if NOT report/post-purchase link)
   useEffect(() => {
-    // Skip if we're on post-purchase link (already handled above)
+    // Skip if we're on report link
+    const reportMatch = window.location.pathname.match(/^\/report\/([a-f0-9]{64})$/i);
+    if (reportMatch) {
+      return;
+    }
+    
+    // Skip if we're on legacy post-purchase link
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const order = urlParams.get('order');

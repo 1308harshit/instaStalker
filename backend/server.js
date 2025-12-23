@@ -417,11 +417,11 @@ app.post("/api/payment/send-email", async (req, res) => {
     
     log(`✅ Found order for: ${order.email}`);
     
-    // Generate post-purchase link
+    // Generate report link with clean URL
     const accessToken = crypto.randomBytes(32).toString('hex');
-    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
+    const reportUrl = `${BASE_URL}/report/${accessToken}`;
     
-    log(`📝 Generated post-purchase link: ${postPurchaseLink}`);
+    log(`📝 Generated report link: ${reportUrl}`);
     
     // Update database with payment info and page state
     await collection.updateOne(
@@ -430,11 +430,12 @@ app.post("/api/payment/send-email", async (req, res) => {
         $set: { 
           status: "paid",
           paymentId: paymentId,
-          postPurchaseLink: postPurchaseLink,
+          reportUrl: reportUrl,
           accessToken: accessToken,
           pageState: pageState,
           paidAt: new Date(),
-          emailSent: false
+          emailSent: false,
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year expiry
         } 
       }
     );
@@ -443,7 +444,7 @@ app.post("/api/payment/send-email", async (req, res) => {
     
     // Send email immediately
     log(`📧 Sending email to: ${order.email}`);
-    const emailResult = await sendPostPurchaseEmail(order.email, order.fullName || 'Customer', postPurchaseLink);
+    const emailResult = await sendPostPurchaseEmail(order.email, order.fullName || 'Customer', reportUrl);
     
     if (emailResult) {
       log(`✅ Email sent successfully to ${order.email}`);
@@ -456,7 +457,7 @@ app.post("/api/payment/send-email", async (req, res) => {
       return res.json({ 
         success: true, 
         message: 'Email sent successfully',
-        postPurchaseLink: postPurchaseLink
+        reportUrl: reportUrl
       });
     } else {
       log(`⚠️ Email sending failed for ${order.email}`);
@@ -511,9 +512,9 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       let userEmail = '';
       let userFullName = '';
       
-      // Generate unique post-purchase link
+      // Generate unique report link
       const accessToken = crypto.randomBytes(32).toString('hex');
-      const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
+      const reportUrl = `${BASE_URL}/report/${accessToken}`;
       
       // Update database after successful verification
       try {
@@ -550,9 +551,10 @@ app.post("/api/payment/verify-payment", async (req, res) => {
             status: "paid",
             paymentId: paymentId,
             verifiedAt: new Date(),
-            postPurchaseLink: postPurchaseLink,
+            reportUrl: reportUrl,
             accessToken: accessToken,
-            emailSent: false
+            emailSent: false,
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year expiry
           };
           
           // Store complete page state if provided (preferred method)
@@ -600,14 +602,14 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send post-purchase email IMMEDIATELY after payment verification
-      if (userEmail && postPurchaseLink) {
+      // Send report email IMMEDIATELY after payment verification
+      if (userEmail && reportUrl) {
         log(`📧 Sending email immediately to: ${userEmail}`);
-        log(`📧 Post-purchase link: ${postPurchaseLink}`);
+        log(`📧 Report link: ${reportUrl}`);
         
         try {
           // Send email and wait for it to complete
-          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink);
+          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, reportUrl);
           
           if (emailResult) {
             log(`✅ Email sent successfully to ${userEmail}: ${emailResult.messageId}`);
@@ -634,7 +636,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           log(`❌ Email error stack: ${emailErr.stack}`);
         }
       } else {
-        log(`⚠️ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
+        log(`⚠️ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, reportUrl: ${reportUrl ? 'SET' : 'NOT SET'}`);
         log(`⚠️ Order ID: ${orderId}`);
       }
       
@@ -646,7 +648,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         message: 'Payment verified successfully',
         orderId,
         paymentId,
-        postPurchaseLink, // Return link in response (optional, for frontend use)
+        reportUrl, // Return link in response (optional, for frontend use)
       });
     } else {
       log(`❌ Payment verification failed - Invalid signature`);
@@ -667,7 +669,65 @@ app.post("/api/payment/verify-payment", async (req, res) => {
   }
 });
 
-// Validate post-purchase link endpoint
+// NEW: Get report by access token (clean URL approach)
+app.get("/api/report/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    if (!token || token.length < 32) {
+      return res.status(400).json({ error: "Invalid token" });
+    }
+    
+    log(`🔍 Fetching report for token: ${token.substring(0, 10)}...`);
+    
+    const database = await connectDB();
+    if (!database) {
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+    
+    const collection = database.collection(COLLECTION_NAME);
+    const order = await collection.findOne({ 
+      accessToken: token,
+      status: "paid"
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+    
+    // Check if expired
+    if (order.expiresAt && new Date() > new Date(order.expiresAt)) {
+      return res.status(410).json({ error: "Report has expired" });
+    }
+    
+    log(`✅ Report found for ${order.email}`);
+    
+    // Update last accessed time
+    await collection.updateOne(
+      { accessToken: token },
+      { $set: { lastAccessedAt: new Date() } }
+    );
+    
+    res.json({
+      success: true,
+      reportData: order.pageState || {
+        profile: order.profile,
+        cards: order.cards,
+        username: order.username
+      },
+      purchaseDate: order.verifiedAt,
+      customerName: order.fullName
+    });
+    
+  } catch (error) {
+    log(`❌ Error fetching report: ${error.message}`);
+    res.status(500).json({ 
+      error: "Failed to fetch report" 
+    });
+  }
+});
+
+// LEGACY: Validate post-purchase link endpoint (kept for backward compatibility)
 app.get("/api/payment/post-purchase", async (req, res) => {
   try {
     const { token, order } = req.query;
