@@ -3323,7 +3323,18 @@ function App() {
             .filter((card) => card.username) // drop junk
             .slice(0, 50); // hard cap to avoid huge payloads
 
-          const minimalPaymentSuccessCards = getPaymentSuccessCards()
+          // IMPORTANT: keep images for payment-success carousel + last-7 table so they show on reopen.
+          // We still cap/limit overall count to keep payload safe.
+          const cardsForRows = cards
+            .filter(
+              (card) =>
+                card &&
+                typeof card === "object" &&
+                !card?.isLocked &&
+                !card?.blurImage &&
+                card?.username &&
+                card?.image
+            )
             .map((card) => ({
               username: card.username,
               title: card.title,
@@ -3331,11 +3342,14 @@ function App() {
               isLocked: !!card.isLocked,
               blurImage: !!card.blurImage,
               lockText: card.lockText,
-              image: stripCardImage(card.image),
+              // allow base64 avatars here (up to stripAvatarImage limit)
+              image: stripAvatarImage(card.image),
               lines: Array.isArray(card.lines) ? card.lines.slice(0, 6) : [],
             }))
             .filter((card) => card.username && card.image)
-            .slice(0, 6);
+            .slice(0, 7); // we need 7 for the table
+
+          const minimalPaymentSuccessCards = cardsForRows.slice(0, 6);
 
           // Deterministic helpers so the report is STATIC when reopened.
           const hashToRange = (input, min, max) => {
@@ -3392,11 +3406,11 @@ function App() {
           };
 
           const staticLast7Rows = buildStaticLast7Rows(
-            minimalPaymentSuccessCards.length ? minimalPaymentSuccessCards : minimalCards
+            cardsForRows.length ? cardsForRows : minimalCards
           );
           const staticLast7Summary = {
-            profileVisits: 2,
-            screenshots: 1,
+            profileVisits: staticLast7Rows.reduce((acc, r) => acc + (r.visits || 0), 0),
+            screenshots: staticLast7Rows.reduce((acc, r) => acc + (r.screenshots || 0), 0),
           };
           const static90DayVisits = hashToRange(response.razorpay_order_id, 30, 45);
 
