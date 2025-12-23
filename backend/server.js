@@ -99,6 +99,20 @@ const emailTransporter = nodemailer.createTransport({
   } : undefined,
 });
 
+// Verify transporter ONCE at startup (not per email)
+if (EMAIL_USER && EMAIL_PASS) {
+  emailTransporter.verify()
+    .then(() => {
+      log("✅ Email transporter ready and verified");
+    })
+    .catch((err) => {
+      log(`❌ Email transporter verification failed at startup: ${err.message}`);
+      log(`⚠️ Emails may not send. Check EMAIL_USER and EMAIL_PASS in .env`);
+    });
+} else {
+  log(`⚠️ Email not configured - EMAIL_USER: ${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS: ${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+}
+
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
   if (!EMAIL_USER || !EMAIL_PASS) {
@@ -106,24 +120,14 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     return null;
   }
 
+  if (!emailTransporter) {
+    log(`❌ Email transporter not initialized`);
+    return null;
+  }
+
   try {
     log(`📧 Preparing to send email to ${email} from ${EMAIL_USER}`);
     log(`📧 Post-purchase link: ${postPurchaseLink}`);
-    
-    // Verify transporter is configured
-    if (!emailTransporter) {
-      log(`❌ Email transporter not initialized`);
-      return null;
-    }
-    
-    // Verify transporter connection
-    try {
-      await emailTransporter.verify();
-      log(`✅ Email transporter verified successfully`);
-    } catch (verifyErr) {
-      log(`❌ Email transporter verification failed: ${verifyErr.message}`);
-      return null;
-    }
 
     const mailOptions = {
       from: `"Insta Reports" <${EMAIL_USER}>`,
@@ -508,11 +512,12 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send post-purchase email (non-blocking, don't fail payment if email fails)
-      if (userEmail) {
-        log(`📧 Attempting to send email to: ${userEmail}`);
-        log(`📧 Email config check: EMAIL_USER=${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS=${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+      // Send post-purchase email (MANDATORY - ensure it's called)
+      if (userEmail && postPurchaseLink) {
+        log(`📧 Calling sendPostPurchaseEmail for: ${userEmail}`);
+        log(`📧 Post-purchase link: ${postPurchaseLink}`);
         
+        // Call email function - ensure it executes
         sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink)
           .then((emailResult) => {
             if (emailResult) {
@@ -534,15 +539,15 @@ app.post("/api/payment/verify-payment", async (req, res) => {
                 log(`⚠️ Failed to connect to database for emailSent update: ${dbErr.message}`);
               });
             } else {
-              log(`⚠️ Email sending returned null (likely not configured)`);
+              log(`⚠️ Email sending returned null - check email configuration`);
             }
           })
           .catch((emailErr) => {
             log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
-            log(`❌ Email error details:`, emailErr);
+            log(`❌ Email error stack: ${emailErr.stack}`);
           });
       } else {
-        log(`⚠️ No user email found, skipping email send`);
+        log(`⚠️ Missing email or postPurchaseLink - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
       }
       
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
