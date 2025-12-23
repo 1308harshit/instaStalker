@@ -3294,14 +3294,15 @@ function App() {
           // Show success page IMMEDIATELY
           setScreen(SCREEN.PAYMENT_SUCCESS);
           
-          // Send email in background (simple, no verification)
-          fetch(`/api/payment/send-email`, {
+          // Verify payment and send email (backend does both in ONE call)
+          fetch(`/api/payment/verify-payment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
-              pageState: completePageState
+              signature: response.razorpay_signature, // IMPORTANT: signature for verification
+              pageState: completePageState // Complete page data
             }),
           })
           .then(async (res) => {
@@ -3316,10 +3317,13 @@ function App() {
             return data;
           })
           .then(data => {
-            console.log('✅ Email sent:', data);
+            console.log('✅ Payment verified and email sent:', data);
+            if (data.reportUrl) {
+              console.log('📧 Report URL:', data.reportUrl);
+            }
           })
           .catch(err => {
-            console.error('❌ Email error:', err);
+            console.error('❌ Payment verification error:', err);
           });
         },
         prefill: {
