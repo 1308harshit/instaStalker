@@ -397,8 +397,158 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Restore last successful scrape when returning from payment
+  // Handle post-purchase link access FIRST - check URL params on mount
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    // If we have token and order params, load from backend (skip localStorage)
+    if (token && order) {
+      console.log('🔍 Post-purchase link detected, loading from MongoDB...');
+      
+      const loadOrderData = async () => {
+        try {
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          console.log('📡 Fetching order data from:', apiUrl);
+          
+          const validateResponse = await fetch(apiUrl);
+          
+          if (!validateResponse.ok) {
+            console.error('❌ Failed to fetch order data:', validateResponse.status);
+            return;
+          }
+          
+          const validateData = await validateResponse.json();
+          console.log('📋 Order data received:', {
+            success: validateData.success,
+            hasPageState: !!validateData.pageState,
+            hasCards: Array.isArray(validateData.cards) && validateData.cards.length > 0,
+            hasProfile: !!validateData.profile,
+            username: validateData.username,
+            cardsCount: validateData.cards?.length || 0,
+            pageStateCardsCount: validateData.pageState?.cards?.length || 0
+          });
+          
+          if (validateData.success) {
+            // Clear any existing localStorage data first
+            try {
+              localStorage.removeItem(LAST_RUN_KEY);
+            } catch (e) {}
+            
+            // Restore complete page state from MongoDB
+            if (validateData.pageState && typeof validateData.pageState === 'object') {
+              console.log('✅ Loading complete pageState from MongoDB');
+              const pageState = validateData.pageState;
+              
+              // Restore core data
+              if (pageState.cards && Array.isArray(pageState.cards)) {
+                console.log(`📋 Restoring ${pageState.cards.length} cards`);
+                setCards(pageState.cards);
+              }
+              
+              if (pageState.profile) {
+                console.log(`📋 Restoring profile: ${pageState.profile.username}`);
+                setProfile((prev) => ({ ...prev, ...pageState.profile }));
+              }
+              
+              if (pageState.username) {
+                setUsernameInput(pageState.username.replace('@', ''));
+              }
+              
+              // Restore payment success page specific state
+              if (pageState.paymentSuccessCards && Array.isArray(pageState.paymentSuccessCards)) {
+                console.log(`📋 Restoring ${pageState.paymentSuccessCards.length} payment success cards`);
+                setPaymentSuccessCards(pageState.paymentSuccessCards);
+              }
+              
+              if (pageState.paymentSuccessLast7Summary) {
+                console.log(`📋 Restoring last 7 summary:`, pageState.paymentSuccessLast7Summary);
+                setPaymentSuccessLast7Summary(pageState.paymentSuccessLast7Summary);
+              }
+              
+              if (pageState.paymentSuccessLast7Rows && Array.isArray(pageState.paymentSuccessLast7Rows)) {
+                console.log(`📋 Restoring ${pageState.paymentSuccessLast7Rows.length} last 7 rows`);
+                setPaymentSuccessLast7Rows(pageState.paymentSuccessLast7Rows);
+              }
+              
+              if (typeof pageState.paymentSuccess90DayVisits === 'number') {
+                console.log(`📋 Restoring 90-day visits: ${pageState.paymentSuccess90DayVisits}`);
+                setPaymentSuccess90DayVisits(pageState.paymentSuccess90DayVisits);
+              }
+              
+              if (pageState.paymentSuccessAdditionalUsernames && Array.isArray(pageState.paymentSuccessAdditionalUsernames)) {
+                console.log(`📋 Restoring ${pageState.paymentSuccessAdditionalUsernames.length} additional usernames`);
+                setPaymentSuccessAdditionalUsernames(pageState.paymentSuccessAdditionalUsernames);
+              }
+              
+              if (pageState.analysis) {
+                console.log(`📋 Restoring analysis data`);
+                setAnalysis(pageState.analysis);
+              }
+              
+              if (pageState.snapshots && Array.isArray(pageState.snapshots)) {
+                console.log(`📋 Restoring ${pageState.snapshots.length} snapshots`);
+                setSnapshots(pageState.snapshots);
+              }
+              
+              console.log('✅ Complete pageState restored from MongoDB');
+            } else {
+              // Fallback: backward compatibility with old format
+              console.log('⚠️ Using backward compatibility mode (individual fields)');
+              
+              if (validateData.cards && Array.isArray(validateData.cards) && validateData.cards.length > 0) {
+                console.log('✅ Loading cards from MongoDB:', validateData.cards.length);
+                setCards(validateData.cards);
+                setPaymentSuccessCards(validateData.cards);
+              } else {
+                console.warn('⚠️ No cards found in order data');
+              }
+              
+              if (validateData.profile) {
+                console.log('✅ Loading profile from MongoDB:', validateData.profile.username);
+                setProfile((prev) => ({ ...prev, ...validateData.profile }));
+              } else {
+                console.warn('⚠️ No profile found in order data');
+              }
+              
+              if (validateData.username) {
+                setUsernameInput(validateData.username.replace('@', ''));
+              }
+            }
+            
+            // Show payment success screen
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            
+            // Clean URL but keep /post-purchase path
+            window.history.replaceState({}, '', '/post-purchase');
+          } else {
+            console.error('❌ Order validation failed:', validateData);
+          }
+        } catch (err) {
+          console.error('❌ Error loading order data:', err);
+        }
+      };
+      
+      loadOrderData();
+      return; // Exit early, don't load from localStorage
+    }
+  }, []);
+
+  // Restore last successful scrape when returning from payment (only if NOT post-purchase link)
+  useEffect(() => {
+    // Skip if we're on post-purchase link (already handled above)
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const order = urlParams.get('order');
+    
+    if (token && order) {
+      // Post-purchase link will load data from backend, skip localStorage
+      return;
+    }
+    
     const restored = loadLastRun();
     if (!restored) return;
 
@@ -412,56 +562,6 @@ function App() {
 
     if (restored.profile) {
       setProfile((prev) => ({ ...prev, ...restored.profile }));
-    }
-  }, []);
-
-  // Handle post-purchase link access - check URL params on mount
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const order = urlParams.get('order');
-    
-    // If we have token and order params, validate and show success screen
-    if (token && order) {
-      const validatePostPurchase = async () => {
-        try {
-          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
-          const validateResponse = await fetch(apiUrl);
-          
-          if (validateResponse.ok) {
-            const validateData = await validateResponse.json();
-            if (validateData.success) {
-              console.log('✅ Post-purchase link validated, loading order data');
-              
-              // Load order-specific data from backend (not localStorage)
-              if (validateData.cards && Array.isArray(validateData.cards) && validateData.cards.length > 0) {
-                setCards(validateData.cards);
-                setPaymentSuccessCards(validateData.cards);
-              }
-              
-              if (validateData.profile) {
-                setProfile((prev) => ({ ...prev, ...validateData.profile }));
-              }
-              
-              if (validateData.username) {
-                setUsernameInput(validateData.username.replace('@', ''));
-              }
-              
-              // Show payment success screen
-              setScreen(SCREEN.PAYMENT_SUCCESS);
-              
-              // Clean URL but keep /post-purchase path
-              window.history.replaceState({}, '', '/post-purchase');
-            }
-          }
-        } catch (err) {
-          console.error('Error validating post-purchase link:', err);
-        }
-      };
-      
-      validatePostPurchase();
     }
   }, []);
 
@@ -2995,20 +3095,108 @@ function App() {
           // Navigate to success page IMMEDIATELY
           setScreen(SCREEN.PAYMENT_SUCCESS);
           
+          // Capture complete page state at payment time
+          // This ensures the exact page can be recreated when accessing the link
+          
+          // Calculate payment success cards if not already set
+          const getPaymentSuccessCards = () => {
+            if (paymentSuccessCards.length > 0) {
+              return paymentSuccessCards;
+            }
+            // Filter cards with strict criteria (clean profiles only)
+            return cards.filter(
+              (card) => !card?.isLocked && !card?.blurImage && card?.image && card?.username
+            ).slice(0, 6);
+          };
+          
+          // Calculate last 7 summary if not already set
+          const getPaymentSuccessLast7Summary = () => {
+            if (paymentSuccessLast7Summary.profileVisits !== null) {
+              return paymentSuccessLast7Summary;
+            }
+            // Generate random values (same logic as useEffect)
+            const visits = randBetween(1, 5);
+            let screenshots = randBetween(1, 5);
+            screenshots = ((screenshots % 5) || 5);
+            if (screenshots === visits) {
+              screenshots = ((screenshots + 1) % 5) || 5;
+            }
+            return { profileVisits: visits, screenshots };
+          };
+          
+          // Calculate 90-day visits if not already set
+          const getPaymentSuccess90DayVisits = () => {
+            if (paymentSuccess90DayVisits !== null) {
+              return paymentSuccess90DayVisits;
+            }
+            return randBetween(30, 45);
+          };
+          
+          // Calculate last 7 rows if not already set (simplified version)
+          const getPaymentSuccessLast7Rows = () => {
+            if (paymentSuccessLast7Rows.length > 0) {
+              return paymentSuccessLast7Rows;
+            }
+            // This will be calculated by useEffect when page loads, but we'll store empty array
+            // The useEffect will populate it based on paymentSuccessCards
+            return [];
+          };
+          
+          const completePageState = {
+            // Core data
+            username: profile.username,
+            cards: cards,
+            profile: profile,
+            
+            // Payment success page specific state (calculate if not set)
+            paymentSuccessCards: getPaymentSuccessCards(),
+            paymentSuccessLast7Summary: getPaymentSuccessLast7Summary(),
+            paymentSuccessLast7Rows: getPaymentSuccessLast7Rows(),
+            paymentSuccess90DayVisits: getPaymentSuccess90DayVisits(),
+            paymentSuccessAdditionalUsernames: paymentSuccessAdditionalUsernames.length > 0 
+              ? paymentSuccessAdditionalUsernames 
+              : [],
+            
+            // Analysis data (if available)
+            analysis: analysis || null,
+            
+            // Snapshots (if available, for reference)
+            snapshots: snapshots.length > 0 ? snapshots : []
+          };
+          
           // Backend verification happens in background (optional, don't wait)
+          const verificationData = {
+            orderId: response.razorpay_order_id,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+            // Send complete page state
+            pageState: completePageState
+          };
+          
+          console.log('📤 Sending complete pageState to backend:', {
+            username: completePageState.username,
+            cardsCount: completePageState.cards?.length || 0,
+            paymentSuccessCardsCount: completePageState.paymentSuccessCards?.length || 0,
+            hasProfile: !!completePageState.profile,
+            hasPaymentSuccessLast7Summary: !!completePageState.paymentSuccessLast7Summary,
+            paymentSuccessLast7RowsCount: completePageState.paymentSuccessLast7Rows?.length || 0,
+            paymentSuccess90DayVisits: completePageState.paymentSuccess90DayVisits,
+            hasAnalysis: !!completePageState.analysis
+          });
+          
           fetch('/api/payment/verify-payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId: response.razorpay_order_id,
-              paymentId: response.razorpay_payment_id,
-              signature: response.razorpay_signature,
-              // Send current user's profile data
-              username: profile.username,
-              cards: cards,
-              profile: profile
-            }),
-          }).catch(err => console.log('Background verification:', err));
+            body: JSON.stringify(verificationData),
+          })
+          .then(res => res.json())
+          .then(data => {
+            console.log('✅ Backend verification response:', data);
+            if (data.postPurchaseLink) {
+              console.log('📧 Post-purchase link generated:', data.postPurchaseLink);
+            }
+          })
+          .catch(err => console.error('❌ Background verification error:', err));
         },
         prefill: {
           name: paymentForm.fullName,

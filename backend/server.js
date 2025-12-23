@@ -403,8 +403,13 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
           
-          // Get profile data from request body (frontend will send it)
-          const { username, cards, profile } = req.body;
+          // Get complete page state from request body (frontend will send it)
+          const { 
+            username, 
+            cards, 
+            profile,
+            pageState // Complete page state object
+          } = req.body;
           
           const updateData = {
             status: "paid",
@@ -415,10 +420,36 @@ app.post("/api/payment/verify-payment", async (req, res) => {
             emailSent: false
           };
           
-          // Add profile data if provided (store directly, not snapshotId)
-          if (username) updateData.username = username;
-          if (cards && Array.isArray(cards)) updateData.cards = cards;
-          if (profile) updateData.profile = profile;
+          // Store complete page state if provided (preferred method)
+          if (pageState && typeof pageState === 'object') {
+            updateData.pageState = pageState;
+            log(`📝 Saving complete pageState:`, {
+              hasCards: Array.isArray(pageState.cards),
+              cardsCount: pageState.cards?.length || 0,
+              hasProfile: !!pageState.profile,
+              hasPaymentSuccessCards: Array.isArray(pageState.paymentSuccessCards),
+              hasPaymentSuccessLast7Summary: !!pageState.paymentSuccessLast7Summary,
+              hasPaymentSuccessLast7Rows: Array.isArray(pageState.paymentSuccessLast7Rows),
+              hasPaymentSuccess90DayVisits: typeof pageState.paymentSuccess90DayVisits === 'number',
+              hasAnalysis: !!pageState.analysis
+            });
+          } else {
+            // Fallback: store individual fields for backward compatibility
+            if (username) {
+              updateData.username = username;
+              log(`📝 Saving username: ${username}`);
+            }
+            if (cards && Array.isArray(cards)) {
+              updateData.cards = cards;
+              log(`📝 Saving cards: ${cards.length} cards`);
+            }
+            if (profile) {
+              updateData.profile = profile;
+              log(`📝 Saving profile: ${profile.username || 'no username'}`);
+            }
+          }
+          
+          log(`💾 Updating order ${orderId} with page state data`);
           
           const updateResult = await collection.updateOne(
             { razorpayOrderId: orderId },
@@ -426,7 +457,7 @@ app.post("/api/payment/verify-payment", async (req, res) => {
           );
           
           if (updateResult.matchedCount > 0) {
-            log(`✅ Database updated: Order ${orderId} marked as paid`);
+            log(`✅ Database updated: Order ${orderId} marked as paid with profile data`);
             
             // Retrieve user data for Meta CAPI and email
             const order = await collection.findOne({ razorpayOrderId: orderId });
@@ -536,16 +567,30 @@ app.get("/api/payment/post-purchase", async (req, res) => {
       }
       
       log(`✅ Post-purchase link validated: order=${order}`);
-      res.json({
-        success: true,
-        orderId: orderDoc.razorpayOrderId,
-        email: orderDoc.email,
-        fullName: orderDoc.fullName,
-        // Return stored profile data
-        username: orderDoc.username || null,
-        cards: orderDoc.cards || [],
-        profile: orderDoc.profile || null
-      });
+      
+      // Return complete page state if available (preferred)
+      if (orderDoc.pageState && typeof orderDoc.pageState === 'object') {
+        log(`📋 Returning complete pageState from MongoDB`);
+        res.json({
+          success: true,
+          orderId: orderDoc.razorpayOrderId,
+          email: orderDoc.email,
+          fullName: orderDoc.fullName,
+          pageState: orderDoc.pageState // Return complete page state
+        });
+      } else {
+        // Fallback: return individual fields for backward compatibility
+        log(`📋 Returning individual fields (backward compatibility): username=${orderDoc.username || 'none'}, cards=${orderDoc.cards?.length || 0}, hasProfile=${!!orderDoc.profile}`);
+        res.json({
+          success: true,
+          orderId: orderDoc.razorpayOrderId,
+          email: orderDoc.email,
+          fullName: orderDoc.fullName,
+          username: orderDoc.username || null,
+          cards: orderDoc.cards || [],
+          profile: orderDoc.profile || null
+        });
+      }
     } catch (dbErr) {
       log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
       res.status(500).json({
