@@ -411,7 +411,7 @@ function App() {
       
       const loadOrderData = async () => {
         try {
-          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `${API_BASE}/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
           console.log('📡 Fetching order data from:', apiUrl);
           
           const validateResponse = await fetch(apiUrl);
@@ -3015,7 +3015,7 @@ function App() {
 
     try {
       // Save user data to MongoDB
-      const saveResponse = await fetch(`/api/payment/save-user`, {
+      const saveResponse = await fetch(`${API_BASE}/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
@@ -3034,7 +3034,7 @@ function App() {
       // Create Razorpay order
       const amount = 99 * quantity; // 99₹ per item (will default to 99 if not provided)
       const orderResponse = await fetch(
-        `/api/payment/create-order`,
+        `${API_BASE}/api/payment/create-order`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3082,21 +3082,12 @@ function App() {
         handler: async function (response) {
           console.log('✅ Razorpay payment success callback:', response);
           
-          const orderId = response.razorpay_order_id;
-          const paymentId = response.razorpay_payment_id;
-          
           // Store payment info in state for success page
           setPaymentForm((prev) => ({
             ...prev,
-            orderId: orderId,
-            paymentId: paymentId
+            orderId: response.razorpay_order_id,
+            paymentId: response.razorpay_payment_id
           }));
-          
-          // Navigate to success page IMMEDIATELY
-          setScreen(SCREEN.PAYMENT_SUCCESS);
-          
-          // Capture complete page state at payment time
-          // This ensures the exact page can be recreated when accessing the link
           
           // Calculate payment success cards if not already set
           const getPaymentSuccessCards = () => {
@@ -3142,13 +3133,11 @@ function App() {
             return [];
           };
           
+          // Prepare complete page state
           const completePageState = {
-            // Core data
             username: profile.username,
             cards: cards,
             profile: profile,
-            
-            // Payment success page specific state (calculate if not set)
             paymentSuccessCards: getPaymentSuccessCards(),
             paymentSuccessLast7Summary: getPaymentSuccessLast7Summary(),
             paymentSuccessLast7Rows: getPaymentSuccessLast7Rows(),
@@ -3156,47 +3145,49 @@ function App() {
             paymentSuccessAdditionalUsernames: paymentSuccessAdditionalUsernames.length > 0 
               ? paymentSuccessAdditionalUsernames 
               : [],
-            
-            // Analysis data (if available)
             analysis: analysis || null,
-            
-            // Snapshots (if available, for reference)
             snapshots: snapshots.length > 0 ? snapshots : []
           };
           
-          // Backend verification happens in background (optional, don't wait)
-          const verificationData = {
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            // Send complete page state
-            pageState: completePageState
-          };
+          console.log('🎉 RAZORPAY PAYMENT SUCCESS - Verifying with backend...');
           
-          console.log('📤 Sending complete pageState to backend:', {
-            username: completePageState.username,
-            cardsCount: completePageState.cards?.length || 0,
-            paymentSuccessCardsCount: completePageState.paymentSuccessCards?.length || 0,
-            hasProfile: !!completePageState.profile,
-            hasPaymentSuccessLast7Summary: !!completePageState.paymentSuccessLast7Summary,
-            paymentSuccessLast7RowsCount: completePageState.paymentSuccessLast7Rows?.length || 0,
-            paymentSuccess90DayVisits: completePageState.paymentSuccess90DayVisits,
-            hasAnalysis: !!completePageState.analysis
-          });
-          
-          fetch('/api/payment/verify-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(verificationData),
-          })
-          .then(res => res.json())
-          .then(data => {
-            console.log('✅ Backend verification response:', data);
-            if (data.postPurchaseLink) {
-              console.log('📧 Post-purchase link generated:', data.postPurchaseLink);
+          try {
+            // WAIT for backend verification before showing success page
+            const verifyResponse = await fetch(`${API_BASE}/api/payment/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+                // Send complete page state
+                pageState: completePageState
+              }),
+            });
+            
+            if (!verifyResponse.ok) {
+              throw new Error(`Verification failed: ${verifyResponse.status} ${verifyResponse.statusText}`);
             }
-          })
-          .catch(err => console.error('❌ Background verification error:', err));
+            
+            const verifyData = await verifyResponse.json();
+            
+            if (!verifyData.success) {
+              alert('Payment verification failed. Please contact support.');
+              return;
+            }
+            
+            console.log('✅ Payment verified on backend:', verifyData);
+            if (verifyData.postPurchaseLink) {
+              console.log('📧 Post-purchase link generated:', verifyData.postPurchaseLink);
+            }
+            
+            // NOW show success page (after verification completes)
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            
+          } catch (err) {
+            console.error('❌ Backend verification error:', err);
+            alert('Payment successful but verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
+          }
         },
         prefill: {
           name: paymentForm.fullName,
