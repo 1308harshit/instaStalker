@@ -3501,6 +3501,7 @@ function App() {
                 alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.postPurchaseLink}`);
               } else {
                 console.log('✅ Email sent successfully to your inbox!');
+                alert('Please check your spam folder for the email with your report access link.');
               }
             }
           })
