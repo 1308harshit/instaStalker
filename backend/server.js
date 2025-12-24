@@ -152,7 +152,7 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     log(`📧 Post-purchase link: ${postPurchaseLink}`);
 
     const mailOptions = {
-      from: `"Insta Reports" <${EMAIL_USER}>`,
+      from: `"Insta Reports" <${process.env.EMAIL_FROM}>`,
       to: email,
       subject: 'Payment Confirmation - Your Report Access',
       html: `
