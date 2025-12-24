@@ -154,30 +154,19 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     const mailOptions = {
       from: `"Insta Reports" <${EMAIL_USER}>`,
       to: email,
-      subject: 'Your report link',
+      subject: 'Payment Confirmation - Your Report Access',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <p>Hi ${fullName || 'there'},</p>
-          <p>Your payment is confirmed. Access your report anytime:</p>
-          <div style="margin: 30px 0;">
-            <a href="${postPurchaseLink}" 
-               style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Open my report
-            </a>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            You can bookmark this link or keep this email.
+          <p>This email confirms that your payment has been successfully processed.</p>
+          <p>You can access your purchased content using the link below:</p>
+          <p style="margin: 20px 0;">
+            <a href="${postPurchaseLink}" style="color: #f43f3f; text-decoration: underline;">${postPurchaseLink}</a>
           </p>
-          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
-            <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
-              Important Notice:
-            </p>
-            <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
-              This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
-            </p>
-          </div>
-          <p style="color: #666; font-size: 14px;">
+          <p>Please keep this email for future reference. This link can be used again if needed.</p>
+          <p>If you face any issues, reply to this email and our support team will help you.</p>
+          <p style="margin-top: 30px;">Regards,<br>Insta Reports Team</p>
+          <p style="margin-top: 20px; color: #666; font-size: 14px;">
             Support: <a href="mailto:velarlunera@gmail.com" style="color: #f43f3f;">velarlunera@gmail.com</a>
           </p>
         </div>
