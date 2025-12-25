@@ -3495,14 +3495,7 @@ function App() {
             
             // Add a small delay to ensure page transition is complete before showing alert
             setTimeout(() => {
-              if (data.emailSent) {
-                console.log('✅ Email sent successfully to your inbox!');
-                alert('Please check your spam folder for the email with your report access link.');
-              } else if (data.postPurchaseLink) {
-                console.warn('⚠️ Email not sent! Showing URL to user.');
-                console.log('📧 Post-purchase link:', data.postPurchaseLink);
-                alert(`⚠️ Email delivery failed.\n\nSave this link to access your report:\n\n${data.postPurchaseLink}`);
-              }
+              alert('✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference.');
             }, 500);
           })
           .catch(err => {

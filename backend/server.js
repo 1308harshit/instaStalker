@@ -547,57 +547,18 @@ app.post("/api/payment/verify-payment", async (req, res) => {
         // Don't fail the verification if DB update fails
       }
       
-      // Send report email IMMEDIATELY after payment verification
+      // Email sending disabled - users will take screenshots instead
       let emailSent = false;
-      if (userEmail && postPurchaseLink) {
-        log(`📧 Sending email immediately to: ${userEmail}`);
-        log(`📧 Post-purchase link: ${postPurchaseLink}`);
-        
-        try {
-          // Send email and wait for it to complete
-          const emailResult = await sendPostPurchaseEmail(userEmail, userFullName, postPurchaseLink);
-          
-          if (emailResult) {
-            log(`✅ Email sent successfully to ${userEmail}: ${emailResult.messageId}`);
-            emailSent = true;
-            
-            // Update emailSent flag in database
-            try {
-              const database = await connectDB();
-              if (database) {
-                const collection = database.collection(COLLECTION_NAME);
-                await collection.updateOne(
-                  { razorpayOrderId: orderId },
-                  { $set: { emailSent: true, emailSentAt: new Date() } }
-                );
-                log(`✅ Email sent flag updated in database for order ${orderId}`);
-              }
-            } catch (dbErr) {
-              log(`⚠️ Failed to update emailSent flag: ${dbErr.message}`);
-            }
-          } else {
-            log(`❌ Email sending returned null - EMAIL NOT CONFIGURED!`);
-            log(`❌ Set EMAIL_USER and EMAIL_PASS in .env file!`);
-          }
-        } catch (emailErr) {
-          log(`❌ Email sending failed (payment still verified): ${emailErr.message}`);
-          log(`❌ Email error stack: ${emailErr.stack}`);
-        }
-      } else {
-        log(`❌ Cannot send email - userEmail: ${userEmail ? 'SET' : 'NOT SET'}, postPurchaseLink: ${postPurchaseLink ? 'SET' : 'NOT SET'}`);
-        log(`⚠️ Order ID: ${orderId}`);
-      }
+      log(`📧 Email sending disabled - users will take screenshots of their report`);
       
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
       
-      // Always send JSON response, even if email fails
+      // Always send JSON response
       res.json({
         success: true,
         message: 'Payment verified successfully',
         orderId,
         paymentId,
-        postPurchaseLink, // Return link in response (optional, for frontend use)
-        emailSent, // Let frontend know if email was sent
       });
     } else {
       log(`❌ Payment verification failed - Invalid signature`);
