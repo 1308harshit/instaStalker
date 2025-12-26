@@ -1784,7 +1784,7 @@ function App() {
       </form>
       <div className="landing-footer">
         <div className="landing-links">
-          <a href="https://sensorahub.com/" target="_blank" rel="noreferrer">
+          <a href="https://sensorahub.com/contact.html" target="_blank" rel="noreferrer">
             Contact Us
           </a>
           <a
