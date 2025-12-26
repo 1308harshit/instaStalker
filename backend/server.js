@@ -3,22 +3,25 @@
 // Always load .env file, regardless of NODE_ENV (needed for PM2 production)
 try {
   // Use import() with await at top level (ES modules support this)
-  const dotenvModule = await import('dotenv');
-  const path = await import('path');
-  const { fileURLToPath } = await import('url');
+  const dotenvModule = await import("dotenv");
+  const path = await import("path");
+  const { fileURLToPath } = await import("url");
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // Explicitly specify .env file path
-  const envPath = path.join(__dirname, '.env');
+  const envPath = path.join(__dirname, ".env");
   const result = dotenvModule.default.config({ path: envPath });
   if (result.error) {
-    console.warn('⚠️  Error loading .env file:', result.error.message);
+    console.warn("⚠️  Error loading .env file:", result.error.message);
   } else {
-    console.log('✅ Loaded .env file from:', envPath);
+    console.log("✅ Loaded .env file from:", envPath);
   }
 } catch (e) {
   // dotenv not installed, continue without it
-  console.warn('⚠️  dotenv not available, using environment variables from system:', e.message);
+  console.warn(
+    "⚠️  dotenv not available, using environment variables from system:",
+    e.message
+  );
 }
 
 import express from "express";
@@ -29,21 +32,27 @@ import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
 import { redis } from "./utils/redis.js";
-import { 
-  connectDB, 
-  getSnapshotStep, 
+import {
+  connectDB,
+  getSnapshotStep,
   getRecentSnapshot,
-  closeDB 
+  closeDB,
 } from "./utils/mongodb.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 
 const app = express();
-app.use(cors({
-  origin: ["https://whoviewedmyprofile.in", "http://localhost:5173", "http://localhost:3000"],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: [
+      "https://sensorahub.com",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  })
+);
 // For parsing JSON request bodies (pageState can be large)
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -86,11 +95,15 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 // Validate required environment variables
 if (!RAZORPAY_KEY_ID) {
-  throw new Error("❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables.");
+  throw new Error(
+    "❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables."
+  );
 }
 
 if (!RAZORPAY_KEY_SECRET) {
-  throw new Error("❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables.");
+  throw new Error(
+    "❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables."
+  );
 }
 
 // Initialize Razorpay instance
@@ -100,45 +113,59 @@ const razorpay = new Razorpay({
 });
 
 // Meta Conversions API configuration (optional but recommended for accurate tracking)
-const META_PIXEL_ID = process.env.META_PIXEL_ID || '1752528628790870'; // Your pixel ID
+const META_PIXEL_ID = process.env.META_PIXEL_ID || "1752528628790870"; // Your pixel ID
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN; // Get from Meta Business Settings
 
 // Email configuration
-const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
+const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
 const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
-const BASE_URL = process.env.BASE_URL || 'https://whoviewedmyprofile.in';
+const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
 
 // Create email transporter
 const emailTransporter = nodemailer.createTransport({
   host: EMAIL_HOST,
   port: EMAIL_PORT,
   secure: EMAIL_PORT === 465,
-  auth: EMAIL_USER && EMAIL_PASS ? {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  } : undefined,
+  auth:
+    EMAIL_USER && EMAIL_PASS
+      ? {
+          user: EMAIL_USER,
+          pass: EMAIL_PASS,
+        }
+      : undefined,
 });
 
 // Verify transporter ONCE at startup (not per email)
 if (EMAIL_USER && EMAIL_PASS) {
-  emailTransporter.verify()
+  emailTransporter
+    .verify()
     .then(() => {
       log("✅ Email transporter ready and verified");
     })
     .catch((err) => {
-      log(`❌ Email transporter verification failed at startup: ${err.message}`);
+      log(
+        `❌ Email transporter verification failed at startup: ${err.message}`
+      );
       log(`⚠️ Emails may not send. Check EMAIL_USER and EMAIL_PASS in .env`);
     });
 } else {
-  log(`⚠️ Email not configured - EMAIL_USER: ${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS: ${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+  log(
+    `⚠️ Email not configured - EMAIL_USER: ${
+      EMAIL_USER ? "SET" : "NOT SET"
+    }, EMAIL_PASS: ${EMAIL_PASS ? "SET" : "NOT SET"}`
+  );
 }
 
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
   if (!EMAIL_USER || !EMAIL_PASS) {
-    log(`⚠️ Email not configured - EMAIL_USER: ${EMAIL_USER ? 'SET' : 'NOT SET'}, EMAIL_PASS: ${EMAIL_PASS ? 'SET' : 'NOT SET'}`);
+    log(
+      `⚠️ Email not configured - EMAIL_USER: ${
+        EMAIL_USER ? "SET" : "NOT SET"
+      }, EMAIL_PASS: ${EMAIL_PASS ? "SET" : "NOT SET"}`
+    );
     return null;
   }
 
@@ -154,10 +181,10 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     const mailOptions = {
       from: `"Insta Reports" <${process.env.EMAIL_FROM}>`,
       to: email,
-      subject: 'Payment Confirmation - Your Report Access',
+      subject: "Payment Confirmation - Your Report Access",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <p>Hi ${fullName || 'there'},</p>
+          <p>Hi ${fullName || "there"},</p>
           <p>This email confirms that your payment has been successfully processed.</p>
           <p>You can access your purchased content using the link below:</p>
           <p style="margin: 20px 0;">
@@ -175,7 +202,9 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
 
     log(`📧 Sending email...`);
     const info = await emailTransporter.sendMail(mailOptions);
-    log(`✅ Post-purchase email sent successfully to ${email}: ${info.messageId}`);
+    log(
+      `✅ Post-purchase email sent successfully to ${email}: ${info.messageId}`
+    );
     log(`✅ Email response: ${JSON.stringify(info.response)}`);
     return info;
   } catch (err) {
@@ -191,49 +220,66 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
 // Helper function to send Meta Conversions API (CAPI) event
 async function sendMetaCAPIEvent(eventName, eventData, userData = {}) {
   if (!META_ACCESS_TOKEN) {
-    log('⚠️ META_ACCESS_TOKEN not configured - skipping server-side event tracking');
+    log(
+      "⚠️ META_ACCESS_TOKEN not configured - skipping server-side event tracking"
+    );
     return null;
   }
 
   try {
     const url = `https://graph.facebook.com/v18.0/${META_PIXEL_ID}/events`;
-    
+
     const payload = {
-      data: [{
-        event_name: eventName,
-        event_time: Math.floor(Date.now() / 1000),
-        event_id: eventData.event_id, // Must match frontend eventID for deduplication
-        event_source_url: eventData.event_source_url || 'https://whoviewedmyprofile.in',
-        action_source: 'website',
-        user_data: {
-          em: userData.email ? crypto.createHash('sha256').update(userData.email.toLowerCase().trim()).digest('hex') : undefined,
-          ph: userData.phone ? crypto.createHash('sha256').update(userData.phone.replace(/\D/g, '')).digest('hex') : undefined,
-          client_ip_address: userData.ip,
-          client_user_agent: userData.userAgent,
+      data: [
+        {
+          event_name: eventName,
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: eventData.event_id, // Must match frontend eventID for deduplication
+          event_source_url:
+            eventData.event_source_url || "https://sensorahub.com",
+          action_source: "website",
+          user_data: {
+            em: userData.email
+              ? crypto
+                  .createHash("sha256")
+                  .update(userData.email.toLowerCase().trim())
+                  .digest("hex")
+              : undefined,
+            ph: userData.phone
+              ? crypto
+                  .createHash("sha256")
+                  .update(userData.phone.replace(/\D/g, ""))
+                  .digest("hex")
+              : undefined,
+            client_ip_address: userData.ip,
+            client_user_agent: userData.userAgent,
+          },
+          custom_data: {
+            currency: eventData.currency,
+            value: eventData.value,
+            content_name: eventData.content_name,
+            content_type: eventData.content_type,
+            num_items: eventData.num_items,
+            order_id: eventData.order_id,
+            transaction_id: eventData.transaction_id,
+          },
         },
-        custom_data: {
-          currency: eventData.currency,
-          value: eventData.value,
-          content_name: eventData.content_name,
-          content_type: eventData.content_type,
-          num_items: eventData.num_items,
-          order_id: eventData.order_id,
-          transaction_id: eventData.transaction_id,
-        },
-      }],
+      ],
       access_token: META_ACCESS_TOKEN,
     };
 
     const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     const result = await response.json();
-    
+
     if (response.ok && result.events_received > 0) {
-      log(`✅ Meta CAPI: ${eventName} event sent successfully (${result.events_received} events received)`);
+      log(
+        `✅ Meta CAPI: ${eventName} event sent successfully (${result.events_received} events received)`
+      );
       return result;
     } else {
       log(`⚠️ Meta CAPI: ${eventName} event failed:`, result);
@@ -247,63 +293,87 @@ async function sendMetaCAPIEvent(eventName, eventData, userData = {}) {
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data || '');
+  console.log(`[${timestamp}] ${message}`, data || "");
 };
 
 // Log credentials at startup to verify environment configuration
 log(`🚀 Razorpay credentials loaded:`);
-log(`   Key ID: ${RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + '...' : 'MISSING'}`);
-log(`   Key Secret length: ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.length : 0}`);
-log(`   Key Secret (first 20 chars): ${RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.substring(0, 20) + '...' : 'MISSING'}`);
+log(
+  `   Key ID: ${
+    RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.substring(0, 12) + "..." : "MISSING"
+  }`
+);
+log(
+  `   Key Secret length: ${
+    RAZORPAY_KEY_SECRET ? RAZORPAY_KEY_SECRET.length : 0
+  }`
+);
+log(
+  `   Key Secret (first 20 chars): ${
+    RAZORPAY_KEY_SECRET
+      ? RAZORPAY_KEY_SECRET.substring(0, 20) + "..."
+      : "MISSING"
+  }`
+);
 
 log(`📧 Email configuration:`);
-log(`   EMAIL_USER: ${EMAIL_USER ? EMAIL_USER : '❌ NOT SET - EMAILS WILL NOT BE SENT!'}`);
-log(`   EMAIL_PASS: ${EMAIL_PASS ? '✅ SET' : '❌ NOT SET - EMAILS WILL NOT BE SENT!'}`);
+log(
+  `   EMAIL_USER: ${
+    EMAIL_USER ? EMAIL_USER : "❌ NOT SET - EMAILS WILL NOT BE SENT!"
+  }`
+);
+log(
+  `   EMAIL_PASS: ${
+    EMAIL_PASS ? "✅ SET" : "❌ NOT SET - EMAILS WILL NOT BE SENT!"
+  }`
+);
 log(`   BASE_URL: ${BASE_URL}`);
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
   try {
     const { email, fullName, phoneNumber } = req.body;
-    
+
     if (!email || !fullName || !phoneNumber) {
-      return res.status(400).json({ error: "Email, full name, and phone number are required" });
+      return res
+        .status(400)
+        .json({ error: "Email, full name, and phone number are required" });
     }
 
     const database = await connectDB();
     if (!database) {
-      log('⚠️ MongoDB not available, skipping save');
+      log("⚠️ MongoDB not available, skipping save");
       // Still return success so payment flow can continue
-      return res.json({ 
-        success: true, 
-        message: "User data received (MongoDB unavailable)" 
+      return res.json({
+        success: true,
+        message: "User data received (MongoDB unavailable)",
       });
     }
 
     const collection = database.collection(COLLECTION_NAME);
-    
+
     const userData = {
       email,
       fullName,
       phoneNumber,
       createdAt: new Date(),
-      status: "pending"
+      status: "pending",
     };
 
     const result = await collection.insertOne(userData);
     log(`✅ User data saved: ${email}`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       userId: result.insertedId,
-      message: "User data saved successfully" 
+      message: "User data saved successfully",
     });
   } catch (err) {
-    log('❌ Error saving user data:', err.message);
+    log("❌ Error saving user data:", err.message);
     // Still return success so payment flow can continue even if DB fails
-    res.json({ 
-      success: true, 
-      message: "User data received (save may have failed)" 
+    res.json({
+      success: true,
+      message: "User data received (save may have failed)",
     });
   }
 });
@@ -311,27 +381,37 @@ app.post("/api/payment/save-user", async (req, res) => {
 // Create Razorpay order
 app.post("/api/payment/create-order", async (req, res) => {
   try {
-    const { amount, currency = 'INR', receipt, notes, email, fullName, phoneNumber } = req.body;
-    
+    const {
+      amount,
+      currency = "INR",
+      receipt,
+      notes,
+      email,
+      fullName,
+      phoneNumber,
+    } = req.body;
+
     // Hardcode amount to 99 INR if not provided or invalid
-    const orderAmount = (amount && amount > 0) ? amount : 99; // Default to 99 INR
-    
+    const orderAmount = amount && amount > 0 ? amount : 99; // Default to 99 INR
+
     log(`📥 Create order request: amount=${orderAmount}, email=${email}`);
 
     // Verify Razorpay is configured correctly
     if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
       throw new Error("Razorpay not configured properly");
     }
-    
+
     // Format phone number
-    let phone = phoneNumber ? phoneNumber.replace(/[^0-9]/g, '') : '';
+    let phone = phoneNumber ? phoneNumber.replace(/[^0-9]/g, "") : "";
     if (phone.length > 10) {
       phone = phone.slice(-10);
     }
-    
+
     // Generate unique receipt ID if not provided
-    const receiptId = receipt || `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    
+    const receiptId =
+      receipt ||
+      `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
     // Prepare notes with customer info
     const orderNotes = {
       ...notes,
@@ -339,9 +419,9 @@ app.post("/api/payment/create-order", async (req, res) => {
       customer_name: fullName || "",
       customer_phone: phone || "",
     };
-    
+
     log(`💰 Creating Razorpay order: ₹${orderAmount} (Receipt: ${receiptId})`);
-    
+
     // Create Razorpay order
     // Amount should be in paise (smallest currency unit)
     const options = {
@@ -350,21 +430,23 @@ app.post("/api/payment/create-order", async (req, res) => {
       receipt: receiptId,
       notes: orderNotes,
     };
-    
+
     log(`📤 Creating Razorpay order with options: ${JSON.stringify(options)}`);
-    
+
     const order = await razorpay.orders.create(options);
-    
+
     log(`✅ Razorpay order created: ${order.id}`);
-    log(`📡 Order ID: ${order.id}, Amount: ₹${orderAmount} (${order.amount} paise)`);
-    
+    log(
+      `📡 Order ID: ${order.id}, Amount: ₹${orderAmount} (${order.amount} paise)`
+    );
+
     // Save order to MongoDB (optional, don't fail if DB is unavailable)
     if (email && fullName && phoneNumber) {
       try {
         const database = await connectDB();
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
-          
+
           await collection.insertOne({
             orderId: order.id,
             email,
@@ -378,10 +460,13 @@ app.post("/api/payment/create-order", async (req, res) => {
           log(`✅ Order saved to MongoDB: ${order.id}`);
         }
       } catch (dbErr) {
-        log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
+        log(
+          "⚠️ Failed to save order to MongoDB (continuing anyway):",
+          dbErr.message
+        );
       }
     }
-    
+
     // Return order data for frontend
     res.json({
       success: true,
@@ -392,12 +477,12 @@ app.post("/api/payment/create-order", async (req, res) => {
       receipt: order.receipt,
     });
   } catch (err) {
-    log('❌ Error creating Razorpay order:', err.message);
-    console.error('Full Razorpay error:', err);
-    
-    res.status(500).json({ 
+    log("❌ Error creating Razorpay order:", err.message);
+    console.error("Full Razorpay error:", err);
+
+    res.status(500).json({
       success: false,
-      error: "Failed to create Razorpay order", 
+      error: "Failed to create Razorpay order",
       details: err.message,
       statusCode: err.statusCode || err.status,
     });
@@ -423,16 +508,18 @@ app.post("/api/payment/verify-payment", async (req, res) => {
   } catch (e) {
     // ignore logging errors
   }
-  
+
   // Ensure we always return JSON, even on errors
   try {
     const { orderId, paymentId, signature } = req.body;
 
     if (!orderId || !paymentId || !signature) {
-      log(`❌ Missing parameters: orderId=${!!orderId}, paymentId=${!!paymentId}, signature=${!!signature}`);
-      return res.status(400).json({ 
+      log(
+        `❌ Missing parameters: orderId=${!!orderId}, paymentId=${!!paymentId}, signature=${!!signature}`
+      );
+      return res.status(400).json({
         success: false,
-        error: 'Missing required payment verification parameters' 
+        error: "Missing required payment verification parameters",
       });
     }
 
@@ -440,33 +527,33 @@ app.post("/api/payment/verify-payment", async (req, res) => {
 
     // Create the signature string
     const text = `${orderId}|${paymentId}`;
-    
+
     // Generate the expected signature
     const expectedSignature = crypto
-      .createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", RAZORPAY_KEY_SECRET)
       .update(text)
-      .digest('hex');
+      .digest("hex");
 
     // Compare signatures
     if (expectedSignature === signature) {
       log(`✅ Payment verified successfully: ${paymentId}`);
-      
+
       // Get user data from database for Meta CAPI
       let userData = {};
       let orderAmount = 99; // Default amount
-      let userEmail = '';
-      let userFullName = '';
-      
+      let userEmail = "";
+      let userFullName = "";
+
       // Generate unique post-purchase link (token + order)
-      const accessToken = crypto.randomBytes(32).toString('hex');
+      const accessToken = crypto.randomBytes(32).toString("hex");
       const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
-      
+
       // Update database after successful verification
       try {
         const database = await connectDB();
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
-          
+
           // FIRST: Retrieve user data BEFORE updating (to get email)
           const order = await collection.findOne({ razorpayOrderId: orderId });
           if (order) {
@@ -474,24 +561,26 @@ app.post("/api/payment/verify-payment", async (req, res) => {
               email: order.email,
               phone: order.phoneNumber,
               ip: req.ip || req.connection.remoteAddress,
-              userAgent: req.headers['user-agent'],
+              userAgent: req.headers["user-agent"],
             };
             userEmail = order.email;
-            userFullName = order.fullName || 'Customer';
+            userFullName = order.fullName || "Customer";
             orderAmount = order.amount ? order.amount / 100 : 99; // Convert paise to rupees
-            log(`✅ Retrieved user data from database: email=${userEmail}, name=${userFullName}`);
+            log(
+              `✅ Retrieved user data from database: email=${userEmail}, name=${userFullName}`
+            );
           } else {
             log(`⚠️ Order ${orderId} not found in database`);
           }
-          
+
           // Get complete page state from request body (frontend will send it)
-          const { 
-            username, 
-            cards, 
+          const {
+            username,
+            cards,
             profile,
-            pageState // Complete page state object
+            pageState, // Complete page state object
           } = req.body;
-          
+
           const updateData = {
             status: "paid",
             paymentId: paymentId,
@@ -499,21 +588,27 @@ app.post("/api/payment/verify-payment", async (req, res) => {
             postPurchaseLink: postPurchaseLink,
             accessToken: accessToken,
             emailSent: false,
-            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year expiry
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year expiry
           };
-          
+
           // Store complete page state if provided (preferred method)
-          if (pageState && typeof pageState === 'object') {
+          if (pageState && typeof pageState === "object") {
             updateData.pageState = pageState;
             log(`📝 Saving complete pageState:`, {
               hasCards: Array.isArray(pageState.cards),
               cardsCount: pageState.cards?.length || 0,
               hasProfile: !!pageState.profile,
-              hasPaymentSuccessCards: Array.isArray(pageState.paymentSuccessCards),
-              hasPaymentSuccessLast7Summary: !!pageState.paymentSuccessLast7Summary,
-              hasPaymentSuccessLast7Rows: Array.isArray(pageState.paymentSuccessLast7Rows),
-              hasPaymentSuccess90DayVisits: typeof pageState.paymentSuccess90DayVisits === 'number',
-              hasAnalysis: !!pageState.analysis
+              hasPaymentSuccessCards: Array.isArray(
+                pageState.paymentSuccessCards
+              ),
+              hasPaymentSuccessLast7Summary:
+                !!pageState.paymentSuccessLast7Summary,
+              hasPaymentSuccessLast7Rows: Array.isArray(
+                pageState.paymentSuccessLast7Rows
+              ),
+              hasPaymentSuccess90DayVisits:
+                typeof pageState.paymentSuccess90DayVisits === "number",
+              hasAnalysis: !!pageState.analysis,
             });
           } else {
             // Fallback: store individual fields for backward compatibility
@@ -527,36 +622,42 @@ app.post("/api/payment/verify-payment", async (req, res) => {
             }
             if (profile) {
               updateData.profile = profile;
-              log(`📝 Saving profile: ${profile.username || 'no username'}`);
+              log(`📝 Saving profile: ${profile.username || "no username"}`);
             }
           }
-          
+
           log(`💾 Updating order ${orderId} with page state data`);
-          
+
           await collection.updateOne(
             { razorpayOrderId: orderId },
             { $set: updateData }
           );
-          
-          log(`✅ Database updated: Order ${orderId} marked as paid with profile data`);
+
+          log(
+            `✅ Database updated: Order ${orderId} marked as paid with profile data`
+          );
         } else {
           log(`⚠️ MongoDB not available, skipping database update`);
         }
       } catch (dbErr) {
-        log(`⚠️ Failed to update database (payment still verified): ${dbErr.message}`);
+        log(
+          `⚠️ Failed to update database (payment still verified): ${dbErr.message}`
+        );
         // Don't fail the verification if DB update fails
       }
-      
+
       // Email sending disabled - users will take screenshots instead
       let emailSent = false;
-      log(`📧 Email sending disabled - users will take screenshots of their report`);
-      
+      log(
+        `📧 Email sending disabled - users will take screenshots of their report`
+      );
+
       // Meta Pixel tracking handled by browser on success page load (instant, no backend delay)
-      
+
       // Always send JSON response
       res.json({
         success: true,
-        message: 'Payment verified successfully',
+        message: "Payment verified successfully",
         orderId,
         paymentId,
       });
@@ -564,17 +665,17 @@ app.post("/api/payment/verify-payment", async (req, res) => {
       log(`❌ Payment verification failed - Invalid signature`);
       res.status(400).json({
         success: false,
-        error: 'Payment verification failed - Invalid signature',
+        error: "Payment verification failed - Invalid signature",
       });
     }
   } catch (error) {
     log(`❌ Error verifying payment: ${error.message}`);
     log(`❌ Error stack: ${error.stack}`);
     // Always return JSON, never HTML - ensure proper error handling
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      error: error.message || 'Failed to verify payment',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message || "Failed to verify payment",
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 });
@@ -583,56 +684,55 @@ app.post("/api/payment/verify-payment", async (req, res) => {
 app.get("/api/report/:token", async (req, res) => {
   try {
     const { token } = req.params;
-    
+
     if (!token || token.length < 32) {
       return res.status(400).json({ error: "Invalid token" });
     }
-    
+
     log(`🔍 Fetching report for token: ${token.substring(0, 10)}...`);
-    
+
     const database = await connectDB();
     if (!database) {
       return res.status(503).json({ error: "Database unavailable" });
     }
-    
+
     const collection = database.collection(COLLECTION_NAME);
-    const order = await collection.findOne({ 
+    const order = await collection.findOne({
       accessToken: token,
-      status: "paid"
+      status: "paid",
     });
-    
+
     if (!order) {
       return res.status(404).json({ error: "Report not found" });
     }
-    
+
     // Check if expired
     if (order.expiresAt && new Date() > new Date(order.expiresAt)) {
       return res.status(410).json({ error: "Report has expired" });
     }
-    
+
     log(`✅ Report found for ${order.email}`);
-    
+
     // Update last accessed time
     await collection.updateOne(
       { accessToken: token },
       { $set: { lastAccessedAt: new Date() } }
     );
-    
+
     res.json({
       success: true,
       reportData: order.pageState || {
         profile: order.profile,
         cards: order.cards,
-        username: order.username
+        username: order.username,
       },
       purchaseDate: order.verifiedAt,
-      customerName: order.fullName
+      customerName: order.fullName,
     });
-    
   } catch (error) {
     log(`❌ Error fetching report: ${error.message}`);
-    res.status(500).json({ 
-      error: "Failed to fetch report" 
+    res.status(500).json({
+      error: "Failed to fetch report",
     });
   }
 });
@@ -641,47 +741,52 @@ app.get("/api/report/:token", async (req, res) => {
 app.get("/api/payment/post-purchase", async (req, res) => {
   try {
     const { token, order } = req.query;
-    
+
     if (!token || !order) {
       return res.status(400).json({
         success: false,
-        error: 'Missing token or order parameter'
+        error: "Missing token or order parameter",
       });
     }
-    
+
     log(`🔍 Validating post-purchase link: order=${order}`);
-    
+
     try {
       const database = await connectDB();
       if (!database) {
         return res.status(500).json({
           success: false,
-          error: 'Database not available'
+          error: "Database not available",
         });
       }
-      
+
       const collection = database.collection(COLLECTION_NAME);
       const orderDoc = await collection.findOne({
         razorpayOrderId: order,
         accessToken: token,
-        status: 'paid'
+        status: "paid",
       });
-      
+
       if (!orderDoc) {
-        log(`❌ Invalid post-purchase link: order=${order}, token=${token.substring(0, 10)}...`);
+        log(
+          `❌ Invalid post-purchase link: order=${order}, token=${token.substring(
+            0,
+            10
+          )}...`
+        );
         return res.status(404).json({
           success: false,
-          error: 'Invalid or expired link'
+          error: "Invalid or expired link",
         });
       }
-      
+
       log(`✅ Post-purchase link validated: order=${order}`);
 
       // Expiry check (if expiresAt exists)
       if (orderDoc.expiresAt && new Date(orderDoc.expiresAt) < new Date()) {
         return res.status(410).json({
           success: false,
-          error: "This report has expired"
+          error: "This report has expired",
         });
       }
 
@@ -694,20 +799,26 @@ app.get("/api/payment/post-purchase", async (req, res) => {
       } catch (updateErr) {
         log(`⚠️ Failed to update lastAccessedAt: ${updateErr.message}`);
       }
-      
+
       // Return complete page state if available (preferred)
-      if (orderDoc.pageState && typeof orderDoc.pageState === 'object') {
+      if (orderDoc.pageState && typeof orderDoc.pageState === "object") {
         log(`📋 Returning complete pageState from MongoDB`);
         res.json({
           success: true,
           orderId: orderDoc.razorpayOrderId,
           email: orderDoc.email,
           fullName: orderDoc.fullName,
-          pageState: orderDoc.pageState // Return complete page state
+          pageState: orderDoc.pageState, // Return complete page state
         });
       } else {
         // Fallback: return individual fields for backward compatibility
-        log(`📋 Returning individual fields (backward compatibility): username=${orderDoc.username || 'none'}, cards=${orderDoc.cards?.length || 0}, hasProfile=${!!orderDoc.profile}`);
+        log(
+          `📋 Returning individual fields (backward compatibility): username=${
+            orderDoc.username || "none"
+          }, cards=${
+            orderDoc.cards?.length || 0
+          }, hasProfile=${!!orderDoc.profile}`
+        );
         res.json({
           success: true,
           orderId: orderDoc.razorpayOrderId,
@@ -715,21 +826,21 @@ app.get("/api/payment/post-purchase", async (req, res) => {
           fullName: orderDoc.fullName,
           username: orderDoc.username || null,
           cards: orderDoc.cards || [],
-          profile: orderDoc.profile || null
+          profile: orderDoc.profile || null,
         });
       }
     } catch (dbErr) {
       log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
       res.status(500).json({
         success: false,
-        error: 'Failed to validate link'
+        error: "Failed to validate link",
       });
     }
   } catch (error) {
     log(`❌ Error validating post-purchase link: ${error.message}`);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to validate link'
+      error: error.message || "Failed to validate link",
     });
   }
 });
@@ -739,9 +850,9 @@ app.get("/api/payment/payment/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
     log(`🔍 Fetching payment details: ${paymentId}`);
-    
+
     const payment = await razorpay.payments.fetch(paymentId);
-    
+
     log(`✅ Payment details fetched: ${paymentId}`);
     res.json({
       success: true,
@@ -749,9 +860,9 @@ app.get("/api/payment/payment/:paymentId", async (req, res) => {
     });
   } catch (error) {
     log(`❌ Error fetching payment: ${error.message}`);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: error.message || 'Failed to fetch payment details' 
+      error: error.message || "Failed to fetch payment details",
     });
   }
 });
@@ -761,9 +872,9 @@ app.get("/api/payment/order/:orderId", async (req, res) => {
   try {
     const { orderId } = req.params;
     log(`🔍 Fetching order details: ${orderId}`);
-    
+
     const order = await razorpay.orders.fetch(orderId);
-    
+
     log(`✅ Order details fetched: ${orderId}`);
     res.json({
       success: true,
@@ -771,9 +882,9 @@ app.get("/api/payment/order/:orderId", async (req, res) => {
     });
   } catch (error) {
     log(`❌ Error fetching order: ${error.message}`);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: error.message || 'Failed to fetch order details' 
+      error: error.message || "Failed to fetch order details",
     });
   }
 });
@@ -781,15 +892,15 @@ app.get("/api/payment/order/:orderId", async (req, res) => {
 // New endpoint: Serve HTML snapshots from MongoDB
 app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
   const { snapshotId, stepName } = req.params;
-  
+
   try {
     const html = await getSnapshotStep(snapshotId, stepName);
-    
+
     if (!html) {
       return res.status(404).json({ error: "Snapshot not found" });
     }
-    
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
   } catch (err) {
     log(`❌ Error serving snapshot: ${err.message}`);
@@ -800,11 +911,11 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
 app.get("/api/stalkers", async (req, res) => {
   const startTime = Date.now();
   const username = req.query.username;
-  
-  log(`📥 New request received for username: ${username || 'MISSING'}`);
-  
+
+  log(`📥 New request received for username: ${username || "MISSING"}`);
+
   if (!username) {
-    log('❌ Request rejected: username required');
+    log("❌ Request rejected: username required");
     return res.json({ error: "username required" });
   }
 
@@ -814,13 +925,13 @@ app.get("/api/stalkers", async (req, res) => {
   //   const recentSnapshot = await getRecentSnapshot(username, 60); // 60 minutes cache
   //   if (recentSnapshot) {
   //     log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
-  //     
+  //
   //     const cachedSteps = recentSnapshot.steps.map(step => ({
   //       name: step.name,
   //       htmlPath: `/api/snapshots/${recentSnapshot._id}/${step.name}`,
   //       meta: step.meta
   //     }));
-  //     
+  //
   //     return res.json({
   //       cards: recentSnapshot.cards || [],
   //       steps: cachedSteps,
@@ -835,17 +946,18 @@ app.get("/api/stalkers", async (req, res) => {
   // }
 
   // Check if client wants SSE streaming (EventSource)
-  const acceptHeader = req.headers.accept || '';
-  const wantsSSE = acceptHeader.includes('text/event-stream') || req.query.stream === 'true';
-  
+  const acceptHeader = req.headers.accept || "";
+  const wantsSSE =
+    acceptHeader.includes("text/event-stream") || req.query.stream === "true";
+
   if (wantsSSE) {
     // Server-Sent Events streaming mode
     log(`📡 Starting SSE streaming for username: ${username}`);
-    
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Cache-Control",
       "X-Accel-Buffering": "no", // Disable NGINX buffering
@@ -853,9 +965,9 @@ app.get("/api/stalkers", async (req, res) => {
 
     // Send initial connection message
     res.write(`: connected\n\n`);
-    
+
     // Flush headers immediately
-    if (typeof res.flushHeaders === 'function') {
+    if (typeof res.flushHeaders === "function") {
       res.flushHeaders();
     }
 
@@ -864,59 +976,75 @@ app.get("/api/stalkers", async (req, res) => {
         const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
         res.write(message);
         // Force flush to ensure real-time delivery
-        if (typeof res.flush === 'function') {
+        if (typeof res.flush === "function") {
           res.flush();
         }
-        log(`📤 SSE event sent: ${event} (${event === 'snapshot' ? data.name : 'final'})`);
+        log(
+          `📤 SSE event sent: ${event} (${
+            event === "snapshot" ? data.name : "final"
+          })`
+        );
       } catch (err) {
         log(`⚠️ Error sending SSE event: ${err.message}`);
       }
     };
 
     // Use queue to handle concurrent requests
-    scrapeQueue.enqueue(username, async (username) => {
-      return await scrape(username, (step) => {
-        log(`📤 Emitting snapshot via SSE: ${step.name}`);
-        send("snapshot", step);
+    scrapeQueue
+      .enqueue(username, async (username) => {
+        return await scrape(username, (step) => {
+          log(`📤 Emitting snapshot via SSE: ${step.name}`);
+          send("snapshot", step);
+        });
+      })
+      .then((finalResult) => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        log(`✅ Scrape completed successfully in ${duration}s`);
+        log(
+          `📊 Sending final result with ${finalResult.cards?.length || 0} cards`
+        );
+        send("done", finalResult);
+        res.end();
+      })
+      .catch((err) => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        const errorMessage =
+          err?.message || err?.toString() || "Unknown error occurred";
+        log(`❌ Scrape failed after ${duration}s:`, errorMessage);
+        send("error", { error: errorMessage });
+        res.end();
       });
-    })
-    .then((finalResult) => {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      log(`✅ Scrape completed successfully in ${duration}s`);
-      log(`📊 Sending final result with ${finalResult.cards?.length || 0} cards`);
-      send("done", finalResult);
-      res.end();
-    })
-    .catch((err) => {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
-      log(`❌ Scrape failed after ${duration}s:`, errorMessage);
-      send("error", { error: errorMessage });
-      res.end();
-    });
 
     // Handle client disconnect
-    req.on('close', () => {
+    req.on("close", () => {
       log(`🔌 Client disconnected for username: ${username}`);
       res.end();
     });
   } else {
     // Legacy mode: return everything at once (for backward compatibility)
     log(`⏱️  Starting scrape process... (this may take 30-60 seconds)`);
-    
+
     try {
       // Use queue to handle concurrent requests
       const result = await scrapeQueue.enqueue(username, scrape);
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       log(`✅ Scrape completed successfully in ${duration}s`);
-      log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
+      log(
+        `📊 Returning ${result.cards?.length || 0} cards and ${
+          result.steps?.length || 0
+        } snapshots`
+      );
       res.json(result);
     } catch (err) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
+      const errorMessage =
+        err?.message || err?.toString() || "Unknown error occurred";
       log(`❌ Scrape failed after ${duration}s:`, errorMessage);
-      log(`📋 Error details:`, err?.stack || 'No stack trace available');
-      log(`📋 Full error object:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      log(`📋 Error details:`, err?.stack || "No stack trace available");
+      log(
+        `📋 Full error object:`,
+        JSON.stringify(err, Object.getOwnPropertyNames(err))
+      );
       res.json({ error: errorMessage });
     }
   }
@@ -928,53 +1056,56 @@ app.get("/api/stats", async (req, res) => {
     // Get counts from Redis (shared across all PM2 processes)
     let activeTabs = 0;
     let activeBrowsers = 0;
-    
+
     try {
-      activeTabs = Number(await redis.get("active_tabs") || 0);
-      activeBrowsers = Number(await redis.get("active_browsers") || 0);
+      activeTabs = Number((await redis.get("active_tabs")) || 0);
+      activeBrowsers = Number((await redis.get("active_browsers")) || 0);
     } catch (err) {
       log(`⚠️ Redis error reading stats (returning 0): ${err.message}`);
       // Continue with 0 values if Redis fails
     }
-    
+
     res.json({
       browsers: {
         max: 4, // MAX_BROWSERS
-        active: activeBrowsers
+        active: activeBrowsers,
       },
       tabs: {
-        active: activeTabs
+        active: activeTabs,
       },
       users: {
         active: activeTabs, // Each tab = one active user request
-        total: activeTabs
+        total: activeTabs,
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (err) {
     log(`❌ Error getting stats: ${err.message}`);
-    res.status(500).json({ 
-      error: "Failed to get stats", 
-      details: err.message 
+    res.status(500).json({
+      error: "Failed to get stats",
+      details: err.message,
     });
   }
 });
 
 // Initialize MongoDB on server start (non-blocking)
 connectDB().catch((err) => {
-  log('⚠️ MongoDB connection failed on startup (will retry on first use):', err.message);
+  log(
+    "⚠️ MongoDB connection failed on startup (will retry on first use):",
+    err.message
+  );
 });
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  log('🛑 SIGTERM received, closing connections...');
+process.on("SIGTERM", async () => {
+  log("🛑 SIGTERM received, closing connections...");
   await browserPool.close();
   await closeDB();
   process.exit(0);
 });
 
-process.on('SIGINT', async () => {
-  log('🛑 SIGINT received, closing connections...');
+process.on("SIGINT", async () => {
+  log("🛑 SIGINT received, closing connections...");
   await browserPool.close();
   await closeDB();
   process.exit(0);
@@ -983,10 +1114,13 @@ process.on('SIGINT', async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   log(`🚀 API server started on port ${PORT}`);
-  log(`📍 Endpoint: http://localhost:${PORT}/api/stalkers?username=<instagram_username>`);
-  log(`📍 Snapshot Endpoint: http://localhost:${PORT}/api/snapshots/:snapshotId/:stepName`);
+  log(
+    `📍 Endpoint: http://localhost:${PORT}/api/stalkers?username=<instagram_username>`
+  );
+  log(
+    `📍 Snapshot Endpoint: http://localhost:${PORT}/api/snapshots/:snapshotId/:stepName`
+  );
   log(`📍 Payment Endpoint: http://localhost:${PORT}/api/payment/create-order`);
-  log('⏱️  Expected response time: 30-60 seconds per request');
-  log('🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)');
+  log("⏱️  Expected response time: 30-60 seconds per request");
+  log("🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)");
 });
-
