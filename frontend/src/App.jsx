@@ -22,6 +22,30 @@ const API_BASE = (() => {
 })();
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
+// Meta Pixel Helper Function
+const trackMetaPixel = (eventName, eventData = {}) => {
+  if (typeof window === "undefined") return;
+  
+  // Wait for fbq to be available (with retry logic)
+  const tryTrack = (attempts = 0) => {
+    if (window.fbq && typeof window.fbq === "function") {
+      try {
+        window.fbq("track", eventName, eventData);
+        console.log(`✅ Meta Pixel: ${eventName} tracked`, eventData);
+      } catch (err) {
+        console.error(`❌ Meta Pixel tracking error for ${eventName}:`, err);
+      }
+    } else if (attempts < 10) {
+      // Retry after a short delay if fbq not yet loaded
+      setTimeout(() => tryTrack(attempts + 1), 100);
+    } else {
+      console.warn(`⚠️ Meta Pixel: fbq not available after retries for ${eventName}`);
+    }
+  };
+  
+  tryTrack();
+};
+
 const SCREEN = {
   LANDING: "landing",
   ANALYZING: "analyzing",
@@ -387,10 +411,12 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Track PageView on screen changes
   useEffect(() => {
-    if (window.fbq) {
-      window.fbq("track", "PageView");
-    }
+    trackMetaPixel("PageView", {
+      content_name: screen,
+      content_category: "Screen Navigation",
+    });
   }, [screen]);
 
   // Restore last successful scrape when returning from payment
@@ -600,6 +626,11 @@ function App() {
         Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
     ) {
       setScreen(SCREEN.PROFILE);
+      // Track ViewContent when profile is shown
+      trackMetaPixel("ViewContent", {
+        content_name: "Profile Confirmation",
+        content_category: "Profile",
+      });
       setCanAdvanceFromProfile(false);
       clearTimeout(profileHoldTimerRef.current);
       profileHoldTimerRef.current = setTimeout(() => {
@@ -765,6 +796,11 @@ function App() {
     ) {
       setIsInQueue(false); // No longer in queue, results are ready
       setScreen(SCREEN.PREVIEW);
+      // Track ViewContent when preview is shown
+      trackMetaPixel("ViewContent", {
+        content_name: "Stalker Preview",
+        content_category: "Preview",
+      });
     }
   }, [
     analysis,
@@ -1158,6 +1194,12 @@ function App() {
     // Set analyzing screen immediately - don't wait for fetchCards
     setScreen(SCREEN.ANALYZING);
 
+    // Track Lead event when username is submitted
+    trackMetaPixel("Lead", {
+      content_name: "Username Submitted",
+      content_category: "User Input",
+    });
+
     // Fetch cards in background - don't block UI transitions
     fetchCards(formatted).catch((err) => {
       console.error("Failed to fetch cards:", err);
@@ -1305,6 +1347,12 @@ function App() {
     setFullReportLoading(true);
     setScreen(SCREEN.FULL_REPORT);
     setPaymentCountdown(900); // Reset to 15 minutes when entering full report
+
+    // Track ViewContent when full report is viewed
+    trackMetaPixel("ViewContent", {
+      content_name: "Full Report",
+      content_category: "Report",
+    });
 
     try {
       const url = buildSnapshotUrl(fullReportStep.htmlPath);
@@ -2850,12 +2898,10 @@ function App() {
 
         const amount = 99 * quantity;
 
-        window.fbq("track", "InitiateCheckout", {
+        trackMetaPixel("InitiateCheckout", {
           value: amount,
           currency: "INR",
         });
-
-        console.log("✅ Meta: InitiateCheckout fired");
       }
 
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
@@ -3042,19 +3088,16 @@ function App() {
             );
 
             // Fire Purchase BEFORE screen change
-            if (
-              window.fbq &&
-              !purchaseEventFiredRef.current.has(orderId)
-            ) {
+            if (!purchaseEventFiredRef.current.has(orderId)) {
               const paidAmount = 99 * quantity;
               purchaseEventFiredRef.current.add(orderId);
 
-              window.fbq("track", "Purchase", {
+              trackMetaPixel("Purchase", {
                 value: paidAmount,
                 currency: "INR",
+                content_name: "Instagram Stalker Report",
+                content_category: "Digital Product",
               });
-
-              console.log("✅ Meta: Purchase fired", orderId);
             }
 
             setScreen(SCREEN.PAYMENT_SUCCESS);
@@ -3113,6 +3156,15 @@ function App() {
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPaymentLoading(true);
+
+    // Track AddPaymentInfo when payment form is submitted
+    const amount = 99 * quantity;
+    trackMetaPixel("AddPaymentInfo", {
+      content_name: "Payment Form Submitted",
+      content_category: "Payment",
+      value: amount,
+      currency: "INR",
+    });
 
     try {
       // Save user data to MongoDB
