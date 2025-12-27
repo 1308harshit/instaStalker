@@ -276,8 +276,10 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] =
-    useState({ profileVisits: null, screenshots: null });
+  const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] = useState({
+    profileVisits: null,
+    screenshots: null,
+  });
   const [paymentSuccessLast7Rows, setPaymentSuccessLast7Rows] = useState([]);
   const [paymentSuccess90DayVisits, setPaymentSuccess90DayVisits] =
     useState(null);
@@ -293,8 +295,12 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [storiesCarouselIndex, setStoriesCarouselIndex] = useState(0);
-  const [paymentSuccessCarouselIndex, setPaymentSuccessCarouselIndex] = useState(0);
-  const [paymentSuccessAdditionalUsernames, setPaymentSuccessAdditionalUsernames] = useState([]);
+  const [paymentSuccessCarouselIndex, setPaymentSuccessCarouselIndex] =
+    useState(0);
+  const [
+    paymentSuccessAdditionalUsernames,
+    setPaymentSuccessAdditionalUsernames,
+  ] = useState([]);
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
@@ -386,14 +392,14 @@ function App() {
   useEffect(() => {
     // Don't restore from localStorage if we're accessing via post-purchase link
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const order = urlParams.get('order');
-    
+    const token = urlParams.get("token");
+    const order = urlParams.get("order");
+
     if (token && order) {
       // Post-purchase link will load data from backend, skip localStorage
       return;
     }
-    
+
     const restored = loadLastRun();
     if (!restored) return;
 
@@ -413,50 +419,58 @@ function App() {
   // Handle post-purchase link access - load order-specific data
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const order = urlParams.get('order');
-    
+    const token = urlParams.get("token");
+    const order = urlParams.get("order");
+
     // If we have token and order params, fetch order data
     if (token && order) {
       const loadOrderData = async () => {
         try {
-          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order)}`;
+          const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(
+            token
+          )}&order=${encodeURIComponent(order)}`;
           const validateResponse = await fetch(apiUrl);
-          
+
           if (validateResponse.ok) {
             const validateData = await validateResponse.json();
-            
+
             if (validateData.success) {
-              console.log('✅ Post-purchase link validated, loading order data');
-              
+              console.log(
+                "✅ Post-purchase link validated, loading order data"
+              );
+
               // Load order-specific data from backend (not localStorage)
-              if (validateData.cards && Array.isArray(validateData.cards) && validateData.cards.length > 0) {
+              if (
+                validateData.cards &&
+                Array.isArray(validateData.cards) &&
+                validateData.cards.length > 0
+              ) {
                 setCards(validateData.cards);
                 setPaymentSuccessCards(validateData.cards);
               }
-              
+
               if (validateData.profile) {
                 setProfile((prev) => ({ ...prev, ...validateData.profile }));
               }
-              
+
               if (validateData.username) {
-                setUsernameInput(validateData.username.replace('@', ''));
+                setUsernameInput(validateData.username.replace("@", ""));
               }
-              
+
               // Show payment success screen
               setScreen(SCREEN.PAYMENT_SUCCESS);
-              
+
               // Clean URL but keep /post-purchase path
-              window.history.replaceState({}, '', '/post-purchase');
+              window.history.replaceState({}, "", "/post-purchase");
             }
           }
         } catch (err) {
-          console.error('Error loading order data:', err);
+          console.error("Error loading order data:", err);
         }
       };
-      
+
       loadOrderData();
     }
   }, []);
@@ -899,13 +913,13 @@ function App() {
   const buildSnapshotUrl = (htmlPath = "") => {
     if (!htmlPath) return null;
     const normalized = htmlPath.startsWith("/") ? htmlPath : `/${htmlPath}`;
-    
+
     // If htmlPath already starts with /api/, use it as-is (relative to current domain)
     // This handles snapshot URLs from backend like /api/snapshots/${id}/${name}
     if (normalized.startsWith("/api/")) {
       return normalized;
     }
-    
+
     // Otherwise, prepend SNAPSHOT_BASE (for legacy file-based snapshots)
     return `${SNAPSHOT_BASE || ""}${normalized}`;
   };
@@ -1160,9 +1174,11 @@ function App() {
   const fetchCards = async (usernameValue) => {
     // Use Server-Sent Events for real-time snapshot streaming
     return new Promise((resolve, reject) => {
-      const eventSourceUrl = `${API_URL}?username=${encodeURIComponent(usernameValue)}&stream=true`;
+      const eventSourceUrl = `${API_URL}?username=${encodeURIComponent(
+        usernameValue
+      )}&stream=true`;
       console.log(`🔌 Connecting to SSE: ${eventSourceUrl}`);
-      
+
       const eventSource = new EventSource(eventSourceUrl);
 
       // Log connection state changes
@@ -1179,7 +1195,10 @@ function App() {
           setSnapshots((prev) => {
             const filtered = prev.filter((s) => s.name !== step.name);
             const updated = [...filtered, step];
-            console.log(`📝 Updated snapshots list:`, updated.map(s => s.name));
+            console.log(
+              `📝 Updated snapshots list:`,
+              updated.map((s) => s.name)
+            );
             return updated;
           });
 
@@ -1246,9 +1265,11 @@ function App() {
       // Handle connection errors
       eventSource.onerror = (err) => {
         console.error("❌ EventSource error:", err);
-        console.error(`   ReadyState: ${eventSource.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSED)`);
+        console.error(
+          `   ReadyState: ${eventSource.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSED)`
+        );
         console.error(`   URL: ${eventSourceUrl}`);
-        
+
         // Only reject if connection is closed (readyState === 2)
         // If it's still connecting (0) or open (1), it might recover
         if (eventSource.readyState === EventSource.CLOSED) {
@@ -1396,9 +1417,7 @@ function App() {
   const renderLanding = () => (
     <section className="screen hero">
       {shouldShowQueueMessage() && (
-        <div className="queue-message">
-          {QUEUE_MESSAGE}
-        </div>
+        <div className="queue-message">{QUEUE_MESSAGE}</div>
       )}
       <h4>You have stalkers...</h4>
       <h1>Discover in 1 minute who loves you and who hates you</h1>
@@ -1450,11 +1469,41 @@ function App() {
       </form>
       <div className="landing-footer">
         <div className="landing-links">
-          <a href="https://whoviewedmyprofile.in/contact.html" target="_blank" rel="noreferrer">Contact</a>
-          <a href="https://whoviewedmyprofile.in/terms-and-conditions.html" target="_blank" rel="noreferrer">Terms &amp; Conditions</a>
-          <a href="https://whoviewedmyprofile.in/privacy-policy.html" target="_blank" rel="noreferrer">Privacy Policy</a>
-          <a href="https://whoviewedmyprofile.in/shipping.html" target="_blank" rel="noreferrer">Shipping Policy</a>
-          <a href="https://whoviewedmyprofile.in/refund-and-cancellation.html" target="_blank" rel="noreferrer">Refund &amp; Cancellation</a>
+          <a
+            href="https://sensorahub.com/contact.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Contact
+          </a>
+          <a
+            href="https://sensorahub.com/terms-and-conditions.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Terms &amp; Conditions
+          </a>
+          <a
+            href="https://sensorahub.com/privacy-policy.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Privacy Policy
+          </a>
+          <a
+            href="https://sensorahub.com/shipping.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Shipping Policy
+          </a>
+          <a
+            href="https://sensorahub.com/refund-and-cancellation.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Refund &amp; Cancellation
+          </a>
         </div>
       </div>
     </section>
@@ -1463,9 +1512,7 @@ function App() {
   const renderAnalyzing = () => (
     <section className="screen snapshot-stage">
       {shouldShowQueueMessage() && (
-        <div className="queue-message">
-          {QUEUE_MESSAGE}
-        </div>
+        <div className="queue-message">{QUEUE_MESSAGE}</div>
       )}
       {renderAnalyzingFallback()}
     </section>
@@ -1484,9 +1531,7 @@ function App() {
     return (
       <section className="screen snapshot-stage">
         {shouldShowQueueMessage() && (
-          <div className="queue-message">
-            You are in the queue
-          </div>
+          <div className="queue-message">You are in the queue</div>
         )}
         <div className="stage-card profile-card profile-card--dynamic">
           <div className="stage-progress-track subtle">
@@ -1518,9 +1563,7 @@ function App() {
   const renderProcessing = () => (
     <section className="screen snapshot-stage">
       {shouldShowQueueMessage() && (
-        <div className="queue-message">
-          {QUEUE_MESSAGE}
-        </div>
+        <div className="queue-message">{QUEUE_MESSAGE}</div>
       )}
       <div className="stage-card processing-card">
         <div className="stage-progress-track subtle">
@@ -1579,8 +1622,12 @@ function App() {
     if (!title) return null;
     const parts = title.split(/(addicted)/i);
     return parts.map((part, index) => {
-      if (part.toLowerCase() === 'addicted') {
-        return <span key={index} className="addicted-red">{part}</span>;
+      if (part.toLowerCase() === "addicted") {
+        return (
+          <span key={index} className="addicted-red">
+            {part}
+          </span>
+        );
       }
       return <span key={index}>{part}</span>;
     });
@@ -1873,8 +1920,8 @@ function App() {
                           displayIndex * (220 + 16)
                         }px))`,
                         transition: carouselLoopingRef.current
-                          ? 'none'
-                          : 'transform 0.4s ease-in-out',
+                          ? "none"
+                          : "transform 0.4s ease-in-out",
                       }}
                     >
                       {duplicatedCards.map(
@@ -2016,7 +2063,8 @@ function App() {
                               </div>
                             </article>
                           );
-                        })}
+                        }
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2037,7 +2085,7 @@ function App() {
               <h3>{stories.heading || "Stories activity"}</h3>
               {(() => {
                 const storiesSlides = stories.slides || [];
-                
+
                 if (storiesSlides.length === 0) return null;
 
                 // Create duplicated array for infinite loop
@@ -2071,115 +2119,115 @@ function App() {
                             displayStoriesIndex * (220 + 16)
                           }px))`,
                           transition: storiesCarouselLoopingRef.current
-                            ? 'none'
-                            : 'transform 0.4s ease-in-out',
+                            ? "none"
+                            : "transform 0.4s ease-in-out",
                         }}
                       >
                         {duplicatedStories.map((story, index) => {
                           const isActive = index === displayStoriesIndex;
                           return (
-                          <article
-                            key={`${story.caption}-${story.duplicateKey}-${index}`}
-                            className={`story-card ${
-                              isActive ? "active" : ""
-                            }`}
-                          >
-                            <div
-                              className="story-cover"
-                              style={{
-                                backgroundImage: story.image
-                                  ? `url(${story.image})`
-                                  : "none",
-                                backgroundColor: story.image
-                                  ? "transparent"
-                                  : "#000",
-                              }}
+                            <article
+                              key={`${story.caption}-${story.duplicateKey}-${index}`}
+                              className={`story-card ${
+                                isActive ? "active" : ""
+                              }`}
                             >
-                              <div className="story-hero-info">
-                                <img
-                                  src={hero.profileImage || profile.avatar}
-                                  alt={hero.name || profile.name}
-                                  className="story-hero-avatar"
-                                />
-                                <span className="story-hero-username">
-                                  {hero.name || profile.name}
-                                </span>
-                              </div>
-                              {(story.caption || story.meta) && (
-                                <div className="story-bottom-overlay">
-                                  <div className="story-bottom-text">
-                                    {story.caption && (
-                                      <p className="story-caption">
-                                        {story.caption}
-                                      </p>
-                                    )}
-                                    {story.meta &&
-                                      (() => {
-                                        // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
-                                        const metaText = story.meta.trim();
-                                        // Match pattern: number + "profiles" + rest of text
-                                        const match = metaText.match(
-                                          /^(\d+)\s*(profiles?)\s*(.+)?/i
-                                        );
-                                        if (match) {
-                                          const number = match[1];
-                                          const profiles = match[2];
-                                          const status = match[3]
-                                            ? match[3].trim()
-                                            : "";
-                                          return (
-                                            <div className="story-meta-formatted">
-                                              <div className="story-meta-line1">
-                                                <svg
-                                                  xmlns="http://www.w3.org/2000/svg"
-                                                  width="18"
-                                                  height="18"
-                                                  viewBox="0 0 24 24"
-                                                  fill="none"
-                                                  stroke="currentColor"
-                                                  strokeWidth="2"
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  className="story-lock-icon"
-                                                  aria-hidden="true"
-                                                >
-                                                  <rect
-                                                    width="18"
-                                                    height="11"
-                                                    x="3"
-                                                    y="11"
-                                                    rx="2"
-                                                    ry="2"
-                                                  ></rect>
-                                                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                                                </svg>
-                                                <span className="story-meta-number">
-                                                  {number}
-                                                </span>
-                                                <span className="story-meta-profiles">
-                                                  {profiles}
-                                                </span>
-                                              </div>
-                                              {status && (
-                                                <div className="story-meta-line2">
-                                                  {status}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        }
-                                        // Fallback: display as is
-                                        return (
-                                          <span className="story-meta">
-                                            {story.meta}
-                                          </span>
-                                        );
-                                      })()}
-                                  </div>
+                              <div
+                                className="story-cover"
+                                style={{
+                                  backgroundImage: story.image
+                                    ? `url(${story.image})`
+                                    : "none",
+                                  backgroundColor: story.image
+                                    ? "transparent"
+                                    : "#000",
+                                }}
+                              >
+                                <div className="story-hero-info">
+                                  <img
+                                    src={hero.profileImage || profile.avatar}
+                                    alt={hero.name || profile.name}
+                                    className="story-hero-avatar"
+                                  />
+                                  <span className="story-hero-username">
+                                    {hero.name || profile.name}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          </article>
+                                {(story.caption || story.meta) && (
+                                  <div className="story-bottom-overlay">
+                                    <div className="story-bottom-text">
+                                      {story.caption && (
+                                        <p className="story-caption">
+                                          {story.caption}
+                                        </p>
+                                      )}
+                                      {story.meta &&
+                                        (() => {
+                                          // Parse meta text: "4 profilespaused" or "4 profiles paused" or "3 profiles took a screenshot" etc.
+                                          const metaText = story.meta.trim();
+                                          // Match pattern: number + "profiles" + rest of text
+                                          const match = metaText.match(
+                                            /^(\d+)\s*(profiles?)\s*(.+)?/i
+                                          );
+                                          if (match) {
+                                            const number = match[1];
+                                            const profiles = match[2];
+                                            const status = match[3]
+                                              ? match[3].trim()
+                                              : "";
+                                            return (
+                                              <div className="story-meta-formatted">
+                                                <div className="story-meta-line1">
+                                                  <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    width="18"
+                                                    height="18"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    className="story-lock-icon"
+                                                    aria-hidden="true"
+                                                  >
+                                                    <rect
+                                                      width="18"
+                                                      height="11"
+                                                      x="3"
+                                                      y="11"
+                                                      rx="2"
+                                                      ry="2"
+                                                    ></rect>
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                                  </svg>
+                                                  <span className="story-meta-number">
+                                                    {number}
+                                                  </span>
+                                                  <span className="story-meta-profiles">
+                                                    {profiles}
+                                                  </span>
+                                                </div>
+                                                {status && (
+                                                  <div className="story-meta-line2">
+                                                    {status}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          }
+                                          // Fallback: display as is
+                                          return (
+                                            <span className="story-meta">
+                                              {story.meta}
+                                            </span>
+                                          );
+                                        })()}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </article>
                           );
                         })}
                       </div>
@@ -2791,11 +2839,11 @@ function App() {
   useEffect(() => {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
-      
+
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
       // const amount = 99 * quantity;
       // console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
-      // 
+      //
       // if (window.dataLayer) {
       //   window.dataLayer.push({
       //     event: 'InitiateCheckout',
@@ -2836,7 +2884,7 @@ function App() {
   // GTM CODE COMMENTED OUT - Google Tag Manager: Track PageView on screen changes (for SPA navigation)
   // useEffect(() => {
   //   console.log('🎯 Pushing PageView event to dataLayer for screen:', screen);
-  //   
+  //
   //   if (window.dataLayer) {
   //     window.dataLayer.push({
   //       event: 'page_view',
@@ -2854,40 +2902,46 @@ function App() {
   useEffect(() => {
     const fetchCashfreeEnv = async () => {
       try {
-        const response = await fetch('/api/payment/environment');
+        const response = await fetch("/api/payment/environment");
         if (response.ok) {
           const data = await response.json();
           const isTest = data.isTest;
           const env = isTest ? "TEST" : "PRODUCTION";
           setCashfreeEnv(env);
           cashfreeEnvRef.current = env;
-          
+
           // Remove any existing Cashfree SDK scripts (fallback or previous)
-          const existingScripts = document.querySelectorAll('script[src*="cashfree"], script[id*="cashfree"]');
-          existingScripts.forEach(script => script.remove());
-          
+          const existingScripts = document.querySelectorAll(
+            'script[src*="cashfree"], script[id*="cashfree"]'
+          );
+          existingScripts.forEach((script) => script.remove());
+
           // Clear window.Cashfree if it exists (from previous script)
           if (window.Cashfree) {
             delete window.Cashfree;
           }
-          
+
           // Dynamically load the correct SDK script
-          const script = document.createElement('script');
-          script.id = 'cashfree-sdk';
-          script.src = isTest 
-            ? 'https://sdk.cashfree.com/js/ui/2.0.0/cashfree.sandbox.js'
-            : 'https://sdk.cashfree.com/js/v3/cashfree.js';
+          const script = document.createElement("script");
+          script.id = "cashfree-sdk";
+          script.src = isTest
+            ? "https://sdk.cashfree.com/js/ui/2.0.0/cashfree.sandbox.js"
+            : "https://sdk.cashfree.com/js/v3/cashfree.js";
           script.onload = () => {
-            console.log(`✅ Cashfree SDK loaded (${isTest ? 'TEST' : 'PRODUCTION'})`);
+            console.log(
+              `✅ Cashfree SDK loaded (${isTest ? "TEST" : "PRODUCTION"})`
+            );
             setCashfreeSdkLoaded(true);
           };
           script.onerror = () => {
-            console.error('❌ Failed to load Cashfree SDK');
+            console.error("❌ Failed to load Cashfree SDK");
             setCashfreeSdkLoaded(false);
           };
           document.head.appendChild(script);
         } else {
-          console.warn('⚠️ Failed to fetch Cashfree environment, defaulting to PRODUCTION');
+          console.warn(
+            "⚠️ Failed to fetch Cashfree environment, defaulting to PRODUCTION"
+          );
           const env = "PRODUCTION";
           setCashfreeEnv(env);
           cashfreeEnvRef.current = env;
@@ -2895,7 +2949,7 @@ function App() {
           setCashfreeSdkLoaded(true);
         }
       } catch (err) {
-        console.error('❌ Error fetching Cashfree environment:', err);
+        console.error("❌ Error fetching Cashfree environment:", err);
         const env = "PRODUCTION";
         setCashfreeEnv(env);
         cashfreeEnvRef.current = env;
@@ -2903,82 +2957,93 @@ function App() {
         setCashfreeSdkLoaded(true);
       }
     };
-    
+
     fetchCashfreeEnv();
   }, []);
 
   // Handle payment return URL - verify payment before showing success
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const orderId = urlParams.get('order_id');
-    
+    const orderId = urlParams.get("order_id");
+
     // Only process if we're on the return URL (Cashfree redirects here)
-    if (orderId && window.location.pathname === '/payment/return') {
+    if (orderId && window.location.pathname === "/payment/return") {
       // Prevent duplicate processing
       if (purchaseEventFiredRef.current.has(orderId)) {
-        console.log('⚠️ Order already processed:', orderId);
+        console.log("⚠️ Order already processed:", orderId);
         setScreen(SCREEN.PAYMENT_SUCCESS);
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, "", window.location.pathname);
         return;
       }
-      
-          // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
-          const verifyPayment = async () => {
-            try {
-              console.log('🔍 Verifying payment for order:', orderId);
-              
-              // Send profile data with verification (POST request)
-              const verifyResponse = await fetch(`/api/payment/verify`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  order_id: orderId,
-                  username: profile.username,
-                  cards: cards,
-                  profile: profile
-                })
-              });
-              
-              if (!verifyResponse.ok) {
-                // Any backend verification failure → treat as success fallback
-                const status = verifyResponse.status;
-                const text = await verifyResponse.text().catch(() => '');
-                console.warn('⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:', { status, text });
 
-                setScreen(SCREEN.PAYMENT_SUCCESS);
-                purchaseEventFiredRef.current.add(orderId);
-                window.history.replaceState({}, '', window.location.pathname);
-                return;
-              }
-              
-              const paymentData = await verifyResponse.json();
-              console.log('📋 Payment verification response:', paymentData);
-              console.log('📋 Order status:', paymentData.order_status);
-              console.log('📋 Payment status:', paymentData.payment_status);
-              console.log('📋 Is successful:', paymentData.is_successful);
-              
-              // Only show success if payment is actually successful
-              if (paymentData.is_successful) {
-                console.log('✅ Payment verified successfully');
-                setScreen(SCREEN.PAYMENT_SUCCESS);
-                purchaseEventFiredRef.current.add(orderId);
-                window.history.replaceState({}, '', window.location.pathname);
-              } else {
-                // Payment not successful - stay on payment page (silent fail)
-                console.log('⚠️ Payment not successful - order_status:', paymentData.order_status, 'payment_status:', paymentData.payment_status);
-                setScreen(SCREEN.PAYMENT);
-              }
-            } catch (err) {
-              // Network / unexpected error → treat as success fallback
-              console.error('❌ Error verifying payment (fallback to success):', err);
-              setScreen(SCREEN.PAYMENT_SUCCESS);
-              purchaseEventFiredRef.current.add(orderId);
-              window.history.replaceState({}, '', window.location.pathname);
-            }
-          };
-      
+      // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
+      const verifyPayment = async () => {
+        try {
+          console.log("🔍 Verifying payment for order:", orderId);
+
+          // Send profile data with verification (POST request)
+          const verifyResponse = await fetch(`/api/payment/verify`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              order_id: orderId,
+              username: profile.username,
+              cards: cards,
+              profile: profile,
+            }),
+          });
+
+          if (!verifyResponse.ok) {
+            // Any backend verification failure → treat as success fallback
+            const status = verifyResponse.status;
+            const text = await verifyResponse.text().catch(() => "");
+            console.warn(
+              "⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:",
+              { status, text }
+            );
+
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            purchaseEventFiredRef.current.add(orderId);
+            window.history.replaceState({}, "", window.location.pathname);
+            return;
+          }
+
+          const paymentData = await verifyResponse.json();
+          console.log("📋 Payment verification response:", paymentData);
+          console.log("📋 Order status:", paymentData.order_status);
+          console.log("📋 Payment status:", paymentData.payment_status);
+          console.log("📋 Is successful:", paymentData.is_successful);
+
+          // Only show success if payment is actually successful
+          if (paymentData.is_successful) {
+            console.log("✅ Payment verified successfully");
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+            purchaseEventFiredRef.current.add(orderId);
+            window.history.replaceState({}, "", window.location.pathname);
+          } else {
+            // Payment not successful - stay on payment page (silent fail)
+            console.log(
+              "⚠️ Payment not successful - order_status:",
+              paymentData.order_status,
+              "payment_status:",
+              paymentData.payment_status
+            );
+            setScreen(SCREEN.PAYMENT);
+          }
+        } catch (err) {
+          // Network / unexpected error → treat as success fallback
+          console.error(
+            "❌ Error verifying payment (fallback to success):",
+            err
+          );
+          setScreen(SCREEN.PAYMENT_SUCCESS);
+          purchaseEventFiredRef.current.add(orderId);
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      };
+
       verifyPayment();
     }
   }, []);
@@ -3020,7 +3085,9 @@ function App() {
         body: JSON.stringify(paymentForm),
       }).catch((fetchErr) => {
         console.error("Network error saving user:", fetchErr);
-        throw new Error(`Cannot connect to server. Please check if backend is running.`);
+        throw new Error(
+          `Cannot connect to server. Please check if backend is running.`
+        );
       });
 
       if (!saveResponse.ok) {
@@ -3032,21 +3099,20 @@ function App() {
 
       // Create Cashfree payment session
       const amount = 99 * quantity; // 99₹ per item
-      const orderResponse = await fetch(
-        `/api/payment/create-session`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            amount,
-            email: paymentForm.email,
-            fullName: paymentForm.fullName,
-            phoneNumber: paymentForm.phoneNumber,
-          }),
-        }
-      ).catch((fetchErr) => {
+      const orderResponse = await fetch(`/api/payment/create-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          email: paymentForm.email,
+          fullName: paymentForm.fullName,
+          phoneNumber: paymentForm.phoneNumber,
+        }),
+      }).catch((fetchErr) => {
         console.error("Network error creating payment:", fetchErr);
-        throw new Error(`Cannot connect to payment server. Please check if backend is running.`);
+        throw new Error(
+          `Cannot connect to payment server. Please check if backend is running.`
+        );
       });
 
       if (!orderResponse.ok) {
@@ -3055,7 +3121,9 @@ function App() {
           .catch(() => ({ error: "Unknown error" }));
         console.error("Payment session error:", errorData);
         throw new Error(
-          errorData.error || errorData.message || "Failed to create payment session"
+          errorData.error ||
+            errorData.message ||
+            "Failed to create payment session"
         );
       }
 
@@ -3076,17 +3144,19 @@ function App() {
 
       // Wait for Cashfree environment to be determined (use ref for synchronous access)
       if (cashfreeEnvRef.current === null) {
-        console.log('⏳ Waiting for Cashfree environment to load...');
+        console.log("⏳ Waiting for Cashfree environment to load...");
         // Wait up to 5 seconds for environment to load
         let attempts = 0;
         while (cashfreeEnvRef.current === null && attempts < 25) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
           attempts++;
         }
         if (cashfreeEnvRef.current === null) {
           // Default to PRODUCTION if still not loaded
           cashfreeEnvRef.current = "PRODUCTION";
-          console.warn('⚠️ Cashfree environment not loaded, defaulting to PRODUCTION');
+          console.warn(
+            "⚠️ Cashfree environment not loaded, defaulting to PRODUCTION"
+          );
         }
       }
 
@@ -3096,7 +3166,9 @@ function App() {
       // Initialize Cashfree with environment-based mode (use ref for current value)
       const currentEnv = cashfreeEnvRef.current || "PRODUCTION";
       const cashfreeMode = currentEnv === "TEST" ? "sandbox" : "production";
-      console.log(`🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`);
+      console.log(
+        `🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`
+      );
       const cashfree = new Cashfree({ mode: cashfreeMode });
 
       console.log(
@@ -3245,8 +3317,10 @@ function App() {
               {/* Urgency Countdown */}
               <div className="payment-urgency">
                 <div className="urgency-icon">⚠️</div>
-                  <p>Your report expires in &nbsp;
-                    {formatCountdown(paymentCountdown)}</p>
+                <p>
+                  Your report expires in &nbsp;
+                  {formatCountdown(paymentCountdown)}
+                </p>
               </div>
 
               {/* Reviews */}
@@ -3279,7 +3353,14 @@ function App() {
 
                 {/* Product Item */}
                 <div className="order-item">
-                  <div className="order-item-icon"><img src={instaLogo} alt="Instagram" height="80px" width="70px" /></div>
+                  <div className="order-item-icon">
+                    <img
+                      src={instaLogo}
+                      alt="Instagram"
+                      height="80px"
+                      width="70px"
+                    />
+                  </div>
                   <div className="order-item-details">
                     <div className="order-item-name">
                       Unlock Insta Full Report
@@ -3339,7 +3420,8 @@ function App() {
                 <div className="payment-disclaimer-box">
                   <div className="payment-disclaimer-header">
                     <span>
-                      By continuing, you acknowledge our Service Disclaimer, Acceptable Use, and Data &amp; Privacy Statement.
+                      By continuing, you acknowledge our Service Disclaimer,
+                      Acceptable Use, and Data &amp; Privacy Statement.
                     </span>
                     <button
                       type="button"
@@ -3353,18 +3435,46 @@ function App() {
                   {showDisclaimers && (
                     <div className="payment-disclaimer-body">
                       <h4>Service Disclaimer</h4>
-                      <p>This website provides digital, entertainment-based informational services related to social media engagement insights.</p>
-                      <p>All information and reports generated are strictly based on publicly available data and user-provided inputs.</p>
-                      <p>We do not access private accounts, do not require login credentials, and do not retrieve or store any personal or confidential information.</p>
-                      <p>This service is intended solely for entertainment and informational purposes and should not be interpreted as factual tracking, surveillance, or monitoring of any individual.</p>
+                      <p>
+                        This website provides digital, entertainment-based
+                        informational services related to social media
+                        engagement insights.
+                      </p>
+                      <p>
+                        All information and reports generated are strictly based
+                        on publicly available data and user-provided inputs.
+                      </p>
+                      <p>
+                        We do not access private accounts, do not require login
+                        credentials, and do not retrieve or store any personal
+                        or confidential information.
+                      </p>
+                      <p>
+                        This service is intended solely for entertainment and
+                        informational purposes and should not be interpreted as
+                        factual tracking, surveillance, or monitoring of any
+                        individual.
+                      </p>
 
                       <h4>Acceptable Use</h4>
                       <p>By using this service, you confirm that:</p>
                       <ul>
-                        <li>You are requesting insights only for lawful and ethical purposes</li>
-                        <li>You understand that the service does not guarantee accuracy or real-time activity</li>
-                        <li>You agree that this service does not invade privacy or bypass platform restrictions</li>
-                        <li>Any misuse or misinterpretation of the information provided is solely the responsibility of the user.</li>
+                        <li>
+                          You are requesting insights only for lawful and
+                          ethical purposes
+                        </li>
+                        <li>
+                          You understand that the service does not guarantee
+                          accuracy or real-time activity
+                        </li>
+                        <li>
+                          You agree that this service does not invade privacy or
+                          bypass platform restrictions
+                        </li>
+                        <li>
+                          Any misuse or misinterpretation of the information
+                          provided is solely the responsibility of the user.
+                        </li>
                       </ul>
 
                       <h4>Data &amp; Privacy Statement</h4>
@@ -3374,11 +3484,14 @@ function App() {
                         <li>Login credentials</li>
                         <li>Passwords or authentication details</li>
                       </ul>
-                      <p>All outputs are generated using publicly accessible information and automated analysis for entertainment use only.</p>
+                      <p>
+                        All outputs are generated using publicly accessible
+                        information and automated analysis for entertainment use
+                        only.
+                      </p>
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
           </div>
@@ -3389,209 +3502,358 @@ function App() {
 
   const renderContactUs = () => {
     return (
-      <section className="screen contact-us-screen" style={{
-        maxWidth: '900px',
-        margin: '0 auto',
-        padding: '40px 20px',
-        background: '#fff',
-      }}>
-        <div style={{ marginBottom: '30px' }}>
-          <button 
+      <section
+        className="screen contact-us-screen"
+        style={{
+          maxWidth: "900px",
+          margin: "0 auto",
+          padding: "40px 20px",
+          background: "#fff",
+        }}
+      >
+        <div style={{ marginBottom: "30px" }}>
+          <button
             onClick={() => setScreen(SCREEN.PAYMENT)}
             style={{
-              background: 'none',
-              border: 'none',
-              color: '#f43f3f',
-              cursor: 'pointer',
-              fontSize: '16px',
-              marginBottom: '20px',
-              textDecoration: 'underline'
+              background: "none",
+              border: "none",
+              color: "#f43f3f",
+              cursor: "pointer",
+              fontSize: "16px",
+              marginBottom: "20px",
+              textDecoration: "underline",
             }}
           >
             ← Back to Payment
           </button>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '10px', color: '#1a1a1a' }}>
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: "700",
+              marginBottom: "10px",
+              color: "#1a1a1a",
+            }}
+          >
             Contact Us
           </h1>
-          <p style={{ fontSize: '16px', color: '#666', marginBottom: '30px' }}>
+          <p style={{ fontSize: "16px", color: "#666", marginBottom: "30px" }}>
             Get in touch with us for any queries or support
           </p>
         </div>
 
         {/* Business Information */}
-        <div style={{
-          background: '#f9f9f9',
-          padding: '30px',
-          borderRadius: '12px',
-          marginBottom: '30px'
-        }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+        <div
+          style={{
+            background: "#f9f9f9",
+            padding: "30px",
+            borderRadius: "12px",
+            marginBottom: "30px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: "700",
+              marginBottom: "20px",
+              color: "#1a1a1a",
+            }}
+          >
             Contact Information
           </h2>
-          
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#333' }}>Email:</div>
-            <div style={{ color: '#666', fontSize: '16px' }}>
-              <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', textDecoration: 'none' }}>
-                support@whoviewedmyprofile.in
+
+          <div style={{ marginBottom: "20px" }}>
+            <div
+              style={{ fontWeight: "600", marginBottom: "8px", color: "#333" }}
+            >
+              Email:
+            </div>
+            <div style={{ color: "#666", fontSize: "16px" }}>
+              <a
+                href="mailto:robertpranav369@gmail.com"
+                style={{ color: "#f43f3f", textDecoration: "none" }}
+              >
+                robertpranav369@gmail.com
               </a>
             </div>
           </div>
         </div>
 
         {/* Terms and Conditions */}
-        <div style={{
-          background: '#fff',
-          border: '1px solid #e0e0e0',
-          padding: '30px',
-          borderRadius: '12px',
-          marginBottom: '30px'
-        }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            padding: "30px",
+            borderRadius: "12px",
+            marginBottom: "30px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: "700",
+              marginBottom: "20px",
+              color: "#1a1a1a",
+            }}
+          >
             Terms & Conditions
           </h2>
-          
-          <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+
+          <div style={{ fontSize: "14px", color: "#666", lineHeight: "1.8" }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 1. Service Description
               </h3>
               <p>
-                Our service provides Instagram profile analysis and visitor insights. By using our service, 
-                you agree to these terms and conditions.
+                Our service provides Instagram profile analysis and visitor
+                insights. By using our service, you agree to these terms and
+                conditions.
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 2. Payment Terms
               </h3>
               <p>
-                All payments are processed securely through Cashfree payment gateway. Payment is required 
-                before accessing the full report. All prices are in Indian Rupees (INR).
+                All payments are processed securely through Cashfree payment
+                gateway. Payment is required before accessing the full report.
+                All prices are in Indian Rupees (INR).
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 3. Refund Policy
               </h3>
               <p>
-                We offer a 14-day money-back guarantee. If you're not satisfied with our service within 
-                14 days of purchase, contact us for a full refund - no questions asked.
+                We offer a 14-day money-back guarantee. If you're not satisfied
+                with our service within 14 days of purchase, contact us for a
+                full refund - no questions asked.
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 4. Privacy Policy
               </h3>
               <p>
-                We respect your privacy. All personal information provided during payment is securely 
-                stored and used only for processing your order and providing customer support.
+                We respect your privacy. All personal information provided
+                during payment is securely stored and used only for processing
+                your order and providing customer support.
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 5. Service Availability
               </h3>
               <p>
-                Our service availability depends on Instagram's API and website structure. We strive to 
-                maintain 99% uptime but cannot guarantee uninterrupted service.
+                Our service availability depends on Instagram's API and website
+                structure. We strive to maintain 99% uptime but cannot guarantee
+                uninterrupted service.
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 6. Limitation of Liability
               </h3>
               <p>
-                Our service is provided "as is" without warranties. We are not liable for any indirect, 
-                incidental, or consequential damages arising from the use of our service.
+                Our service is provided "as is" without warranties. We are not
+                liable for any indirect, incidental, or consequential damages
+                arising from the use of our service.
               </p>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "20px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 7. Contact Information
               </h3>
               <p>
                 For any queries, complaints, or support, please contact us at:
                 <br />
-                Email: <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f' }}>support@whoviewedmyprofile.in</a>
+                Email:{" "}
+                <a
+                  href="mailto:robertpranav369@gmail.com"
+                  style={{ color: "#f43f3f" }}
+                >
+                  robertpranav369@gmail.com
+                </a>
                 <br />
-                Address: #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta Bazaar, Hyderabad, Telangana - 500002
+                Address: #22-8-73/1/125, New Shoe Market, Yousuf Bazar, Chatta
+                Bazaar, Hyderabad, Telangana - 500002
               </p>
             </div>
 
-            <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #e0e0e0', fontSize: '12px', color: '#999' }}>
+            <div
+              style={{
+                marginTop: "30px",
+                paddingTop: "20px",
+                borderTop: "1px solid #e0e0e0",
+                fontSize: "12px",
+                color: "#999",
+              }}
+            >
               Last updated: December 5, 2024
             </div>
           </div>
         </div>
 
         {/* Refund & Cancellation Policy */}
-        <div style={{
-          background: '#fff',
-          border: '1px solid #e0e0e0',
-          padding: '30px',
-          borderRadius: '12px',
-          marginBottom: '30px'
-        }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e0e0e0",
+            padding: "30px",
+            borderRadius: "12px",
+            marginBottom: "30px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: "700",
+              marginBottom: "20px",
+              color: "#1a1a1a",
+            }}
+          >
             Refunds & Cancellations
           </h2>
-          
-          <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
-            <div style={{ marginBottom: '15px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+
+          <div style={{ fontSize: "14px", color: "#666", lineHeight: "1.8" }}>
+            <div style={{ marginBottom: "15px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 Refund Policy
               </h3>
               <p>
-                We offer a 14-day money-back guarantee on all purchases. If you're not satisfied with 
-                our service for any reason, contact us within 14 days of your purchase date for a full refund.
+                We offer a 14-day money-back guarantee on all purchases. If
+                you're not satisfied with our service for any reason, contact us
+                within 14 days of your purchase date for a full refund.
               </p>
             </div>
 
-            <div style={{ marginBottom: '15px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "15px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 Cancellation Policy
               </h3>
               <p>
-                You may cancel your order before payment is processed. Once payment is completed, 
-                you can request a refund within 14 days as per our refund policy.
+                You may cancel your order before payment is processed. Once
+                payment is completed, you can request a refund within 14 days as
+                per our refund policy.
               </p>
             </div>
 
-            <div style={{ marginBottom: '15px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px', color: '#333' }}>
+            <div style={{ marginBottom: "15px" }}>
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  marginBottom: "10px",
+                  color: "#333",
+                }}
+              >
                 Processing Time
               </h3>
               <p>
-                Refunds will be processed within 5-7 business days to your original payment method 
-                after approval.
+                Refunds will be processed within 5-7 business days to your
+                original payment method after approval.
               </p>
             </div>
           </div>
         </div>
 
         {/* Contact Form */}
-        <div style={{
-          background: '#f9f9f9',
-          padding: '30px',
-          borderRadius: '12px'
-        }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '20px', color: '#1a1a1a' }}>
+        <div
+          style={{
+            background: "#f9f9f9",
+            padding: "30px",
+            borderRadius: "12px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: "700",
+              marginBottom: "20px",
+              color: "#1a1a1a",
+            }}
+          >
             Send us a Message
           </h2>
-          <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
-            Have a question or need support? Send us an email at{' '}
-            <a href="mailto:support@whoviewedmyprofile.in" style={{ color: '#f43f3f', fontWeight: '600' }}>
-              support@whoviewedmyprofile.in
+          <p style={{ fontSize: "14px", color: "#666", marginBottom: "20px" }}>
+            Have a question or need support? Send us an email at{" "}
+            <a
+              href="mailto:robertpranav369@gmail.com"
+              style={{ color: "#f43f3f", fontWeight: "600" }}
+            >
+              robertpranav369@gmail.com
             </a>
           </p>
-          <p style={{ fontSize: '14px', color: '#666' }}>
+          <p style={{ fontSize: "14px", color: "#666" }}>
             We typically respond within 24-48 hours during business days.
           </p>
         </div>
@@ -3602,14 +3864,18 @@ function App() {
   // Fetch results.html and extract cards when on payment success page
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    
+
     const fetchResultsCards = async () => {
       try {
         const resultsStep = snapshots.find((step) => step.name === "results");
         if (!resultsStep || !resultsStep.htmlPath) {
           console.log("No results snapshot found, using cards from state");
           // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+          const getCardsWithCriteria = (
+            cardList,
+            requireImage = true,
+            requireNotBlurred = true
+          ) => {
             return cardList.filter((card) => {
               if (card?.isLocked || !card?.username) return false;
               if (requireImage && !card?.image) return false;
@@ -3617,11 +3883,11 @@ function App() {
               return true;
             });
           };
-          
+
           // Carousel: strict criteria (clean profiles only)
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
-          
+
           // No results snapshot; to avoid duplicates, do not populate additional usernames
           setPaymentSuccessAdditionalUsernames([]);
           return;
@@ -3631,7 +3897,11 @@ function App() {
         if (!url) {
           console.log("Could not build results URL, using cards from state");
           // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+          const getCardsWithCriteria = (
+            cardList,
+            requireImage = true,
+            requireNotBlurred = true
+          ) => {
             return cardList.filter((card) => {
               if (card?.isLocked || !card?.username) return false;
               if (requireImage && !card?.image) return false;
@@ -3639,11 +3909,11 @@ function App() {
               return true;
             });
           };
-          
+
           // Carousel: strict criteria (clean profiles only)
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
-          
+
           // No URL; to avoid duplicates, do not populate additional usernames
           setPaymentSuccessAdditionalUsernames([]);
           return;
@@ -3653,7 +3923,11 @@ function App() {
         if (!res.ok) {
           console.log("Failed to fetch results.html, using cards from state");
           // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+          const getCardsWithCriteria = (
+            cardList,
+            requireImage = true,
+            requireNotBlurred = true
+          ) => {
             return cardList.filter((card) => {
               if (card?.isLocked || !card?.username) return false;
               if (requireImage && !card?.image) return false;
@@ -3661,11 +3935,11 @@ function App() {
               return true;
             });
           };
-          
+
           // Carousel: strict criteria (clean profiles only)
           const carouselCards = getCardsWithCriteria(cards, true, true);
           setPaymentSuccessCards(carouselCards.slice(0, 6));
-          
+
           // Fetch failed; to avoid duplicates, do not populate additional usernames
           setPaymentSuccessAdditionalUsernames([]);
           return;
@@ -3673,9 +3947,13 @@ function App() {
 
         const html = await res.text();
         const parsed = parseResultsSnapshot(html);
-        
+
         // Helper function to get cards with progressively relaxed criteria
-        const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+        const getCardsWithCriteria = (
+          cardList,
+          requireImage = true,
+          requireNotBlurred = true
+        ) => {
           return cardList.filter((card) => {
             if (card?.isLocked || !card?.username) return false;
             if (requireImage && !card?.image) return false;
@@ -3683,14 +3961,14 @@ function App() {
             return true;
           });
         };
-        
+
         // Use only parsed slider cards from results.html
         const sliderCards = parsed.slider.cards || [];
 
         // Dedupe by username while preserving order
         const seen = new Set();
         const deduped = [];
-        sliderCards.forEach(card => {
+        sliderCards.forEach((card) => {
           const u = card?.username;
           if (u && !seen.has(u)) {
             seen.add(u);
@@ -3704,10 +3982,10 @@ function App() {
 
         // Additional usernames: from all remaining cards (>=7), any status, just need username
         const additionalUsernames = deduped
-          .slice(6)              // skip first 6 used by carousel
-          .map(card => card?.username)
+          .slice(6) // skip first 6 used by carousel
+          .map((card) => card?.username)
           .filter(Boolean)
-          .slice(0, 5);          // up to 5
+          .slice(0, 5); // up to 5
 
         console.log(
           `Parsed slider usernames (deduped, after carousel): count=${additionalUsernames.length}`,
@@ -3717,7 +3995,11 @@ function App() {
       } catch (err) {
         console.error("Error fetching results cards:", err);
         // Helper function for carousel (strict criteria)
-        const getCardsWithCriteria = (cardList, requireImage = true, requireNotBlurred = true) => {
+        const getCardsWithCriteria = (
+          cardList,
+          requireImage = true,
+          requireNotBlurred = true
+        ) => {
           return cardList.filter((card) => {
             if (card?.isLocked || !card?.username) return false;
             if (requireImage && !card?.image) return false;
@@ -3725,11 +4007,11 @@ function App() {
             return true;
           });
         };
-        
+
         // Carousel: strict criteria (clean profiles only)
         const carouselCards = getCardsWithCriteria(cards, true, true);
         setPaymentSuccessCards(carouselCards.slice(0, 6));
-        
+
         // Error fallback; to avoid duplicates, do not populate additional usernames
         setPaymentSuccessAdditionalUsernames([]);
       }
@@ -3754,7 +4036,8 @@ function App() {
 
   // Auto-scroll payment success carousel (same logic as result page)
   useEffect(() => {
-    if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length === 0) return;
+    if (screen !== SCREEN.PAYMENT_SUCCESS || paymentSuccessCards.length === 0)
+      return;
 
     // Filter cards (same logic as result page)
     const filteredCards = paymentSuccessCards.filter((card, index) => {
@@ -3797,9 +4080,9 @@ function App() {
     let screenshots = randBetween(1, 5);
     if (screenshots === visits) {
       // Ensure screenshots count is different from visits
-      screenshots = ((screenshots % 5) || 5);
+      screenshots = screenshots % 5 || 5;
       if (screenshots === visits) {
-        screenshots = ((screenshots + 1) % 5) || 5;
+        screenshots = (screenshots + 1) % 5 || 5;
       }
     }
 
@@ -3822,10 +4105,9 @@ function App() {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
-    const sourceCards =
-      (paymentSuccessCards.length ? paymentSuccessCards : cards).filter(
-        (card) => !card?.isLocked && card?.username
-      );
+    const sourceCards = (
+      paymentSuccessCards.length ? paymentSuccessCards : cards
+    ).filter((card) => !card?.isLocked && card?.username);
 
     if (!sourceCards.length) {
       setPaymentSuccessLast7Rows([]);
@@ -3856,12 +4138,17 @@ function App() {
 
     // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
     let fallbackIndex = 0;
-    while (selected.length < TOTAL_ROWS && cards.length > 0 && fallbackIndex < cards.length * 2) {
+    while (
+      selected.length < TOTAL_ROWS &&
+      cards.length > 0 &&
+      fallbackIndex < cards.length * 2
+    ) {
       const fallbackCard = cards[fallbackIndex % cards.length];
       fallbackIndex += 1;
       const username = (fallbackCard?.username || "").trim();
       if (!username) continue;
-      if (selected.some((c) => (c.username || "").trim() === username)) continue;
+      if (selected.some((c) => (c.username || "").trim() === username))
+        continue;
       selected.push(fallbackCard);
     }
 
@@ -3966,37 +4253,42 @@ function App() {
       "This user screenshoted your last story",
       "This user copied your username",
       "This user viewed your profile yesterday",
-      "This user took screenshot of your profile"
+      "This user took screenshot of your profile",
     ];
 
     const handleDownloadPDF = () => {
       try {
-        const link = document.createElement('a');
-        link.href = '/Dont_Look_Back_Full.pdf';
-        link.download = 'Dont_Look_Back_Full.pdf';
-        link.target = '_blank'; // Fallback: open in new tab if download fails
+        const link = document.createElement("a");
+        link.href = "/Dont_Look_Back_Full.pdf";
+        link.download = "Dont_Look_Back_Full.pdf";
+        link.target = "_blank"; // Fallback: open in new tab if download fails
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } catch (error) {
-        console.error('Error downloading PDF:', error);
+        console.error("Error downloading PDF:", error);
         // Fallback: open PDF in new tab
-        window.open('/Dont_Look_Back_Full.pdf', '_blank');
+        window.open("/Dont_Look_Back_Full.pdf", "_blank");
       }
     };
 
     return (
-      <section className="screen payment-success-screen" style={{
-        maxWidth: '100%',
-        padding: 'clamp(10px, 3vw, 20px)',
-        background: '#fff',
-        minHeight: '100vh'
-      }}>
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          padding: 'clamp(15px, 3vw, 20px)'
-        }}>
+      <section
+        className="screen payment-success-screen"
+        style={{
+          maxWidth: "100%",
+          padding: "clamp(10px, 3vw, 20px)",
+          background: "#fff",
+          minHeight: "100vh",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "1200px",
+            margin: "0 auto",
+            padding: "clamp(15px, 3vw, 20px)",
+          }}
+        >
           {/* Top header bar */}
           <header
             style={{
@@ -4286,20 +4578,25 @@ function App() {
                     ...item,
                     duplicateKey: `original-${idx}`,
                   })),
-                  ...filteredCardsWithIndex.slice(0, offset).map((item, idx) => ({
-                    ...item,
-                    duplicateKey: `end-${idx}`,
-                  })),
+                  ...filteredCardsWithIndex
+                    .slice(0, offset)
+                    .map((item, idx) => ({
+                      ...item,
+                      duplicateKey: `end-${idx}`,
+                    })),
                 ];
 
                 // Use paymentSuccessCarouselIndex directly (it already includes offset)
                 const displayIndex = paymentSuccessCarouselIndex;
 
                 return (
-                  <div className="carousel-container" style={{
-                    marginBottom: 'clamp(20px, 5vw, 40px)',
-                    padding: '0 clamp(5px, 2vw, 10px)'
-                  }}>
+                  <div
+                    className="carousel-container"
+                    style={{
+                      marginBottom: "clamp(20px, 5vw, 40px)",
+                      padding: "0 clamp(5px, 2vw, 10px)",
+                    }}
+                  >
                     <div className="carousel-wrapper">
                       <div
                         className="carousel-track"
@@ -4308,10 +4605,10 @@ function App() {
                             displayIndex * (220 + 16)
                           }px))`,
                           transition: paymentSuccessCarouselResetRef.current
-                            ? 'none'
-                            : 'transform 0.4s ease-in-out',
-                          gap: '16px',
-                          padding: '0 calc(50% - 110px)'
+                            ? "none"
+                            : "transform 0.4s ease-in-out",
+                          gap: "16px",
+                          padding: "0 calc(50% - 110px)",
                         }}
                       >
                         {duplicatedCards.map(
@@ -4321,76 +4618,91 @@ function App() {
 
                             return (
                               <article
-                                key={`${card.username || 'card'}-${duplicateKey}-${index}`}
+                                key={`${
+                                  card.username || "card"
+                                }-${duplicateKey}-${index}`}
                                 className={`slider-card ${
                                   isActive ? "active" : ""
                                 }`}
                                 style={{
-                                  borderRadius: '18px',
-                                  overflow: 'hidden',
-                                  background: '#fff',
-                                  border: '1px solid rgba(0, 0, 0, 0.08)',
-                                  boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.1)'
+                                  borderRadius: "18px",
+                                  overflow: "hidden",
+                                  background: "#fff",
+                                  border: "1px solid rgba(0, 0, 0, 0.08)",
+                                  boxShadow: isActive
+                                    ? "0 4px 12px rgba(0, 0, 0, 0.15)"
+                                    : "0 2px 8px rgba(0, 0, 0, 0.1)",
                                 }}
                               >
                                 <div
                                   className="slider-image"
                                   style={{
-                                    width: '100%',
-                                    height: '250px',
+                                    width: "100%",
+                                    height: "250px",
                                     backgroundImage: imageUrl
                                       ? `url(${imageUrl})`
                                       : "none",
                                     backgroundColor: imageUrl
                                       ? "transparent"
                                       : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                    backgroundRepeat: 'no-repeat',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    position: 'relative'
+                                    backgroundSize: "cover",
+                                    backgroundPosition: "center",
+                                    backgroundRepeat: "no-repeat",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    position: "relative",
                                   }}
                                 >
                                   {!imageUrl && (
-                                    <div style={{
-                                      width: '120px',
-                                      height: '120px',
-                                      borderRadius: '50%',
-                                      background: 'rgba(255, 255, 255, 0.3)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontSize: '48px',
-                                      color: '#fff'
-                                    }}>
+                                    <div
+                                      style={{
+                                        width: "120px",
+                                        height: "120px",
+                                        borderRadius: "50%",
+                                        background: "rgba(255, 255, 255, 0.3)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontSize: "48px",
+                                        color: "#fff",
+                                      }}
+                                    >
                                       👤
                                     </div>
                                   )}
                                 </div>
-                                <div className="slider-card-content" style={{
-                                  padding: 'clamp(15px, 3vw, 20px)',
-                                  textAlign: 'center'
-                                }}>
+                                <div
+                                  className="slider-card-content"
+                                  style={{
+                                    padding: "clamp(15px, 3vw, 20px)",
+                                    textAlign: "center",
+                                  }}
+                                >
                                   {card?.username && (
-                                    <h4 className="username" style={{
-                                      fontSize: 'clamp(16px, 3vw, 18px)',
-                                      fontWeight: '600',
-                                      color: '#1a1a1a',
-                                      margin: '0 0 8px 0'
-                                    }}>
+                                    <h4
+                                      className="username"
+                                      style={{
+                                        fontSize: "clamp(16px, 3vw, 18px)",
+                                        fontWeight: "600",
+                                        color: "#1a1a1a",
+                                        margin: "0 0 8px 0",
+                                      }}
+                                    >
                                       {card.username}
                                     </h4>
                                   )}
-                                  <p style={{
-                                    fontSize: 'clamp(13px, 2.5vw, 15px)',
-                                    color: '#666',
-                                    margin: '8px 0 0 0',
-                                    fontWeight: '500',
-                                    lineHeight: '1.5'
-                                  }}>
-                                    {profileActions[originalIndex] || profileActions[0]}
+                                  <p
+                                    style={{
+                                      fontSize: "clamp(13px, 2.5vw, 15px)",
+                                      color: "#666",
+                                      margin: "8px 0 0 0",
+                                      fontWeight: "500",
+                                      lineHeight: "1.5",
+                                    }}
+                                  >
+                                    {profileActions[originalIndex] ||
+                                      profileActions[0]}
                                   </p>
                                 </div>
                               </article>
@@ -4402,15 +4714,16 @@ function App() {
                   </div>
                 );
               })()}
-
             </>
           ) : (
-            <div style={{
-              textAlign: 'center',
-              padding: '40px 20px',
-              color: '#666',
-              marginBottom: '40px'
-            }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px 20px",
+                color: "#666",
+                marginBottom: "40px",
+              }}
+            >
               <p>Loading profiles...</p>
             </div>
           )}
@@ -4430,318 +4743,327 @@ function App() {
                 color: "#f9fafb",
               }}
             >
-                <p
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "#b91c1c",
+                  margin: "0 0 6px 0",
+                }}
+              >
+                We can&apos;t show the full name of the profile because
+                it&apos;s restricted by Instagram.
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <h4
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    margin: 0,
+                  }}
+                >
+                  Last 7 days
+                </h4>
+                <span
                   style={{
                     fontSize: 11,
-                    color: "#b91c1c",
-                    margin: "0 0 6px 0",
+                    color: "#9ca3af",
                   }}
                 >
-                  We can&apos;t show the full name of the profile because it&apos;s
-                  restricted by Instagram.
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 10,
-                  }}
-                >
-                  <h4
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      margin: 0,
-                    }}
-                  >
-                    Last 7 days
-                  </h4>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "#9ca3af",
-                    }}
-                  >
-                    Swipe sideways →
-                  </span>
-                </div>
+                  Swipe sideways →
+                </span>
+              </div>
 
-                <div
+              <div
+                style={{
+                  width: "100%",
+                  overflowX: "auto",
+                }}
+              >
+                <table
                   style={{
                     width: "100%",
-                    overflowX: "auto",
+                    minWidth: 420,
+                    borderCollapse: "collapse",
+                    fontSize: 13,
                   }}
                 >
-                  <table
-                    style={{
-                      width: "100%",
-                      minWidth: 420,
-                      borderCollapse: "collapse",
-                      fontSize: 13,
-                    }}
-                  >
-                    <thead>
-                      <tr
+                  <thead>
+                    <tr
+                      style={{
+                        textAlign: "left",
+                        color: "#9ca3af",
+                        fontSize: 11,
+                        letterSpacing: 0.03,
+                      }}
+                    >
+                      <th
                         style={{
-                          textAlign: "left",
-                          color: "#9ca3af",
-                          fontSize: 11,
-                          letterSpacing: 0.03,
+                          padding: "6px 4px",
+                          fontWeight: 500,
                         }}
                       >
-                        <th
+                        Name
+                      </th>
+                      <th
+                        style={{
+                          padding: "6px 4px",
+                          fontWeight: 500,
+                          textAlign: "center",
+                        }}
+                      >
+                        Visits
+                      </th>
+                      <th
+                        style={{
+                          padding: "6px 4px",
+                          fontWeight: 500,
+                          textAlign: "center",
+                        }}
+                      >
+                        Screenshots
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentSuccessLast7Rows.map((row, index) => (
+                      <tr
+                        key={row.id}
+                        style={{
+                          borderTop: "1px solid rgba(148, 163, 184, 0.25)",
+                        }}
+                      >
+                        {/* Name + username */}
+                        <td
                           style={{
-                            padding: "6px 4px",
-                            fontWeight: 500,
+                            padding: "8px 4px",
                           }}
                         >
-                          Name
-                        </th>
-                        <th
-                          style={{
-                            padding: "6px 4px",
-                            fontWeight: 500,
-                            textAlign: "center",
-                          }}
-                        >
-                          Visits
-                        </th>
-                        <th
-                          style={{
-                            padding: "6px 4px",
-                            fontWeight: 500,
-                            textAlign: "center",
-                          }}
-                        >
-                          Screenshots
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paymentSuccessLast7Rows.map((row, index) => (
-                        <tr
-                          key={row.id}
-                          style={{
-                            borderTop: "1px solid rgba(148, 163, 184, 0.25)",
-                          }}
-                        >
-                          {/* Name + username */}
-                          <td
+                          <div
                             style={{
-                              padding: "8px 4px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
                             }}
                           >
                             <div
                               style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
+                                width: 32,
+                                height: 32,
+                                borderRadius: "50%",
+                                overflow: "hidden",
+                                background:
+                                  "linear-gradient(135deg,#4b5563,#111827)",
+                                flexShrink: 0,
                               }}
                             >
-                              <div
-                                style={{
-                                  width: 32,
-                                  height: 32,
-                                  borderRadius: "50%",
-                                  overflow: "hidden",
-                                  background:
-                                    "linear-gradient(135deg,#4b5563,#111827)",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {row.image ? (
-                                  <img
-                                    src={row.image}
-                                    alt={row.name}
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      objectFit: "cover",
-                                    }}
-                                  />
-                                ) : (
-                                  <div
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      fontSize: 14,
-                                    }}
-                                  >
-                                    👤
-                                  </div>
-                                )}
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  minWidth: 0,
-                                }}
-                              >
-                                <span
+                              {row.image ? (
+                                <img
+                                  src={row.image}
+                                  alt={row.name}
                                   style={{
-                                    fontSize: 13,
-                                    fontWeight: 500,
-                                    whiteSpace: "nowrap",
-                                    textOverflow: "ellipsis",
-                                    overflow: "hidden",
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: 14,
                                   }}
                                 >
-                                  {row.name}
-                                </span>
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: "#9ca3af",
-                                  }}
-                                >
-                                  {row.username}
-                                </span>
-                              </div>
+                                  👤
+                                </div>
+                              )}
                             </div>
-                          </td>
-
-                          {/* Visits */}
-                          <td
-                            style={{
-                              padding: "8px 4px",
-                              textAlign: "center",
-                            }}
-                          >
-                            {row.visitsHighlighted ? (
-                              <div
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: "999px",
-                                  border: "1px solid #fbbf24",
-                                  color: "#fbbf24",
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {row.visits}
-                              </div>
-                            ) : (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                minWidth: 0,
+                              }}
+                            >
                               <span
                                 style={{
-                                  fontSize: 12,
+                                  fontSize: 13,
+                                  fontWeight: 500,
+                                  whiteSpace: "nowrap",
+                                  textOverflow: "ellipsis",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {row.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 11,
                                   color: "#9ca3af",
                                 }}
                               >
-                                {row.visits}
+                                {row.username}
                               </span>
-                            )}
-                          </td>
+                            </div>
+                          </div>
+                        </td>
 
-                          {/* Screenshots */}
-                          <td
-                            style={{
-                              padding: "8px 4px",
-                              textAlign: "center",
-                            }}
-                          >
-                            {row.screenshotsHighlighted ? (
-                              <div
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: "999px",
-                                  background:
-                                    "linear-gradient(135deg,#f97316,#ea580c)",
-                                  color: "#fff",
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {row.screenshots}
-                              </div>
-                            ) : (
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  color: "#9ca3af",
-                                }}
-                              >
-                                {row.screenshots}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                        {/* Visits */}
+                        <td
+                          style={{
+                            padding: "8px 4px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {row.visitsHighlighted ? (
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: 22,
+                                height: 22,
+                                borderRadius: "999px",
+                                border: "1px solid #fbbf24",
+                                color: "#fbbf24",
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {row.visits}
+                            </div>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "#9ca3af",
+                              }}
+                            >
+                              {row.visits}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Screenshots */}
+                        <td
+                          style={{
+                            padding: "8px 4px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {row.screenshotsHighlighted ? (
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: 22,
+                                height: 22,
+                                borderRadius: "999px",
+                                background:
+                                  "linear-gradient(135deg,#f97316,#ea580c)",
+                                color: "#fff",
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {row.screenshots}
+                            </div>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "#9ca3af",
+                              }}
+                            >
+                              {row.screenshots}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {paymentSuccessLast7Rows.length === 0 && (
+                <div
+                  style={{
+                    paddingTop: 10,
+                    fontSize: 12,
+                    color: "#9ca3af",
+                  }}
+                >
+                  Profiles are loading...
                 </div>
-                {paymentSuccessLast7Rows.length === 0 && (
-                  <div
-                    style={{
-                      paddingTop: 10,
-                      fontSize: 12,
-                      color: "#9ca3af",
-                    }}
-                  >
-                    Profiles are loading...
-                  </div>
-                )}
+              )}
             </div>
           </section>
 
           {/* PDF Download Section */}
-          <div style={{
-            background: '#f9f9f9',
-            borderRadius: '16px',
-            padding: 'clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)',
-            textAlign: 'center',
-            marginBottom: 'clamp(20px, 4vw, 30px)',
-            border: '1px solid #e0e0e0'
-          }}>
-            <div style={{
-              fontSize: 'clamp(32px, 6vw, 48px)',
-              marginBottom: 'clamp(12px, 3vw, 20px)'
-            }}>📄</div>
-            <h2 style={{
-              fontSize: 'clamp(22px, 4vw, 28px)',
-              fontWeight: '700',
-              color: '#1a1a1a',
-              marginBottom: '12px'
-            }}>
+          <div
+            style={{
+              background: "#f9f9f9",
+              borderRadius: "16px",
+              padding: "clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)",
+              textAlign: "center",
+              marginBottom: "clamp(20px, 4vw, 30px)",
+              border: "1px solid #e0e0e0",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(32px, 6vw, 48px)",
+                marginBottom: "clamp(12px, 3vw, 20px)",
+              }}
+            >
+              📄
+            </div>
+            <h2
+              style={{
+                fontSize: "clamp(22px, 4vw, 28px)",
+                fontWeight: "700",
+                color: "#1a1a1a",
+                marginBottom: "12px",
+              }}
+            >
               Download your ebook
             </h2>
             <button
               onClick={handleDownloadPDF}
               className="primary-btn"
               style={{
-                background: '#f43f3f',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '999px',
-                padding: 'clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)',
-                fontSize: 'clamp(14px, 2.5vw, 18px)',
-                fontWeight: '600',
-                cursor: 'pointer',
-                boxShadow: '0 15px 40px rgba(244, 63, 63, 0.35)',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                minWidth: 'clamp(180px, 30vw, 200px)',
-                width: '100%',
-                maxWidth: '400px'
+                background: "#f43f3f",
+                color: "#fff",
+                border: "none",
+                borderRadius: "999px",
+                padding: "clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)",
+                fontSize: "clamp(14px, 2.5vw, 18px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                boxShadow: "0 15px 40px rgba(244, 63, 63, 0.35)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                minWidth: "clamp(180px, 30vw, 200px)",
+                width: "100%",
+                maxWidth: "400px",
               }}
               onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 20px 50px rgba(244, 63, 63, 0.4)';
+                e.target.style.transform = "translateY(-2px)";
+                e.target.style.boxShadow = "0 20px 50px rgba(244, 63, 63, 0.4)";
               }}
               onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 15px 40px rgba(244, 63, 63, 0.35)';
+                e.target.style.transform = "translateY(0)";
+                e.target.style.boxShadow =
+                  "0 15px 40px rgba(244, 63, 63, 0.35)";
               }}
             >
               pdf (dont look back) [download]
@@ -4749,29 +5071,29 @@ function App() {
           </div>
 
           {/* Back to Home Button */}
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: "center" }}>
             <button
               onClick={() => setScreen(SCREEN.LANDING)}
               style={{
-                background: 'transparent',
-                color: '#f43f3f',
-                border: '2px solid #f43f3f',
-                borderRadius: '999px',
-                padding: 'clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)',
-                fontSize: 'clamp(14px, 2.5vw, 16px)',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                width: '100%',
-                maxWidth: '300px'
+                background: "transparent",
+                color: "#f43f3f",
+                border: "2px solid #f43f3f",
+                borderRadius: "999px",
+                padding: "clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)",
+                fontSize: "clamp(14px, 2.5vw, 16px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                width: "100%",
+                maxWidth: "300px",
               }}
               onMouseOver={(e) => {
-                e.target.style.background = '#f43f3f';
-                e.target.style.color = '#fff';
+                e.target.style.background = "#f43f3f";
+                e.target.style.color = "#fff";
               }}
               onMouseOut={(e) => {
-                e.target.style.background = 'transparent';
-                e.target.style.color = '#f43f3f';
+                e.target.style.background = "transparent";
+                e.target.style.color = "#f43f3f";
               }}
             >
               Back to Home
