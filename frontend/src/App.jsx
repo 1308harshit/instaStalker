@@ -314,6 +314,7 @@ function App() {
   const carouselLoopingRef = useRef(false);
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
+  const checkoutEventFiredRef = useRef(false);
   const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -377,8 +378,6 @@ function App() {
 
   // Track viewport width for responsive layout (stack sections on mobile)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
     const handleResize = () => {
       setViewportWidth(window.innerWidth);
     };
@@ -387,6 +386,12 @@ function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (window.fbq) {
+      window.fbq("track", "PageView");
+    }
+  }, [screen]);
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
@@ -2840,6 +2845,17 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
+      if (window.fbq && !checkoutEventFiredRef.current) {
+        checkoutEventFiredRef.current = true;
+
+        const amount = 99 * quantity;
+
+        window.fbq("track", "InitiateCheckout", {
+          value: amount,
+          currency: "INR",
+        });
+      }
+
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
       // const amount = 99 * quantity;
       // console.log('🎯 Pushing InitiateCheckout event to dataLayer:', { amount, currency: 'INR', quantity });
@@ -3022,8 +3038,18 @@ function App() {
             alert(
               "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
             );
+
+            if (window.fbq && !purchaseEventFiredRef.current.has(orderId)) {
+              const paidAmount = 99 * quantity;
+              purchaseEventFiredRef.current.add(orderId);
+
+              window.fbq("track", "Purchase", {
+                value: paidAmount,
+                currency: "INR",
+              });
+            }
+
             setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
             window.history.replaceState({}, "", window.location.pathname);
           } else {
             // Payment not successful - stay on payment page (silent fail)
