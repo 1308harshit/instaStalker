@@ -1474,7 +1474,7 @@ function App() {
             target="_blank"
             rel="noreferrer"
           >
-            Contact
+            Contact Us
           </a>
           <a
             href="https://sensorahub.com/terms-and-conditions.html"
@@ -3019,6 +3019,9 @@ function App() {
           // Only show success if payment is actually successful
           if (paymentData.is_successful) {
             console.log("✅ Payment verified successfully");
+            alert(
+              "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
+            );
             setScreen(SCREEN.PAYMENT_SUCCESS);
             purchaseEventFiredRef.current.add(orderId);
             window.history.replaceState({}, "", window.location.pathname);
