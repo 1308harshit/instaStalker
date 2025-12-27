@@ -2854,6 +2854,8 @@ function App() {
           value: amount,
           currency: "INR",
         });
+
+        console.log("✅ Meta: InitiateCheckout fired");
       }
 
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
@@ -3039,7 +3041,11 @@ function App() {
               "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
             );
 
-            if (window.fbq && !purchaseEventFiredRef.current.has(orderId)) {
+            // Fire Purchase BEFORE screen change
+            if (
+              window.fbq &&
+              !purchaseEventFiredRef.current.has(orderId)
+            ) {
               const paidAmount = 99 * quantity;
               purchaseEventFiredRef.current.add(orderId);
 
@@ -3047,6 +3053,8 @@ function App() {
                 value: paidAmount,
                 currency: "INR",
               });
+
+              console.log("✅ Meta: Purchase fired", orderId);
             }
 
             setScreen(SCREEN.PAYMENT_SUCCESS);
