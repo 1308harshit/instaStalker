@@ -1557,6 +1557,13 @@ function App() {
           >
             Refund &amp; Cancellation
           </a>
+          <a
+            href="https://sensorahub.com/return.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Return Policy
+          </a>
         </div>
       </div>
     </section>
