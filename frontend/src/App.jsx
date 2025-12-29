@@ -1543,13 +1543,14 @@ function App() {
           >
             Privacy Policy
           </a>
-          <a
+          {/* <a
             href="https://sensorahub.com/shipping.html"
             target="_blank"
             rel="noreferrer"
           >
             Shipping Policy
-          </a>
+          </a> */}
+
           <a
             href="https://sensorahub.com/refund-and-cancellation.html"
             target="_blank"
@@ -1557,13 +1558,14 @@ function App() {
           >
             Refund &amp; Cancellation
           </a>
-          <a
+
+          {/* <a
             href="https://sensorahub.com/return.html"
             target="_blank"
             rel="noreferrer"
           >
             Return Policy
-          </a>
+          </a> */}
         </div>
       </div>
     </section>
