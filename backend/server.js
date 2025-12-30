@@ -45,7 +45,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://sensorahub.com",
+      "https://samjhona.com",
       "http://localhost:5173",
       "http://localhost:3000",
     ],
@@ -145,7 +145,7 @@ const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
 const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
-const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
+const BASE_URL = process.env.BASE_URL || "https://samjhona.com";
 
 // Create email transporter
 const emailTransporter = nodemailer.createTransport({
@@ -313,8 +313,8 @@ app.post("/api/payment/create-session", async (req, res) => {
         customer_phone: phone || "",
       },
       order_meta: {
-        return_url: `https://sensorahub.com/payment/return?order_id={order_id}`,
-        notify_url: `https://sensorahub.com/api/payment/webhook`,
+        return_url: `https://samjhona.com/payment/return?order_id={order_id}`,
+        notify_url: `https://samjhona.com/api/payment/webhook`,
       },
     };
 
@@ -768,7 +768,7 @@ app.get("/api/payment/test-credentials", async (req, res) => {
         customer_phone: "9999999999",
       },
       order_meta: {
-        return_url: `https://sensorahub.com/payment/return?order_id={order_id}`,
+        return_url: `https://samjhona.com/payment/return?order_id={order_id}`,
       },
     };
 

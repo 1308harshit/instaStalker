@@ -25,7 +25,7 @@ const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 // Meta Pixel Helper Function
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
-  
+
   // Wait for fbq to be available (with retry logic)
   const tryTrack = (attempts = 0) => {
     if (window.fbq && typeof window.fbq === "function") {
@@ -39,10 +39,12 @@ const trackMetaPixel = (eventName, eventData = {}) => {
       // Retry after a short delay if fbq not yet loaded
       setTimeout(() => tryTrack(attempts + 1), 100);
     } else {
-      console.warn(`⚠️ Meta Pixel: fbq not available after retries for ${eventName}`);
+      console.warn(
+        `⚠️ Meta Pixel: fbq not available after retries for ${eventName}`
+      );
     }
   };
-  
+
   tryTrack();
 };
 
@@ -1523,28 +1525,28 @@ function App() {
       <div className="landing-footer">
         <div className="landing-links">
           <a
-            href="https://sensorahub.com/contact.html"
+            href="https://samjhona.com/contact.html"
             target="_blank"
             rel="noreferrer"
           >
             Contact Us
           </a>
           <a
-            href="https://sensorahub.com/terms-and-conditions.html"
+            href="https://samjhona.com/terms-and-conditions.html"
             target="_blank"
             rel="noreferrer"
           >
             Terms &amp; Conditions
           </a>
           <a
-            href="https://sensorahub.com/privacy-policy.html"
+            href="https://samjhona.com/privacy-policy.html"
             target="_blank"
             rel="noreferrer"
           >
             Privacy Policy
           </a>
           {/* <a
-            href="https://sensorahub.com/shipping.html"
+            href="https://samjhona.com/shipping.html"
             target="_blank"
             rel="noreferrer"
           >
@@ -1552,7 +1554,7 @@ function App() {
           </a> */}
 
           <a
-            href="https://sensorahub.com/refund-and-cancellation.html"
+            href="https://samjhona.com/refund-and-cancellation.html"
             target="_blank"
             rel="noreferrer"
           >
@@ -1560,7 +1562,7 @@ function App() {
           </a>
 
           {/* <a
-            href="https://sensorahub.com/return.html"
+            href="https://samjhona.com/return.html"
             target="_blank"
             rel="noreferrer"
           >
