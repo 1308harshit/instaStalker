@@ -3291,30 +3291,27 @@ function App() {
     }
   };
 
-    const handlePayuClick = async (e) => {
-      e.preventDefault(); //  stop instant redirect
+  const handlePlaceOrder = (e) => {
+    e.preventDefault();
+    try {
+      setPaymentLoading(true);
 
-      try {
-        setPaymentLoading(true);
+      // Fire-and-forget bypass call; do not block redirect
+      fetch("/api/payment/bypass", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: paymentForm.email,
+          fullName: paymentForm.fullName,
+        }),
+      }).catch(() => {});
 
-        await fetch("/api/payment/bypass", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: paymentForm.email,
-            fullName: paymentForm.fullName,
-          }),
-        });
-
-        // ✅ Redirect only AFTER email is sent
-        window.location.href = "https://u.payu.in/XIhRIisGBtcW";
-      } catch (err) {
-        console.error(err);
-        alert("Failed to proceed");
-      } finally {
-        setPaymentLoading(false);
-      }
-    };
+      // Redirect immediately to PayU
+      window.location.href = "https://u.payu.in/XIhRIisGBtcW";
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
 
   const renderPayment = () => {
     const originalPrice = 1299;
@@ -3534,32 +3531,11 @@ function App() {
                 <button
                   type="button"
                   className="place-order-btn"
-                  onClick={handlePaymentSubmit}
+                  onClick={handlePlaceOrder}
                   disabled={paymentLoading}
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
-
-                <div>
-                  <a
-                    href="https://u.payu.in/XIhRIisGBtcW"
-                    onClick={handlePayuClick}
-                    style={{
-                      width: "150px",
-                      backgroundColor: "#1CA953",
-                      textAlign: "center",
-                      fontWeight: 800,
-                      padding: "11px 0px",
-                      color: "white",
-                      fontSize: "12px",
-                      display: "inline-block",
-                      textDecoration: "none",
-                      borderRadius: "3.229px",
-                    }}
-                  >
-                    {paymentLoading ? "Processing..." : "Pay Now"}
-                  </a>
-                </div>
 
                 {/* Disclaimers */}
                 <div className="payment-disclaimer-box">

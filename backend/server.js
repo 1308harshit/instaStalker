@@ -170,7 +170,7 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
 
   try {
     const mailOptions = {
-      from: "Samjhona <customercare@samjhona.com>",
+      from: '"Samjhona Support" <customercare@samjhona.com>',
       to: email,
       subject: "Your report link",
       html: `
@@ -289,10 +289,13 @@ app.post("/api/payment/bypass", async (req, res) => {
       }
     } catch (_) {}
 
-    // Send email immediately
-    await sendPostPurchaseEmail(email, fullName, postPurchaseLink);
+    // Send email in background — DO NOT BLOCK RESPONSE
+    sendPostPurchaseEmail(email, fullName, postPurchaseLink).catch((err) => {
+      console.error("Email failed (non-blocking):", err.message);
+    });
 
-    res.json({ success: true });
+    // Respond immediately so redirect is not blocked
+    return res.json({ success: true });
   } catch (err) {
     console.error("Bypass error:", err);
     res.status(500).json({ error: "Bypass failed" });
