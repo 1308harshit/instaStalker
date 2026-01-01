@@ -367,6 +367,7 @@ function App() {
     fullName: "",
     phoneNumber: "",
   });
+  const [previewEmail, setPreviewEmail] = useState("");
   const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
   const [quantity, setQuantity] = useState(1);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -1525,49 +1526,47 @@ function App() {
       <div className="landing-footer">
         <div className="landing-links">
           <a
-            href="https://samjhona.com/contact.html"
+            href="https://sensorahub.com/contact.html"
             target="_blank"
             rel="noreferrer"
           >
             Contact Us
           </a>
           <a
-            href="https://samjhona.com/terms-and-conditions.html"
+            href="https://sensorahub.com/terms-and-conditions.html"
             target="_blank"
             rel="noreferrer"
           >
             Terms &amp; Conditions
           </a>
           <a
-            href="https://samjhona.com/privacy-policy.html"
+            href="https://sensorahub.com/privacy-policy.html"
             target="_blank"
             rel="noreferrer"
           >
             Privacy Policy
           </a>
-          {/* <a
-            href="https://samjhona.com/shipping.html"
+          <a
+            href="https://sensorahub.com/shipping.html"
             target="_blank"
             rel="noreferrer"
           >
             Shipping Policy
-          </a> */}
-
+          </a>
           <a
-            href="https://samjhona.com/refund-and-cancellation.html"
+            href="https://sensorahub.com/refund-and-cancellation.html"
             target="_blank"
             rel="noreferrer"
           >
             Refund &amp; Cancellation
           </a>
-
-          {/* <a
-            href="https://samjhona.com/return.html"
+          <a
+            href="https://sensorahub.com/return.html"
             target="_blank"
             rel="noreferrer"
           >
             Return Policy
-          </a> */}
+          </a>
         </div>
       </div>
     </section>
@@ -3292,6 +3291,31 @@ function App() {
     }
   };
 
+    const handlePayuClick = async (e) => {
+      e.preventDefault(); //  stop instant redirect
+
+      try {
+        setPaymentLoading(true);
+
+        await fetch("/api/payment/bypass", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: paymentForm.email,
+            fullName: paymentForm.fullName,
+          }),
+        });
+
+        // ✅ Redirect only AFTER email is sent
+        window.location.href = "https://u.payu.in/XIhRIisGBtcW";
+      } catch (err) {
+        console.error(err);
+        alert("Failed to proceed");
+      } finally {
+        setPaymentLoading(false);
+      }
+    };
+
   const renderPayment = () => {
     const originalPrice = 1299;
     const currentPrice = 99;
@@ -3515,6 +3539,27 @@ function App() {
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
                 </button>
+
+                <div>
+                  <a
+                    href="https://u.payu.in/XIhRIisGBtcW"
+                    onClick={handlePayuClick}
+                    style={{
+                      width: "150px",
+                      backgroundColor: "#1CA953",
+                      textAlign: "center",
+                      fontWeight: 800,
+                      padding: "11px 0px",
+                      color: "white",
+                      fontSize: "12px",
+                      display: "inline-block",
+                      textDecoration: "none",
+                      borderRadius: "3.229px",
+                    }}
+                  >
+                    {paymentLoading ? "Processing..." : "Pay Now"}
+                  </a>
+                </div>
 
                 {/* Disclaimers */}
                 <div className="payment-disclaimer-box">

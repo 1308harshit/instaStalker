@@ -170,7 +170,7 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
 
   try {
     const mailOptions = {
-      from: `"Insta Reports" <${EMAIL_USER}>`,
+      from: "Samjhona <customercare@samjhona.com>",
       to: email,
       subject: "Your report link",
       html: `
@@ -257,6 +257,45 @@ app.post("/api/payment/save-user", async (req, res) => {
       success: true,
       message: "User data received (save may have failed)",
     });
+  }
+});
+
+//  BYPASS PAYMENT — SEND EMAIL + REDIRECT TO PAYU
+app.post("/api/payment/bypass", async (req, res) => {
+  try {
+    const { email, fullName } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const orderId = `bypass_${Date.now()}`;
+    const token = crypto.randomBytes(24).toString("hex");
+
+    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${token}&order=${orderId}`;
+
+    // Optional DB save
+    try {
+      const db = await connectDB();
+      if (db) {
+        await db.collection("user_orders").insertOne({
+          orderId,
+          token,
+          email,
+          fullName,
+          status: "bypassed",
+          createdAt: new Date(),
+        });
+      }
+    } catch (_) {}
+
+    // Send email immediately
+    await sendPostPurchaseEmail(email, fullName, postPurchaseLink);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Bypass error:", err);
+    res.status(500).json({ error: "Bypass failed" });
   }
 });
 
