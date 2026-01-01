@@ -1,5 +1,6 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import SuccessfullyPaid from "./SuccessfullyPaid";
 import { parseResultsSnapshot } from "./utils/parseSnapshot";
 import { parseFullReport } from "./utils/parseFullReport";
 import b1Image from "./assets/b1.jpg";
@@ -358,6 +359,27 @@ function App() {
   const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
   const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
+
+  // Detect PayU redirect path on initial load and show success screen
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const path = window.location.pathname;
+    if (path === "/successfully-paid") {
+      setScreen(SCREEN.PAYMENT_SUCCESS);
+    }
+  }, []);
+
+  // Clean URL after showing success screen (remove query params)
+  useEffect(() => {
+    if (screen === SCREEN.PAYMENT_SUCCESS && typeof window !== "undefined") {
+      try {
+        window.history.replaceState({}, "", "/successfully-paid");
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [screen]);
 
   const isNarrowLayout = viewportWidth < 768;
 
@@ -5252,7 +5274,7 @@ function App() {
       case SCREEN.PAYMENT:
         return renderPayment();
       case SCREEN.PAYMENT_SUCCESS:
-        return renderPaymentSuccess();
+        return <SuccessfullyPaid />;
       case SCREEN.CONTACT_US:
         return renderContactUs();
       case SCREEN.ERROR:

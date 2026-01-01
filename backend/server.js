@@ -169,7 +169,9 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
   }
   try {
     // Log transport-level info for debugging (avoid printing sensitive values)
-    log(`🔧 Preparing to send email to ${email} via ${EMAIL_HOST}:${EMAIL_PORT} (user=${EMAIL_USER})`);
+    log(
+      `🔧 Preparing to send email to ${email} via ${EMAIL_HOST}:${EMAIL_PORT} (user=${EMAIL_USER})`
+    );
 
     // Verify transporter connectivity (helpful to catch auth/connectivity issues early)
     try {
@@ -213,11 +215,15 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     };
 
     // Log a brief preview (non-sensitive) to help debug delivery
-    log(`📧 Sending email to: ${mailOptions.to} | subject: ${mailOptions.subject}`);
+    log(
+      `📧 Sending email to: ${mailOptions.to} | subject: ${mailOptions.subject}`
+    );
     const start = Date.now();
     const info = await emailTransporter.sendMail(mailOptions);
     const duration = ((Date.now() - start) / 1000).toFixed(2);
-    log(`✅ Post-purchase email sent to ${email}: ${info.messageId} (took ${duration}s)`);
+    log(
+      `✅ Post-purchase email sent to ${email}: ${info.messageId} (took ${duration}s)`
+    );
     return info;
   } catch (err) {
     log(`❌ Error sending email: ${err.message}`);
