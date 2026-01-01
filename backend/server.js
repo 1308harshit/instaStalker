@@ -167,8 +167,18 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
     log("⚠️ Email not configured - skipping email send");
     return null;
   }
-
   try {
+    // Log transport-level info for debugging (avoid printing sensitive values)
+    log(`🔧 Preparing to send email to ${email} via ${EMAIL_HOST}:${EMAIL_PORT} (user=${EMAIL_USER})`);
+
+    // Verify transporter connectivity (helpful to catch auth/connectivity issues early)
+    try {
+      await emailTransporter.verify();
+      log("✅ SMTP transporter verified");
+    } catch (verifyErr) {
+      log(`⚠️ SMTP verify failed: ${verifyErr.message}`);
+    }
+
     const mailOptions = {
       from: '"Samjhona Support" <customercare@samjhona.com>',
       to: email,
@@ -196,17 +206,23 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
             </p>
           </div>
           <p style="color: #666; font-size: 14px;">
-            Support: <a href="mailto:robertpranav369@gmail.com" style="color: #f43f3f;">robertpranav369@gmail.com</a>
+            Support: <a href="mailto:customercare@samjhona.com" style="color: #f43f3f;">customercare@samjhona.com</a>
           </p>
         </div>
       `,
     };
 
+    // Log a brief preview (non-sensitive) to help debug delivery
+    log(`📧 Sending email to: ${mailOptions.to} | subject: ${mailOptions.subject}`);
+    const start = Date.now();
     const info = await emailTransporter.sendMail(mailOptions);
-    log(`✅ Post-purchase email sent to ${email}: ${info.messageId}`);
+    const duration = ((Date.now() - start) / 1000).toFixed(2);
+    log(`✅ Post-purchase email sent to ${email}: ${info.messageId} (took ${duration}s)`);
     return info;
   } catch (err) {
     log(`❌ Error sending email: ${err.message}`);
+    // Print full error to stderr for more details in logs
+    console.error(err);
     return null;
   }
 }
