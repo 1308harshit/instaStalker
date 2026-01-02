@@ -957,7 +957,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
     const orderId = `ORD_${Date.now()}`;
     log("🧾 Order ID generated", { requestId, orderId });
 
-    // Prepare signature payload
+    // Prepare signature payload - MUST include all fields that Vegaah validates
     log("🔐 Preparing signature payload...", { requestId });
     const signPayload = {
       terminalId: process.env.VEGAAH_TERMINAL_ID,
@@ -966,8 +966,9 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       amount: String(amount),
       currency: "INR",
       orderId,
-      email: String(email),
-      phone: String(phone),
+      customerEmail: String(email),  // Changed from 'email' to match payload
+      mobileNumber: String(phone),   // Changed from 'phone' to match payload
+      returnUrl: process.env.VEGAAH_RETURN_URL,  // ADDED - required for signature
     };
 
     log("🔐 Signature payload (redacted):", {
@@ -978,8 +979,9 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       amount: signPayload.amount,
       currency: signPayload.currency,
       orderId: signPayload.orderId,
-      email: signPayload.email.slice(0, 3) + "***",
-      phone: signPayload.phone.slice(0, 3) + "***",
+      customerEmail: signPayload.customerEmail.slice(0, 3) + "***",
+      mobileNumber: signPayload.mobileNumber.slice(0, 3) + "***",
+      returnUrl: signPayload.returnUrl,
     });
 
     // Generate signature
@@ -1089,6 +1091,27 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       dataKeys: data ? Object.keys(data) : [],
       fullData: data ? JSON.stringify(data) : rawText,
     });
+
+    // Check for Vegaah failure response (they return 200 with result: "FAILURE")
+    if (data && data.result === "FAILURE") {
+      log("❌ Vegaah API returned FAILURE result", {
+        requestId,
+        result: data.result,
+        responseCode: data.responseCode,
+        orderDetails: data.orderDetails,
+        additionalDetails: data.additionalDetails,
+        fullData: JSON.stringify(data),
+      });
+      return res.status(502).json({
+        error: "Vegaah payment creation failed",
+        result: data.result,
+        responseCode: data.responseCode,
+        orderDetails: data.orderDetails,
+        additionalDetails: data.additionalDetails,
+        message: `Payment failed with response code: ${data.responseCode || "unknown"}`,
+        requestId,
+      });
+    }
 
     if (!resp.ok) {
       log("❌ Vegaah API returned error status", {
