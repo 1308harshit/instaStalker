@@ -861,8 +861,10 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
 app.post("/api/payment/vegaah/create", async (req, res) => {
   try {
     const { amount, email, phone } = req.body;
+    console.log("🔥 VEGAAH CREATE REQUEST:", { amount, email, phone });
 
     const orderId = `ORD_${Date.now()}`;
+    console.log("🔥 VEGAAH ORDER ID:", orderId);
 
     const signPayload = {
       terminalId: process.env.VEGAAH_TERMINAL_ID,
@@ -875,10 +877,14 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       phone,
     };
 
+    console.log("🔥 VEGAAH SIGN PAYLOAD:", signPayload);
+
     const signature = generateVegaahSignature(
       signPayload,
       process.env.VEGAAH_MERCHANT_KEY
     );
+
+    console.log("🔥 VEGAAH SIGNATURE:", signature);
 
     const payload = {
       terminalId: process.env.VEGAAH_TERMINAL_ID,
@@ -895,23 +901,34 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       returnUrl: process.env.VEGAAH_RETURN_URL,
     };
 
+    console.log("🔥 VEGAAH PAYLOAD:", payload);
+    console.log("🔥 VEGAAH PAY URL:", process.env.VEGAAH_PAY_URL);
+
     const resp = await fetch(process.env.VEGAAH_PAY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
+    console.log("🔥 VEGAAH RESPONSE STATUS:", resp.status);
+    console.log("🔥 VEGAAH RESPONSE OK:", resp.ok);
+
     const data = await resp.json();
+    console.log("🔥 VEGAAH RESPONSE DATA:", data);
 
     if (!data?.paymentLink?.linkUrl || !data.transactionId) {
+      console.error("🔥 VEGAAH INVALID RESPONSE:", data);
       return res.status(500).json({ error: "Invalid Vegaah response" });
     }
 
+    const redirectUrl = `${data.paymentLink.linkUrl}${data.transactionId}`;
+    console.log("🔥 VEGAAH REDIRECT URL:", redirectUrl);
+
     res.json({
-      redirectUrl: `${data.paymentLink.linkUrl}${data.transactionId}`,
+      redirectUrl: redirectUrl,
     });
   } catch (err) {
-    console.error("VEGAAH CREATE ERROR:", err);
+    console.error("🔥 VEGAAH CREATE ERROR:", err);
     res.status(500).json({ error: "Vegaah init failed" });
   }
 });

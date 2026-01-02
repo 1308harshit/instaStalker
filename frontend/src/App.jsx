@@ -3213,13 +3213,19 @@ function App() {
         }),
       });
 
+      console.log("Vegaah API Response Status:", res.status);
+      console.log("Vegaah API Response OK:", res.ok);
+
       const data = await res.json();
+      console.log("Vegaah API Response Data:", data);
 
       if (!data.redirectUrl) {
+        console.error("No redirectUrl in response:", data);
         alert("Payment init failed");
         return;
       }
 
+      console.log("Redirecting to:", data.redirectUrl);
       window.location.href = data.redirectUrl;
     } catch (err) {
       alert("Unable to start payment");
