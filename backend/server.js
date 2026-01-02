@@ -857,79 +857,316 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
   }
 });
 
-// Vegaah payment routes
+// Vegaah payment routes - Request logging middleware
+app.use("/api/payment/vegaah/create", (req, res, next) => {
+  log("🔥 Vegaah endpoint hit", {
+    method: req.method,
+    url: req.url,
+    ip: req.ip || req.connection?.remoteAddress,
+    timestamp: new Date().toISOString(),
+  });
+  next();
+});
+
 app.post("/api/payment/vegaah/create", async (req, res) => {
+  const requestId = `veg_${Date.now()}_${Math.random()
+    .toString(16)
+    .slice(2, 10)}`;
+  
+  log("🔥 ========== VEGAAH PAYMENT REQUEST START ==========", { requestId });
+  log("🔥 Request headers:", {
+    requestId,
+    contentType: req.headers["content-type"],
+    userAgent: req.headers["user-agent"]?.slice(0, 50),
+  });
+
   try {
+    log("🔥 Parsing request body...", { requestId });
     const { amount, email, phone } = req.body;
-    console.log("🔥 VEGAAH CREATE REQUEST:", { amount, email, phone });
+    
+    log("🔥 Request body received:", {
+      requestId,
+      amount: amount !== undefined ? String(amount) : "MISSING",
+      email: email ? String(email).slice(0, 3) + "***" : "MISSING",
+      phone: phone ? String(phone).slice(0, 3) + "***" : "MISSING",
+      rawBody: JSON.stringify(req.body),
+    });
 
+    // Check environment variables
+    log("🔥 Checking Vegaah environment variables...", { requestId });
+    const missing = [
+      "VEGAAH_TERMINAL_ID",
+      "VEGAAH_PASSWORD",
+      "VEGAAH_MERCHANT_KEY",
+      "VEGAAH_PAY_URL",
+      "VEGAAH_RETURN_URL",
+    ].filter((k) => !process.env[k]);
+
+    if (missing.length) {
+      log("❌ Vegaah config missing", { requestId, missing });
+      return res
+        .status(500)
+        .json({ error: "Vegaah not configured", missing });
+    }
+
+    log("✅ All Vegaah env vars present", {
+      requestId,
+      terminalIdLength: process.env.VEGAAH_TERMINAL_ID?.length || 0,
+      passwordLength: process.env.VEGAAH_PASSWORD?.length || 0,
+      merchantKeyLength: process.env.VEGAAH_MERCHANT_KEY?.length || 0,
+      payUrl: process.env.VEGAAH_PAY_URL,
+      returnUrl: process.env.VEGAAH_RETURN_URL,
+    });
+
+    // Validate request body
+    log("🔥 Validating request body...", { requestId });
+    if (
+      amount === undefined ||
+      amount === null ||
+      !email ||
+      !phone ||
+      Number.isNaN(Number(amount))
+    ) {
+      log("❌ Vegaah invalid request body", {
+        requestId,
+        hasAmount: amount !== undefined && amount !== null,
+        amountValue: amount,
+        amountType: typeof amount,
+        hasEmail: Boolean(email),
+        hasPhone: Boolean(phone),
+        isAmountNaN: Number.isNaN(Number(amount)),
+      });
+      return res.status(400).json({ 
+        error: "Invalid request",
+        details: {
+          amount: amount === undefined || amount === null ? "missing" : typeof amount,
+          email: !email ? "missing" : "present",
+          phone: !phone ? "missing" : "present",
+        }
+      });
+    }
+
+    log("✅ Request body validated", {
+      requestId,
+      amount: String(amount),
+      email: String(email).slice(0, 3) + "***",
+      phone: String(phone).slice(0, 3) + "***",
+    });
+
+    // Generate order ID
     const orderId = `ORD_${Date.now()}`;
-    console.log("🔥 VEGAAH ORDER ID:", orderId);
+    log("🧾 Order ID generated", { requestId, orderId });
 
+    // Prepare signature payload
+    log("🔐 Preparing signature payload...", { requestId });
     const signPayload = {
       terminalId: process.env.VEGAAH_TERMINAL_ID,
       password: process.env.VEGAAH_PASSWORD,
       paymentType: "1",
-      amount: amount.toString(),
+      amount: String(amount),
       currency: "INR",
       orderId,
-      email,
-      phone,
+      email: String(email),
+      phone: String(phone),
     };
 
-    console.log("🔥 VEGAAH SIGN PAYLOAD:", signPayload);
+    log("🔐 Signature payload (redacted):", {
+      requestId,
+      terminalId: process.env.VEGAAH_TERMINAL_ID ? "***" : "MISSING",
+      password: process.env.VEGAAH_PASSWORD ? "***" : "MISSING",
+      paymentType: signPayload.paymentType,
+      amount: signPayload.amount,
+      currency: signPayload.currency,
+      orderId: signPayload.orderId,
+      email: signPayload.email.slice(0, 3) + "***",
+      phone: signPayload.phone.slice(0, 3) + "***",
+    });
 
+    // Generate signature
+    log("🔐 Generating signature...", { requestId });
     const signature = generateVegaahSignature(
       signPayload,
       process.env.VEGAAH_MERCHANT_KEY
     );
 
-    console.log("🔥 VEGAAH SIGNATURE:", signature);
+    log("✅ Signature generated", {
+      requestId,
+      signatureLength: signature?.length || 0,
+      signaturePreview: signature ? signature.slice(0, 10) + "..." : "MISSING",
+    });
 
+    // Prepare final payload
+    log("📦 Preparing final request payload...", { requestId });
     const payload = {
       terminalId: process.env.VEGAAH_TERMINAL_ID,
       password: process.env.VEGAAH_PASSWORD,
       signature,
       paymentType: "1",
-      amount,
+      amount: String(amount),
       currency: "INR",
       order: { orderId },
       customer: {
-        customerEmail: email,
-        mobileNumber: phone,
+        customerEmail: String(email),
+        mobileNumber: String(phone),
       },
       returnUrl: process.env.VEGAAH_RETURN_URL,
     };
 
-    console.log("🔥 VEGAAH PAYLOAD:", payload);
-    console.log("🔥 VEGAAH PAY URL:", process.env.VEGAAH_PAY_URL);
-
-    const resp = await fetch(process.env.VEGAAH_PAY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    log("📦 Final payload (redacted):", {
+      requestId,
+      terminalId: payload.terminalId ? "***" : "MISSING",
+      password: payload.password ? "***" : "MISSING",
+      signature: payload.signature ? payload.signature.slice(0, 10) + "..." : "MISSING",
+      paymentType: payload.paymentType,
+      amount: payload.amount,
+      currency: payload.currency,
+      orderId: payload.order.orderId,
+      customerEmail: payload.customer.customerEmail.slice(0, 3) + "***",
+      mobileNumber: payload.customer.mobileNumber.slice(0, 3) + "***",
+      returnUrl: payload.returnUrl,
     });
 
-    console.log("🔥 VEGAAH RESPONSE STATUS:", resp.status);
-    console.log("🔥 VEGAAH RESPONSE OK:", resp.ok);
+    log("📤 Sending request to Vegaah API...", {
+      requestId,
+      payUrl: process.env.VEGAAH_PAY_URL,
+      method: "POST",
+    });
 
-    const data = await resp.json();
-    console.log("🔥 VEGAAH RESPONSE DATA:", data);
+    const startTime = Date.now();
+    let resp;
+    try {
+      resp = await fetch(process.env.VEGAAH_PAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const duration = Date.now() - startTime;
+      log("📥 Vegaah API responded", {
+        requestId,
+        status: resp.status,
+        statusText: resp.statusText,
+        ok: resp.ok,
+        duration: `${duration}ms`,
+        headers: Object.fromEntries(resp.headers.entries()),
+      });
+    } catch (fetchErr) {
+      log("❌ Vegaah API fetch failed", {
+        requestId,
+        error: fetchErr?.message || String(fetchErr),
+        stack: fetchErr?.stack,
+        name: fetchErr?.name,
+        code: fetchErr?.code,
+      });
+      throw fetchErr;
+    }
+
+    // Read response
+    log("📖 Reading Vegaah response body...", { requestId });
+    const rawText = await resp.text();
+    log("📖 Raw response received", {
+      requestId,
+      length: rawText?.length || 0,
+      preview: rawText ? rawText.slice(0, 500) : "EMPTY",
+    });
+
+    let data = null;
+    try {
+      data = JSON.parse(rawText);
+      log("✅ Response parsed as JSON", { requestId });
+    } catch (parseErr) {
+      log("⚠️ Response is not JSON", {
+        requestId,
+        parseError: parseErr?.message,
+        rawText: rawText?.slice(0, 500),
+      });
+    }
+
+    log("📥 Vegaah response data:", {
+      requestId,
+      status: resp.status,
+      ok: resp.ok,
+      hasData: data !== null,
+      dataKeys: data ? Object.keys(data) : [],
+      fullData: data ? JSON.stringify(data) : rawText,
+    });
+
+    if (!resp.ok) {
+      log("❌ Vegaah API returned error status", {
+        requestId,
+        status: resp.status,
+        statusText: resp.statusText,
+        data: data || rawText,
+      });
+      return res.status(502).json({
+        error: "Vegaah create payment failed",
+        status: resp.status,
+        statusText: resp.statusText,
+        body: data || rawText,
+        requestId,
+      });
+    }
+
+    // Validate response structure
+    log("🔍 Validating response structure...", { requestId });
+    if (!data) {
+      log("❌ Vegaah response is not valid JSON", {
+        requestId,
+        rawText: rawText?.slice(0, 500),
+      });
+      return res.status(500).json({
+        error: "Invalid Vegaah response format",
+        details: "Response is not valid JSON",
+        rawResponse: rawText?.slice(0, 500),
+        requestId,
+      });
+    }
 
     if (!data?.paymentLink?.linkUrl || !data.transactionId) {
-      console.error("🔥 VEGAAH INVALID RESPONSE:", data);
-      return res.status(500).json({ error: "Invalid Vegaah response" });
+      log("❌ Vegaah invalid response structure", {
+        requestId,
+        hasPaymentLink: Boolean(data?.paymentLink),
+        hasLinkUrl: Boolean(data?.paymentLink?.linkUrl),
+        hasTransactionId: Boolean(data?.transactionId),
+        fullData: JSON.stringify(data),
+      });
+      return res.status(500).json({
+        error: "Invalid Vegaah response",
+        details: "Missing paymentLink.linkUrl or transactionId",
+        receivedData: data,
+        requestId,
+      });
     }
 
     const redirectUrl = `${data.paymentLink.linkUrl}${data.transactionId}`;
-    console.log("🔥 VEGAAH REDIRECT URL:", redirectUrl);
+    log("✅ Vegaah redirect URL created", {
+      requestId,
+      redirectUrl,
+      linkUrl: data.paymentLink.linkUrl,
+      transactionId: data.transactionId,
+    });
+
+    log("🔥 ========== VEGAAH PAYMENT REQUEST SUCCESS ==========", {
+      requestId,
+      redirectUrl,
+    });
 
     res.json({
       redirectUrl: redirectUrl,
+      requestId,
     });
   } catch (err) {
-    console.error("🔥 VEGAAH CREATE ERROR:", err);
-    res.status(500).json({ error: "Vegaah init failed" });
+    log("❌ ========== VEGAAH PAYMENT REQUEST ERROR ==========", {
+      requestId,
+      errorName: err?.name,
+      errorMessage: err?.message || String(err),
+      errorStack: err?.stack,
+      errorCode: err?.code,
+    });
+    res.status(500).json({
+      error: "Vegaah init failed",
+      details: err?.message || String(err),
+      requestId,
+    });
   }
 });
 

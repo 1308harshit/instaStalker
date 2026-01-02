@@ -3182,53 +3182,145 @@ function App() {
       currency: "INR",
     });
 
+    console.log("🔥 ========== PAYMENT SUBMIT START ==========");
+    console.log("🔥 Payment form data:", {
+      email: paymentForm.email?.slice(0, 3) + "***",
+      phone: paymentForm.phoneNumber?.slice(0, 3) + "***",
+      quantity,
+      amount: 99 * quantity,
+    });
+
     try {
       // Save user data to MongoDB
+      console.log("🔥 Step 1: Saving user data to MongoDB...");
       const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
       }).catch((fetchErr) => {
-        console.error("Network error saving user:", fetchErr);
+        console.error("❌ Network error saving user:", {
+          error: fetchErr,
+          message: fetchErr?.message,
+          stack: fetchErr?.stack,
+        });
         throw new Error(
           `Cannot connect to server. Please check if backend is running.`
         );
       });
 
+      console.log("🔥 Save user response status:", saveResponse.status, saveResponse.ok);
+
       if (!saveResponse.ok) {
         const errorData = await saveResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
+        console.error("❌ Save user failed:", {
+          status: saveResponse.status,
+          statusText: saveResponse.statusText,
+          errorData,
+        });
         throw new Error(errorData.error || "Failed to save user data");
       }
 
+      console.log("✅ User data saved successfully");
+
       // Create Vegaah payment
+      console.log("🔥 Step 2: Creating Vegaah payment...");
+      const paymentPayload = {
+        amount: 99 * quantity,
+        email: paymentForm.email,
+        phone: paymentForm.phoneNumber,
+      };
+      console.log("🔥 Vegaah payment payload:", {
+        amount: paymentPayload.amount,
+        email: paymentPayload.email?.slice(0, 3) + "***",
+        phone: paymentPayload.phone?.slice(0, 3) + "***",
+      });
+
       const res = await fetch("/api/payment/vegaah/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: 99,
-          email: paymentForm.email,
-          phone: paymentForm.phoneNumber,
-        }),
+        body: JSON.stringify(paymentPayload),
+      }).catch((fetchErr) => {
+        console.error("❌ Network error creating Vegaah payment:", {
+          error: fetchErr,
+          message: fetchErr?.message,
+          stack: fetchErr?.stack,
+          name: fetchErr?.name,
+        });
+        throw new Error(
+          `Network error: Cannot connect to payment server. ${fetchErr?.message || ""}`
+        );
       });
 
-      console.log("Vegaah API Response Status:", res.status);
-      console.log("Vegaah API Response OK:", res.ok);
+      console.log("🔥 Vegaah API Response:", {
+        status: res.status,
+        statusText: res.statusText,
+        ok: res.ok,
+        headers: Object.fromEntries(res.headers.entries()),
+      });
 
-      const data = await res.json();
-      console.log("Vegaah API Response Data:", data);
+      let data;
+      try {
+        const responseText = await res.text();
+        console.log("🔥 Vegaah raw response text:", responseText?.slice(0, 500));
+        
+        try {
+          data = JSON.parse(responseText);
+          console.log("✅ Vegaah response parsed as JSON:", data);
+        } catch (parseErr) {
+          console.error("❌ Vegaah response is not valid JSON:", {
+            parseError: parseErr?.message,
+            rawText: responseText,
+          });
+          throw new Error(
+            `Invalid response from payment server: ${responseText?.slice(0, 200) || "Empty response"}`
+          );
+        }
+      } catch (readErr) {
+        console.error("❌ Error reading Vegaah response:", {
+          error: readErr,
+          message: readErr?.message,
+        });
+        throw readErr;
+      }
 
-      if (!data.redirectUrl) {
-        console.error("No redirectUrl in response:", data);
-        alert("Payment init failed");
+      if (!res.ok) {
+        console.error("❌ Vegaah API returned error:", {
+          status: res.status,
+          statusText: res.statusText,
+          data,
+        });
+        const errorMsg = data?.error || data?.details || `Payment server error (${res.status})`;
+        const errorDetails = data?.body || data?.missing || data;
+        alert(`Payment failed: ${errorMsg}${errorDetails ? `\n\nDetails: ${JSON.stringify(errorDetails)}` : ""}`);
         return;
       }
 
-      console.log("Redirecting to:", data.redirectUrl);
+      if (!data.redirectUrl) {
+        console.error("❌ No redirectUrl in response:", {
+          data,
+          hasRedirectUrl: Boolean(data?.redirectUrl),
+          responseKeys: data ? Object.keys(data) : [],
+        });
+        alert(
+          `Payment init failed: No redirect URL received.\n\nResponse: ${JSON.stringify(data)}`
+        );
+        return;
+      }
+
+      console.log("✅ Payment created successfully, redirecting to:", data.redirectUrl);
+      console.log("🔥 ========== PAYMENT SUBMIT SUCCESS ==========");
       window.location.href = data.redirectUrl;
     } catch (err) {
-      alert("Unable to start payment");
+      console.error("❌ ========== PAYMENT SUBMIT ERROR ==========", {
+        error: err,
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      const errorMessage = err?.message || "Unable to start payment";
+      alert(`Payment Error: ${errorMessage}\n\nPlease check the browser console for details.`);
     } finally {
       setPaymentLoading(false);
     }
