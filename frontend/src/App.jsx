@@ -88,6 +88,12 @@ const PROCESSING_STAGE_HOLD_MS = 2000;
 const randBetween = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
+const formatCountdown = (seconds = 0) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
 const isValidUsername = (value = "") =>
   Boolean(value) && !INVALID_USERNAME_REGEX.test(value);
 
