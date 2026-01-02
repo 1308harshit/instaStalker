@@ -25,7 +25,7 @@ const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 // Meta Pixel Helper Function
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
-  
+
   // Wait for fbq to be available (with retry logic)
   const tryTrack = (attempts = 0) => {
     if (window.fbq && typeof window.fbq === "function") {
@@ -39,10 +39,12 @@ const trackMetaPixel = (eventName, eventData = {}) => {
       // Retry after a short delay if fbq not yet loaded
       setTimeout(() => tryTrack(attempts + 1), 100);
     } else {
-      console.warn(`⚠️ Meta Pixel: fbq not available after retries for ${eventName}`);
+      console.warn(
+        `⚠️ Meta Pixel: fbq not available after retries for ${eventName}`
+      );
     }
   };
-  
+
   tryTrack();
 };
 
@@ -353,9 +355,11 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
+  /* ===== CASHFREE STATE (COMMENTED) =====
   const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
   const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
+  ===================================== */
 
   const isNarrowLayout = viewportWidth < 768;
 
@@ -503,6 +507,17 @@ function App() {
       };
 
       loadOrderData();
+    }
+  }, []);
+
+  // Handle Vegaah payment return URLs
+  useEffect(() => {
+    if (window.location.pathname === "/payment-success") {
+      setScreen(SCREEN.PAYMENT_SUCCESS);
+    }
+
+    if (window.location.pathname === "/payment-failed") {
+      setScreen(SCREEN.PAYMENT);
     }
   }, []);
 
@@ -2962,6 +2977,7 @@ function App() {
   //   }
   // }, [screen]);
 
+  /* ===== CASHFREE SDK LOADING (COMMENTED) =====
   // Fetch Cashfree environment and load appropriate SDK
   useEffect(() => {
     const fetchCashfreeEnv = async () => {
@@ -3024,7 +3040,9 @@ function App() {
 
     fetchCashfreeEnv();
   }, []);
+  ===================================== */
 
+  /* ===== CASHFREE RETURN URL HANDLING (COMMENTED) =====
   // Handle payment return URL - verify payment before showing success
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -3034,23 +3052,18 @@ function App() {
     if (orderId && window.location.pathname === "/payment/return") {
       // Prevent duplicate processing
       if (purchaseEventFiredRef.current.has(orderId)) {
-        console.log("⚠️ Order already processed:", orderId);
-        setScreen(SCREEN.PAYMENT_SUCCESS);
-        window.history.replaceState({}, "", window.location.pathname);
+        console.log(" Order already processed, skipping:", orderId);
         return;
       }
 
       // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
       const verifyPayment = async () => {
         try {
-          console.log("🔍 Verifying payment for order:", orderId);
+          console.log(" Verifying payment for order:", orderId);
 
-          // Send profile data with verification (POST request)
           const verifyResponse = await fetch(`/api/payment/verify`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               order_id: orderId,
               username: profile.username,
@@ -3060,39 +3073,34 @@ function App() {
           });
 
           if (!verifyResponse.ok) {
-            // Any backend verification failure → treat as success fallback
-            const status = verifyResponse.status;
-            const text = await verifyResponse.text().catch(() => "");
-            console.warn(
-              "⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:",
-              { status, text }
-            );
-
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, "", window.location.pathname);
+            console.error(" Payment verification failed");
+            setScreen(SCREEN.ERROR);
             return;
           }
 
-          const paymentData = await verifyResponse.json();
-          console.log("📋 Payment verification response:", paymentData);
-          console.log("📋 Order status:", paymentData.order_status);
-          console.log("📋 Payment status:", paymentData.payment_status);
-          console.log("📋 Is successful:", paymentData.is_successful);
+          const verifyData = await verifyResponse.json();
+          console.log(" Payment verification response:", verifyData);
 
-          // Only show success if payment is actually successful
-          if (paymentData.is_successful) {
-            console.log("✅ Payment verified successfully");
-            alert(
-              "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
-            );
+          if (verifyData.is_successful) {
+            // Mark this order as processed
+            purchaseEventFiredRef.current.add(orderId);
 
-            // Fire Purchase BEFORE screen change
-            if (!purchaseEventFiredRef.current.has(orderId)) {
-              const paidAmount = 99 * quantity;
-              purchaseEventFiredRef.current.add(orderId);
+            // Fire Purchase event only after successful payment verification
+            trackMetaPixel("Purchase", {
+              content_name: "Instagram Stalker Report",
+              content_category: "Payment",
+              value: 99,
+              currency: "INR",
+              order_id: orderId,
+            });
 
-              trackMetaPixel("Purchase", {
+            // Save last successful run for localStorage
+            saveLastRun({
+              cards: cards,
+              steps: snapshots,
+              profile: profile,
+              username: profile.username,
+            });
                 value: paidAmount,
                 currency: "INR",
                 content_name: "Instagram Stalker Report",
@@ -3134,6 +3142,7 @@ function App() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  /* ===== CASHFREE WAIT FUNCTION (COMMENTED) =====
   // Wait for Cashfree SDK to load (eliminates timing issues)
   const waitForCashfree = () =>
     new Promise((resolve, reject) => {
@@ -3152,6 +3161,7 @@ function App() {
         }
       }, 200);
     });
+  ===================================== */
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
@@ -3186,96 +3196,27 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      // Create Cashfree payment session
-      const amount = 99 * quantity; // 99₹ per item
-      const orderResponse = await fetch(`/api/payment/create-session`, {
+      // Create Vegaah payment
+      const res = await fetch("/api/payment/vegaah/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount,
+          amount: 99,
           email: paymentForm.email,
-          fullName: paymentForm.fullName,
-          phoneNumber: paymentForm.phoneNumber,
+          phone: paymentForm.phoneNumber,
         }),
-      }).catch((fetchErr) => {
-        console.error("Network error creating payment:", fetchErr);
-        throw new Error(
-          `Cannot connect to payment server. Please check if backend is running.`
-        );
       });
 
-      if (!orderResponse.ok) {
-        const errorData = await orderResponse
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
-        console.error("Payment session error:", errorData);
-        throw new Error(
-          errorData.error ||
-            errorData.message ||
-            "Failed to create payment session"
-        );
+      const data = await res.json();
+
+      if (!data.redirectUrl) {
+        alert("Payment init failed");
+        return;
       }
 
-      const session = await orderResponse.json();
-      console.log("Cashfree payment session created:", session);
-
-      // ❌ Purchase event removed from here - it will fire on success page instead
-      // Purchase should only fire AFTER payment is confirmed, not when session is created
-      // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
-
-      if (!session.payment_session_id) {
-        throw new Error("No payment session id");
-      }
-
-      if (!session.order_id) {
-        throw new Error("Cashfree order ID not received from server");
-      }
-
-      // Wait for Cashfree environment to be determined (use ref for synchronous access)
-      if (cashfreeEnvRef.current === null) {
-        console.log("⏳ Waiting for Cashfree environment to load...");
-        // Wait up to 5 seconds for environment to load
-        let attempts = 0;
-        while (cashfreeEnvRef.current === null && attempts < 25) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          attempts++;
-        }
-        if (cashfreeEnvRef.current === null) {
-          // Default to PRODUCTION if still not loaded
-          cashfreeEnvRef.current = "PRODUCTION";
-          console.warn(
-            "⚠️ Cashfree environment not loaded, defaulting to PRODUCTION"
-          );
-        }
-      }
-
-      // Wait for Cashfree SDK to load (eliminates timing issues)
-      const Cashfree = await waitForCashfree();
-
-      // Initialize Cashfree with environment-based mode (use ref for current value)
-      const currentEnv = cashfreeEnvRef.current || "PRODUCTION";
-      const cashfreeMode = currentEnv === "TEST" ? "sandbox" : "production";
-      console.log(
-        `🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`
-      );
-      const cashfree = new Cashfree({ mode: cashfreeMode });
-
-      console.log(
-        "✅ Opening Cashfree checkout with session:",
-        session.payment_session_id
-      );
-
-      // Defer checkout to next tick (prevents React async state update issues)
-      // Cashfree cannot be called in the same tick as async state updates
-      setTimeout(() => {
-        cashfree.checkout({
-          paymentSessionId: session.payment_session_id,
-          redirectTarget: "_self", // Redirect main window so useEffect can detect return URL
-        });
-      }, 0);
+      window.location.href = data.redirectUrl;
     } catch (err) {
-      console.error("Cashfree error:", err);
-      alert(err.message || "Failed to process payment. Please try again.");
+      alert("Unable to start payment");
     } finally {
       setPaymentLoading(false);
     }
@@ -3498,11 +3439,11 @@ function App() {
                 {/* Place Order Button */}
                 <button
                   type="button"
-                  className="place-order-btn"
+                  className="primary-btn"
                   onClick={handlePaymentSubmit}
                   disabled={paymentLoading}
                 >
-                  {paymentLoading ? "Processing..." : "PLACE ORDER"}
+                  {paymentLoading ? "Redirecting..." : "PLACE ORDER"}
                 </button>
 
                 {/* Disclaimers */}
@@ -3719,9 +3660,10 @@ function App() {
                 2. Payment Terms
               </h3>
               <p>
-                All payments are processed securely through Cashfree payment
-                gateway. Payment is required before accessing the full report.
-                All prices are in Indian Rupees (INR).
+                {/* All payments are processed securely through Cashfree payment gateway. */}
+                All payments are processed securely through payment gateway.
+                Payment is required before accessing the full report. All prices
+                are in Indian Rupees (INR).
               </p>
             </div>
 

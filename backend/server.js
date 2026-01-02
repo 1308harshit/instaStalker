@@ -40,6 +40,7 @@ import {
 } from "./utils/mongodb.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(
@@ -65,7 +66,7 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Cashfree configuration
+/* ===== CASHFREE INIT (COMMENTED) =====
 // Cashfree configuration from environment variables
 const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
 const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
@@ -139,6 +140,22 @@ log(
 );
 log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   API Version: ${CASHFREE_API_VERSION}`);
+==================================== */
+
+const log = (message, data = null) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, data || "");
+};
+
+// Vegaah signature helper function
+function generateVegaahSignature(payload, secret) {
+  const data = Object.keys(payload)
+    .sort()
+    .map((k) => payload[k])
+    .join("|");
+
+  return crypto.createHmac("sha256", secret).update(data).digest("hex");
+}
 
 // Email configuration
 const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
@@ -260,6 +277,7 @@ app.post("/api/payment/save-user", async (req, res) => {
   }
 });
 
+/* ===== CASHFREE ROUTES (COMMENTED) =====
 // Create Cashfree payment session
 app.post("/api/payment/create-session", async (req, res) => {
   try {
@@ -818,6 +836,7 @@ app.get("/api/payment/test-credentials", async (req, res) => {
     });
   }
 });
+====================================== */
 
 // New endpoint: Serve HTML snapshots from MongoDB
 app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
@@ -836,6 +855,74 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
     log(`❌ Error serving snapshot: ${err.message}`);
     res.status(500).json({ error: "Failed to retrieve snapshot" });
   }
+});
+
+// Vegaah payment routes
+app.post("/api/payment/vegaah/create", async (req, res) => {
+  try {
+    const { amount, email, phone } = req.body;
+
+    const orderId = `ORD_${Date.now()}`;
+
+    const signPayload = {
+      terminalId: process.env.VEGAAH_TERMINAL_ID,
+      password: process.env.VEGAAH_PASSWORD,
+      paymentType: "1",
+      amount: amount.toString(),
+      currency: "INR",
+      orderId,
+      email,
+      phone,
+    };
+
+    const signature = generateVegaahSignature(
+      signPayload,
+      process.env.VEGAAH_MERCHANT_KEY
+    );
+
+    const payload = {
+      terminalId: process.env.VEGAAH_TERMINAL_ID,
+      password: process.env.VEGAAH_PASSWORD,
+      signature,
+      paymentType: "1",
+      amount,
+      currency: "INR",
+      order: { orderId },
+      customer: {
+        customerEmail: email,
+        mobileNumber: phone,
+      },
+      returnUrl: process.env.VEGAAH_RETURN_URL,
+    };
+
+    const resp = await fetch(process.env.VEGAAH_PAY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await resp.json();
+
+    if (!data?.paymentLink?.linkUrl || !data.transactionId) {
+      return res.status(500).json({ error: "Invalid Vegaah response" });
+    }
+
+    res.json({
+      redirectUrl: `${data.paymentLink.linkUrl}${data.transactionId}`,
+    });
+  } catch (err) {
+    console.error("VEGAAH CREATE ERROR:", err);
+    res.status(500).json({ error: "Vegaah init failed" });
+  }
+});
+
+app.post("/api/payment/vegaah/response", (req, res) => {
+  const status = req.body?.result || req.body?.status;
+
+  if (status === "SUCCESS") {
+    return res.redirect("/payment-success");
+  }
+  return res.redirect("/payment-failed");
 });
 
 app.get("/api/stalkers", async (req, res) => {
