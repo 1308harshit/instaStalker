@@ -147,14 +147,25 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || "");
 };
 
-// Vegaah signature helper function
-function generateVegaahSignature(payload, secret) {
-  const data = Object.keys(payload)
-    .sort()
-    .map((k) => payload[k])
-    .join("|");
+// Vegaah signature helper function (per Vegaah_Payment_Gateway_API.pdf)
+// Request signature format (SHA256, NOT HMAC):
+// trackId | terminalId | password | merchantkey | amount | currency
+function formatVegaahAmount(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return null;
+  return n.toFixed(2);
+}
 
-  return crypto.createHmac("sha256", secret).update(data).digest("hex");
+function generateVegaahRequestSignature({
+  trackId,
+  terminalId,
+  password,
+  merchantKey,
+  amount,
+  currency,
+}) {
+  const pipeSeparatedString = `${trackId}|${terminalId}|${password}|${merchantKey}|${amount}|${currency}`;
+  return crypto.createHash("sha256").update(pipeSeparatedString).digest("hex");
 }
 
 // Email configuration
@@ -957,39 +968,36 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
     const orderId = `ORD_${Date.now()}`;
     log("🧾 Order ID generated", { requestId, orderId });
 
-    // Prepare signature payload - MUST include all fields that Vegaah validates
-    log("🔐 Preparing signature payload...", { requestId });
-    const signPayload = {
-      terminalId: process.env.VEGAAH_TERMINAL_ID,
-      password: process.env.VEGAAH_PASSWORD,
-      paymentType: "1",
-      amount: String(amount),
-      currency: "INR",
-      orderId,
-      customerEmail: String(email),  // Changed from 'email' to match payload
-      mobileNumber: String(phone),   // Changed from 'phone' to match payload
-      returnUrl: process.env.VEGAAH_RETURN_URL,  // ADDED - required for signature
-    };
+    // Vegaah signature is computed from (trackId|terminalId|password|merchantkey|amount|currency)
+    // Use orderId as trackId for uniqueness
+    const trackId = orderId;
+    const currency = "INR";
+    const formattedAmount = formatVegaahAmount(amount);
+    if (!formattedAmount) {
+      log("❌ Invalid amount for Vegaah formatting", { requestId, amount });
+      return res.status(400).json({ error: "Invalid amount" });
+    }
 
-    log("🔐 Signature payload (redacted):", {
+    log("🔐 Preparing signature payload (per PDF spec)...", { requestId });
+    log("🔐 Signature inputs (redacted):", {
       requestId,
-      terminalId: process.env.VEGAAH_TERMINAL_ID ? "***" : "MISSING",
-      password: process.env.VEGAAH_PASSWORD ? "***" : "MISSING",
-      paymentType: signPayload.paymentType,
-      amount: signPayload.amount,
-      currency: signPayload.currency,
-      orderId: signPayload.orderId,
-      customerEmail: signPayload.customerEmail.slice(0, 3) + "***",
-      mobileNumber: signPayload.mobileNumber.slice(0, 3) + "***",
-      returnUrl: signPayload.returnUrl,
+      trackId,
+      terminalIdPresent: Boolean(process.env.VEGAAH_TERMINAL_ID),
+      passwordLength: process.env.VEGAAH_PASSWORD?.length || 0,
+      merchantKeyLength: process.env.VEGAAH_MERCHANT_KEY?.length || 0,
+      amount: formattedAmount,
+      currency,
     });
 
-    // Generate signature
-    log("🔐 Generating signature...", { requestId });
-    const signature = generateVegaahSignature(
-      signPayload,
-      process.env.VEGAAH_MERCHANT_KEY
-    );
+    log("🔐 Generating request signature (SHA256)...", { requestId });
+    const signature = generateVegaahRequestSignature({
+      trackId,
+      terminalId: process.env.VEGAAH_TERMINAL_ID,
+      password: process.env.VEGAAH_PASSWORD,
+      merchantKey: process.env.VEGAAH_MERCHANT_KEY,
+      amount: formattedAmount,
+      currency,
+    });
 
     log("✅ Signature generated", {
       requestId,
@@ -1000,13 +1008,14 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
     // Prepare final payload
     log("📦 Preparing final request payload...", { requestId });
     const payload = {
+      trackId,
       terminalId: process.env.VEGAAH_TERMINAL_ID,
       password: process.env.VEGAAH_PASSWORD,
       signature,
       paymentType: "1",
-      amount: String(amount),
-      currency: "INR",
-      order: { orderId },
+      amount: formattedAmount,
+      currency,
+      order: { orderId }, // keep existing structure (some APIs accept this)
       customer: {
         customerEmail: String(email),
         mobileNumber: String(phone),
@@ -1144,37 +1153,64 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       });
     }
 
-    if (!data?.paymentLink?.linkUrl || !data.transactionId) {
-      log("❌ Vegaah invalid response structure", {
+    // Success handling can differ by Vegaah integration mode:
+    // - Some responses provide a direct link + transactionId
+    // - Hosted Payment Page (HPP) flow returns paymentId + targetUrl (leg1), then merchant does form POST (leg2)
+    const paymentId =
+      data?.paymentId ?? data?.paymentID ?? data?.payment_id ?? null;
+    const targetUrl =
+      data?.targetUrl ?? data?.targetURL ?? data?.target_url ?? null;
+
+    if (data?.paymentLink?.linkUrl && data?.transactionId) {
+      const redirectUrl = `${data.paymentLink.linkUrl}${data.transactionId}`;
+      log("✅ Vegaah redirect URL created", {
         requestId,
-        hasPaymentLink: Boolean(data?.paymentLink),
-        hasLinkUrl: Boolean(data?.paymentLink?.linkUrl),
-        hasTransactionId: Boolean(data?.transactionId),
-        fullData: JSON.stringify(data),
+        redirectUrl,
+        linkUrl: data.paymentLink.linkUrl,
+        transactionId: data.transactionId,
       });
-      return res.status(500).json({
-        error: "Invalid Vegaah response",
-        details: "Missing paymentLink.linkUrl or transactionId",
-        receivedData: data,
+
+      log("🔥 ========== VEGAAH PAYMENT REQUEST SUCCESS ==========", {
+        requestId,
+        redirectUrl,
+      });
+
+      return res.json({
+        redirectUrl,
         requestId,
       });
     }
 
-    const redirectUrl = `${data.paymentLink.linkUrl}${data.transactionId}`;
-    log("✅ Vegaah redirect URL created", {
-      requestId,
-      redirectUrl,
-      linkUrl: data.paymentLink.linkUrl,
-      transactionId: data.transactionId,
-    });
+    if (paymentId && targetUrl) {
+      log("✅ Vegaah HPP init success (paymentId/targetUrl)", {
+        requestId,
+        trackId,
+        paymentId,
+        targetUrl,
+      });
 
-    log("🔥 ========== VEGAAH PAYMENT REQUEST SUCCESS ==========", {
-      requestId,
-      redirectUrl,
-    });
+      return res.json({
+        requestId,
+        trackId,
+        paymentId,
+        targetUrl,
+      });
+    }
 
-    res.json({
-      redirectUrl: redirectUrl,
+    log("❌ Vegaah invalid response structure", {
+      requestId,
+      hasPaymentLink: Boolean(data?.paymentLink),
+      hasLinkUrl: Boolean(data?.paymentLink?.linkUrl),
+      hasTransactionId: Boolean(data?.transactionId),
+      hasPaymentId: Boolean(paymentId),
+      hasTargetUrl: Boolean(targetUrl),
+      fullData: JSON.stringify(data),
+    });
+    return res.status(500).json({
+      error: "Invalid Vegaah response",
+      details:
+        "Expected either (paymentLink.linkUrl + transactionId) or (paymentId + targetUrl)",
+      receivedData: data,
       requestId,
     });
   } catch (err) {

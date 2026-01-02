@@ -3297,21 +3297,57 @@ function App() {
         return;
       }
 
-      if (!data.redirectUrl) {
-        console.error("❌ No redirectUrl in response:", {
-          data,
-          hasRedirectUrl: Boolean(data?.redirectUrl),
-          responseKeys: data ? Object.keys(data) : [],
-        });
-        alert(
-          `Payment init failed: No redirect URL received.\n\nResponse: ${JSON.stringify(data)}`
+      if (data.redirectUrl) {
+        console.log(
+          "✅ Payment created successfully, redirecting to:",
+          data.redirectUrl
         );
+        console.log("🔥 ========== PAYMENT SUBMIT SUCCESS ==========");
+        window.location.href = data.redirectUrl;
         return;
       }
 
-      console.log("✅ Payment created successfully, redirecting to:", data.redirectUrl);
-      console.log("🔥 ========== PAYMENT SUBMIT SUCCESS ==========");
-      window.location.href = data.redirectUrl;
+      // Hosted Payment Page (HPP) flow: backend returns paymentId + targetUrl (leg1)
+      if (data.paymentId && data.targetUrl) {
+        console.log("✅ Vegaah HPP init success:", {
+          paymentId: data.paymentId,
+          targetUrl: data.targetUrl,
+          trackId: data.trackId,
+        });
+
+        // Leg2: form POST to targetUrl with paymentId (per Vegaah API spec)
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = data.targetUrl;
+
+        const paymentIdInput = document.createElement("input");
+        paymentIdInput.type = "hidden";
+        paymentIdInput.name = "paymentId";
+        paymentIdInput.value = String(data.paymentId);
+        form.appendChild(paymentIdInput);
+
+        // Optional: include trackId if returned (harmless if ignored)
+        if (data.trackId) {
+          const trackIdInput = document.createElement("input");
+          trackIdInput.type = "hidden";
+          trackIdInput.name = "trackId";
+          trackIdInput.value = String(data.trackId);
+          form.appendChild(trackIdInput);
+        }
+
+        document.body.appendChild(form);
+        console.log("🚀 Submitting HPP form post...");
+        form.submit();
+        return;
+      }
+
+      console.error("❌ Unexpected Vegaah response shape:", data);
+      alert(
+        `Payment init failed: Unexpected response.\n\nResponse: ${JSON.stringify(
+          data
+        )}`
+      );
+      return;
     } catch (err) {
       console.error("❌ ========== PAYMENT SUBMIT ERROR ==========", {
         error: err,
