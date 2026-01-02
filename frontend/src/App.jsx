@@ -376,7 +376,7 @@ function App() {
     phoneNumber: "",
   });
   const [showPaymentNotice, setShowPaymentNotice] = useState(false);
-  const [paymentNoticeCounter, setPaymentNoticeCounter] = useState(3);
+  const [paymentNoticeCounter, setPaymentNoticeCounter] = useState(5);
   const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
   const [quantity, setQuantity] = useState(1);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -3229,9 +3229,9 @@ function App() {
 
       console.log("Redirecting to:", data.redirectUrl);
       setShowPaymentNotice(true);
-      setPaymentNoticeCounter(3);
+      setPaymentNoticeCounter(5);
 
-      let counter = 3;
+      let counter = 5;
 
       const countdownInterval = setInterval(() => {
         counter -= 1;
