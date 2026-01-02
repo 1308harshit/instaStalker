@@ -375,6 +375,8 @@ function App() {
     fullName: "",
     phoneNumber: "",
   });
+  const [showPaymentNotice, setShowPaymentNotice] = useState(false);
+  const [paymentNoticeCounter, setPaymentNoticeCounter] = useState(3);
   const [paymentCountdown, setPaymentCountdown] = useState(404); // 6:44 in seconds
   const [quantity, setQuantity] = useState(1);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -3182,181 +3184,67 @@ function App() {
       currency: "INR",
     });
 
-    console.log("🔥 ========== PAYMENT SUBMIT START ==========");
-    console.log("🔥 Payment form data:", {
-      email: paymentForm.email?.slice(0, 3) + "***",
-      phone: paymentForm.phoneNumber?.slice(0, 3) + "***",
-      quantity,
-      amount: 99 * quantity,
-    });
-
     try {
       // Save user data to MongoDB
-      console.log("🔥 Step 1: Saving user data to MongoDB...");
       const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
       }).catch((fetchErr) => {
-        console.error("❌ Network error saving user:", {
-          error: fetchErr,
-          message: fetchErr?.message,
-          stack: fetchErr?.stack,
-        });
+        console.error("Network error saving user:", fetchErr);
         throw new Error(
           `Cannot connect to server. Please check if backend is running.`
         );
       });
 
-      console.log("🔥 Save user response status:", saveResponse.status, saveResponse.ok);
-
       if (!saveResponse.ok) {
         const errorData = await saveResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("❌ Save user failed:", {
-          status: saveResponse.status,
-          statusText: saveResponse.statusText,
-          errorData,
-        });
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      console.log("✅ User data saved successfully");
-
       // Create Vegaah payment
-      console.log("🔥 Step 2: Creating Vegaah payment...");
-      const paymentPayload = {
-        amount: 99 * quantity,
-        email: paymentForm.email,
-        phone: paymentForm.phoneNumber,
-      };
-      console.log("🔥 Vegaah payment payload:", {
-        amount: paymentPayload.amount,
-        email: paymentPayload.email?.slice(0, 3) + "***",
-        phone: paymentPayload.phone?.slice(0, 3) + "***",
-      });
-
       const res = await fetch("/api/payment/vegaah/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentPayload),
-      }).catch((fetchErr) => {
-        console.error("❌ Network error creating Vegaah payment:", {
-          error: fetchErr,
-          message: fetchErr?.message,
-          stack: fetchErr?.stack,
-          name: fetchErr?.name,
-        });
-        throw new Error(
-          `Network error: Cannot connect to payment server. ${fetchErr?.message || ""}`
-        );
+        body: JSON.stringify({
+          amount: 99,
+          email: paymentForm.email,
+          phone: paymentForm.phoneNumber,
+        }),
       });
 
-      console.log("🔥 Vegaah API Response:", {
-        status: res.status,
-        statusText: res.statusText,
-        ok: res.ok,
-        headers: Object.fromEntries(res.headers.entries()),
-      });
+      console.log("Vegaah API Response Status:", res.status);
+      console.log("Vegaah API Response OK:", res.ok);
 
-      let data;
-      try {
-        const responseText = await res.text();
-        console.log("🔥 Vegaah raw response text:", responseText?.slice(0, 500));
-        
-        try {
-          data = JSON.parse(responseText);
-          console.log("✅ Vegaah response parsed as JSON:", data);
-        } catch (parseErr) {
-          console.error("❌ Vegaah response is not valid JSON:", {
-            parseError: parseErr?.message,
-            rawText: responseText,
-          });
-          throw new Error(
-            `Invalid response from payment server: ${responseText?.slice(0, 200) || "Empty response"}`
-          );
+      const data = await res.json();
+      console.log("Vegaah API Response Data:", data);
+
+      if (!data.redirectUrl) {
+        console.error("No redirectUrl in response:", data);
+        alert("Payment init failed");
+        return;
+      }
+
+      console.log("Redirecting to:", data.redirectUrl);
+      setShowPaymentNotice(true);
+      setPaymentNoticeCounter(3);
+
+      let counter = 3;
+
+      const countdownInterval = setInterval(() => {
+        counter -= 1;
+        setPaymentNoticeCounter(counter);
+
+        if (counter === 0) {
+          clearInterval(countdownInterval);
+          setShowPaymentNotice(false);
+          window.location.href = data.redirectUrl; // Vegaah redirect
         }
-      } catch (readErr) {
-        console.error("❌ Error reading Vegaah response:", {
-          error: readErr,
-          message: readErr?.message,
-        });
-        throw readErr;
-      }
-
-      if (!res.ok) {
-        console.error("❌ Vegaah API returned error:", {
-          status: res.status,
-          statusText: res.statusText,
-          data,
-        });
-        const errorMsg = data?.error || data?.details || `Payment server error (${res.status})`;
-        const errorDetails = data?.body || data?.missing || data;
-        alert(`Payment failed: ${errorMsg}${errorDetails ? `\n\nDetails: ${JSON.stringify(errorDetails)}` : ""}`);
-        return;
-      }
-
-      if (data.redirectUrl) {
-        console.log(
-          "✅ Payment created successfully, redirecting to:",
-          data.redirectUrl
-        );
-        console.log("🔥 ========== PAYMENT SUBMIT SUCCESS ==========");
-        window.location.href = data.redirectUrl;
-        return;
-      }
-
-      // Hosted Payment Page (HPP) flow: backend returns paymentId + targetUrl (leg1)
-      if (data.paymentId && data.targetUrl) {
-        console.log("✅ Vegaah HPP init success:", {
-          paymentId: data.paymentId,
-          targetUrl: data.targetUrl,
-          trackId: data.trackId,
-        });
-
-        // Leg2: form POST to targetUrl with paymentId (per Vegaah API spec)
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = data.targetUrl;
-
-        const paymentIdInput = document.createElement("input");
-        paymentIdInput.type = "hidden";
-        paymentIdInput.name = "paymentId";
-        paymentIdInput.value = String(data.paymentId);
-        form.appendChild(paymentIdInput);
-
-        // Optional: include trackId if returned (harmless if ignored)
-        if (data.trackId) {
-          const trackIdInput = document.createElement("input");
-          trackIdInput.type = "hidden";
-          trackIdInput.name = "trackId";
-          trackIdInput.value = String(data.trackId);
-          form.appendChild(trackIdInput);
-        }
-
-        document.body.appendChild(form);
-        console.log("🚀 Submitting HPP form post...");
-        form.submit();
-        return;
-      }
-
-      console.error("❌ Unexpected Vegaah response shape:", data);
-      alert(
-        `Payment init failed: Unexpected response.\n\nResponse: ${JSON.stringify(
-          data
-        )}`
-      );
-      return;
+      }, 1000);
     } catch (err) {
-      console.error("❌ ========== PAYMENT SUBMIT ERROR ==========", {
-        error: err,
-        name: err?.name,
-        message: err?.message,
-        stack: err?.stack,
-      });
-      const errorMessage = err?.message || "Unable to start payment";
-      alert(`Payment Error: ${errorMessage}\n\nPlease check the browser console for details.`);
+      alert("Unable to start payment");
     } finally {
       setPaymentLoading(false);
     }
@@ -3575,6 +3463,26 @@ function App() {
                     <span>₹{total.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
+
+                {showPaymentNotice && (
+                  <div
+                    style={{
+                      background: "#111",
+                      color: "#fff",
+                      padding: "12px 16px",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      textAlign: "center",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    Please check your email (including spam) after payment to
+                    get your order.
+                    <div style={{ marginTop: "6px", fontWeight: "bold" }}>
+                      Redirecting in {paymentNoticeCounter}...
+                    </div>
+                  </div>
+                )}
 
                 {/* Place Order Button */}
                 <button
