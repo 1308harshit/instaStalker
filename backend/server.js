@@ -54,6 +54,8 @@ app.use(
   })
 );
 app.use(express.json()); // For parsing JSON request bodies
+// Vegaah "merchant receipt URL" callback is typically application/x-www-form-urlencoded
+app.use(express.urlencoded({ extended: true }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Keep static serving for backward compatibility (if files exist)
@@ -1246,13 +1248,132 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
   }
 });
 
-app.post("/api/payment/vegaah/response", (req, res) => {
-  const status = req.body?.result || req.body?.status;
+app.all("/api/payment/vegaah/response", (req, res) => {
+  try {
+    // Vegaah can either POST encrypted data as form params, or redirect with ?data=...
+    // Examples from PDF show encrypted response like: data=<base64>&termId=...
+    const rawData =
+      req.body?.data ?? req.query?.data ?? req.body?.encryptedResponse ?? null;
 
-  if (status === "SUCCESS") {
-    return res.redirect("/payment-success");
+    // Fallback: if they post plain JSON (rare)
+    const status = req.body?.result || req.body?.status;
+    if (!rawData) {
+      if (status === "SUCCESS") return res.redirect("/payment-success");
+      return res.redirect("/payment-failed");
+    }
+
+    const merchantKeyHex = process.env.VEGAAH_MERCHANT_KEY;
+    if (!merchantKeyHex) {
+      log("❌ Vegaah response: missing VEGAAH_MERCHANT_KEY for decryption");
+      return res.redirect("/payment-failed");
+    }
+
+    const normalizeEncrypted = (value) => {
+      if (!value) return "";
+      let s = String(value);
+      // In x-www-form-urlencoded, '+' often becomes space; base64 needs '+'
+      s = s.replace(/ /g, "+");
+      // Sometimes the param contains 'data=' prefix
+      if (s.startsWith("data=")) s = s.slice("data=".length);
+      // Sometimes includes &termId=...
+      const amp = s.indexOf("&");
+      if (amp !== -1) s = s.slice(0, amp);
+      return s;
+    };
+
+    const decryptVegaahData = (encryptedBase64, keyHex) => {
+      const key = Buffer.from(String(keyHex).trim(), "hex");
+      const b64 = normalizeEncrypted(encryptedBase64);
+      const enc = Buffer.from(b64, "base64");
+
+      let algo = null;
+      if (key.length === 16) algo = "aes-128-ecb";
+      else if (key.length === 24) algo = "aes-192-ecb";
+      else if (key.length === 32) algo = "aes-256-ecb";
+      else throw new Error(`Unsupported merchant key length: ${key.length}`);
+
+      const decipher = crypto.createDecipheriv(algo, key, null);
+      decipher.setAutoPadding(true);
+      const decrypted = Buffer.concat([
+        decipher.update(enc),
+        decipher.final(),
+      ]).toString("utf8");
+      return decrypted;
+    };
+
+    log("📥 Vegaah response callback received", {
+      hasBodyData: Boolean(req.body?.data),
+      hasQueryData: Boolean(req.query?.data),
+      dataLength: String(rawData).length,
+    });
+
+    const decrypted = decryptVegaahData(rawData, merchantKeyHex);
+    log("🔓 Vegaah decrypted response (preview)", {
+      preview: decrypted.slice(0, 500),
+      length: decrypted.length,
+    });
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(decrypted);
+    } catch (e) {
+      // Some implementations wrap JSON in "data=..."
+      const idx = decrypted.indexOf("{");
+      if (idx !== -1) {
+        parsed = JSON.parse(decrypted.slice(idx));
+      } else {
+        throw e;
+      }
+    }
+
+    const responseCode =
+      parsed?.responseCode ?? parsed?.ResponseCode ?? parsed?.response_code;
+    const result = parsed?.result ?? parsed?.Result ?? null;
+    const amount =
+      parsed?.amountDetails?.amount ?? parsed?.amount ?? parsed?.Amount;
+
+    // Optional: verify response signature (per PDF)
+    // Format: PaymentId | merchantkey | responseCode | amount
+    const paymentId =
+      parsed?.paymentId ??
+      parsed?.paymentID ??
+      parsed?.transactionId ??
+      parsed?.TranId ??
+      null;
+    const rspSig = parsed?.signature ?? parsed?.Signature ?? null;
+
+    if (paymentId && responseCode && amount && rspSig) {
+      const sigString = `${paymentId}|${merchantKeyHex}|${responseCode}|${amount}`;
+      const expected = crypto
+        .createHash("sha256")
+        .update(sigString)
+        .digest("hex");
+      log("🔎 Vegaah response signature check", {
+        responseCode,
+        amount,
+        signatureOk: String(expected) === String(rspSig),
+      });
+    }
+
+    log("✅ Vegaah response parsed", {
+      responseCode,
+      result,
+      amount,
+      paymentIdPresent: Boolean(paymentId),
+    });
+
+    // "Transaction Approved" example uses responseCode "001" in PDF
+    const isSuccess =
+      String(result).toUpperCase() === "SUCCESS" || String(responseCode) === "001";
+
+    return res.redirect(isSuccess ? "/payment-success" : "/payment-failed");
+  } catch (err) {
+    log("❌ Vegaah response handler error", {
+      message: err?.message || String(err),
+      stack: err?.stack || null,
+    });
+    return res.redirect("/payment-failed");
   }
-  return res.redirect("/payment-failed");
 });
 
 app.get("/api/stalkers", async (req, res) => {
