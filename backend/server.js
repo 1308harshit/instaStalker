@@ -1015,10 +1015,25 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       paymentType: "1",
       amount: formattedAmount,
       currency,
-      order: { orderId }, // keep existing structure (some APIs accept this)
+      order: {
+        orderId,
+        description: "Insta Reports purchase",
+      },
       customer: {
         customerEmail: String(email),
         mobileNumber: String(phone),
+        // Vegaah validates billingAddressCountry; missing value can cause "Invalid Country" (e.g. responseCode 619)
+        // Default to India as this app charges in INR
+        billingAddressStreet:
+          process.env.VEGAAH_BILLING_STREET || "NA",
+        billingAddressCity:
+          process.env.VEGAAH_BILLING_CITY || "NA",
+        billingAddressState:
+          process.env.VEGAAH_BILLING_STATE || "NA",
+        billingAddressPostalCode:
+          process.env.VEGAAH_BILLING_POSTAL_CODE || "000000",
+        billingAddressCountry:
+          process.env.VEGAAH_BILLING_COUNTRY || "IN",
       },
       returnUrl: process.env.VEGAAH_RETURN_URL,
     };
@@ -1032,8 +1047,10 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       amount: payload.amount,
       currency: payload.currency,
       orderId: payload.order.orderId,
+      orderDescription: payload.order.description,
       customerEmail: payload.customer.customerEmail.slice(0, 3) + "***",
       mobileNumber: payload.customer.mobileNumber.slice(0, 3) + "***",
+      billingAddressCountry: payload.customer.billingAddressCountry,
       returnUrl: payload.returnUrl,
     });
 
