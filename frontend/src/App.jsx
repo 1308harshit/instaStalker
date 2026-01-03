@@ -554,6 +554,13 @@ function App() {
               // If backend returns a finalized stored report, use it and disable randomization.
               if (validateData.report) {
                 setHasStoredReport(true);
+                // Use stored hero profile (avatar + counts) so refresh is stable
+                if (validateData.report.heroProfile) {
+                  setProfile((prev) => ({
+                    ...prev,
+                    ...validateData.report.heroProfile,
+                  }));
+                }
                 if (validateData.report.carouselCards) {
                   setPaymentSuccessCards(validateData.report.carouselCards);
                 }
@@ -3472,11 +3479,30 @@ function App() {
             : `@${usernameFromInput}`
           : (rawProfile?.username || "").trim()) || "";
 
+      // Build a strong "hero profile" from analysis (real avatar + counts)
+      const hero = analysis?.hero || {};
+      const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
+      const parseNum = (v) => {
+        const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
+        return Number.isFinite(n) ? n : null;
+      };
+      const pickStat = (labelIncludes) => {
+        const item = heroStats.find((s) =>
+          String(s?.label || "")
+            .toLowerCase()
+            .includes(labelIncludes)
+        );
+        return item ? parseNum(item.value) : null;
+      };
       const profileToSend = {
         ...(rawProfile || {}),
+        name: hero.name || rawProfile?.name,
         username: usernameToSend,
+        posts: pickStat("post") ?? rawProfile?.posts ?? null,
+        followers: pickStat("follower") ?? rawProfile?.followers ?? null,
+        following: pickStat("following") ?? rawProfile?.following ?? null,
         // Prefer analysis hero image if available
-        avatar: rawProfile?.avatar || analysis?.hero?.profileImage || rawProfile?.avatar,
+        avatar: hero.profileImage || rawProfile?.avatar,
       };
 
       if (!paymentForm.email) {
