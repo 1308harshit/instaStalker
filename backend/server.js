@@ -250,7 +250,7 @@ app.post("/api/payment/bypass", async (req, res) => {
       if (db) {
         await db.collection("user_orders").insertOne({
           orderId,
-          token,
+          accessToken: token, // ✅ IMPORTANT
           email,
           fullName,
           status: "paid", // IMPORTANT
