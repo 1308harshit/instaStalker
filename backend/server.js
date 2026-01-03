@@ -305,9 +305,6 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
           <h2>Thank you for your purchase!</h2>
           <p>Hi ${label},</p>
-          <p style="font-size:12px;color:#666;margin-top:4px;margin-bottom:14px;">
-            This link is unique to: <strong>${email}</strong>
-          </p>
           <p>Access your report using the link below:</p>
           <p>
             <a href="${postPurchaseLink}" 

@@ -5386,36 +5386,6 @@ function App() {
               )}
             </div>
           </section>
-
-          {/* Back to Home Button */}
-          <div style={{ textAlign: "center" }}>
-            <button
-              onClick={() => setScreen(SCREEN.LANDING)}
-              style={{
-                background: "transparent",
-                color: "#f43f3f",
-                border: "2px solid #f43f3f",
-                borderRadius: "999px",
-                padding: "clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)",
-                fontSize: "clamp(14px, 2.5vw, 16px)",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                width: "100%",
-                maxWidth: "300px",
-              }}
-              onMouseOver={(e) => {
-                e.target.style.background = "#f43f3f";
-                e.target.style.color = "#fff";
-              }}
-              onMouseOut={(e) => {
-                e.target.style.background = "transparent";
-                e.target.style.color = "#f43f3f";
-              }}
-            >
-              Back to Home
-            </button>
-          </div>
         </div>
       </section>
     );
