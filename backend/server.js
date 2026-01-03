@@ -141,7 +141,10 @@ log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   API Version: ${CASHFREE_API_VERSION}`);
 
 // Email configuration
-const BASE_URL = process.env.BASE_URL || "https://samjhona.com";
+const BASE_URL = (process.env.BASE_URL || "https://samjhona.com").replace(
+  /\/+$/,
+  ""
+);
 
 // Create Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -242,7 +245,9 @@ app.post("/api/payment/bypass", async (req, res) => {
       .substring(2, 10)}`;
     const token = crypto.randomBytes(32).toString("hex");
 
-    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${token}&order=${orderId}`;
+    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
+      token
+    )}&order=${encodeURIComponent(orderId)}`;
 
     // Optional DB save
     try {
@@ -616,7 +621,9 @@ app.post("/api/payment/verify", async (req, res) => {
 
           // Generate unique post-purchase link
           const accessToken = crypto.randomBytes(32).toString("hex");
-          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${order_id}`;
+          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
+            accessToken
+          )}&order=${encodeURIComponent(order_id)}`;
 
           const updateData = {
             status: "paid",

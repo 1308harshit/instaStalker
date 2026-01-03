@@ -375,7 +375,8 @@ function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.location.pathname === "/post-purchase") {
+    // Be tolerant of trailing slashes (e.g. /post-purchase/)
+    if (window.location.pathname.startsWith("/post-purchase")) {
       postPurchaseLockRef.current = true; // 🔐 LOCK
       setScreen(SCREEN.PAYMENT_SUCCESS);
     }
@@ -459,6 +460,9 @@ function App() {
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
+    // Never restore from localStorage on post-purchase page (email link flow)
+    if (window.location.pathname.startsWith("/post-purchase")) return;
+
     // Don't restore from localStorage if we're accessing via post-purchase link
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
@@ -490,13 +494,35 @@ function App() {
     if (typeof window === "undefined") return;
 
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("token");
-    const order = urlParams.get("order");
+    let token = urlParams.get("token");
+    let order = urlParams.get("order");
+
+    // If URL was cleaned (no query params), try to recover from sessionStorage
+    // so refresh doesn't break the post-purchase page.
+    if (!token || !order) {
+      try {
+        const storedToken = sessionStorage.getItem("postPurchaseToken");
+        const storedOrder = sessionStorage.getItem("postPurchaseOrder");
+        if (storedToken && storedOrder) {
+          token = storedToken;
+          order = storedOrder;
+        }
+      } catch {}
+    }
 
     // If we have token and order params, fetch order data
     if (token && order) {
+      // 🔐 Ensure we never rewrite to /successfully-paid for post-purchase access
+      postPurchaseLockRef.current = true;
+
       const loadOrderData = async () => {
         try {
+          // Persist for reload safety (URL may be cleaned)
+          try {
+            sessionStorage.setItem("postPurchaseToken", token);
+            sessionStorage.setItem("postPurchaseOrder", order);
+          } catch {}
+
           const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(
             token
           )}&order=${encodeURIComponent(order)}`;
@@ -5290,7 +5316,7 @@ function App() {
       case SCREEN.PAYMENT:
         return renderPayment();
       case SCREEN.PAYMENT_SUCCESS:
-        return <SuccessfullyPaid />;
+        return renderPaymentSuccess();
       case SCREEN.CONTACT_US:
         return renderContactUs();
       case SCREEN.ERROR:
