@@ -295,7 +295,6 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
 };
 
 function App() {
-  const postPurchaseLockRef = useRef(false);
   const [screen, setScreen] = useState(SCREEN.LANDING);
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [usernameInput, setUsernameInput] = useState("");
@@ -344,10 +343,6 @@ function App() {
   const paymentSuccessCarouselResetRef = useRef(false);
   const checkoutEventFiredRef = useRef(false);
   const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
-  // Keep latest values available for effects with [] deps (e.g. payment return flow)
-  const cardsRef = useRef([]);
-  const profileRef = useRef(INITIAL_PROFILE);
-  const [hasStoredReport, setHasStoredReport] = useState(false);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -375,36 +370,14 @@ function App() {
     }
   }, []);
 
-  // Keep refs in sync with state (for one-time effects)
-  useEffect(() => {
-    cardsRef.current = cards;
-  }, [cards]);
-
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
-
-  // Post-purchase entry point - always show success screen
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    // Be tolerant of trailing slashes (e.g. /post-purchase/)
-    if (window.location.pathname.startsWith("/post-purchase")) {
-      postPurchaseLockRef.current = true; // 🔐 LOCK
-      setScreen(SCREEN.PAYMENT_SUCCESS);
-    }
-  }, []);
-
   // Clean URL after showing success screen (remove query params)
   useEffect(() => {
-    if (
-      screen === SCREEN.PAYMENT_SUCCESS &&
-      typeof window !== "undefined" &&
-      !postPurchaseLockRef.current // ✅ ONLY normal payments
-    ) {
+    if (screen === SCREEN.PAYMENT_SUCCESS && typeof window !== "undefined") {
       try {
         window.history.replaceState({}, "", "/successfully-paid");
-      } catch {}
+      } catch (e) {
+        // ignore
+      }
     }
   }, [screen]);
 
@@ -473,9 +446,6 @@ function App() {
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
-    // Never restore from localStorage on post-purchase page (email link flow)
-    if (window.location.pathname.startsWith("/post-purchase")) return;
-
     // Don't restore from localStorage if we're accessing via post-purchase link
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
@@ -506,38 +476,14 @@ function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    let cancelled = false;
-
     const urlParams = new URLSearchParams(window.location.search);
-    let token = urlParams.get("token");
-    let order = urlParams.get("order");
-
-    // If URL was cleaned (no query params), try to recover from sessionStorage
-    // so refresh doesn't break the post-purchase page.
-    if (!token || !order) {
-      try {
-        const storedToken = sessionStorage.getItem("postPurchaseToken");
-        const storedOrder = sessionStorage.getItem("postPurchaseOrder");
-        if (storedToken && storedOrder) {
-          token = storedToken;
-          order = storedOrder;
-        }
-      } catch {}
-    }
+    const token = urlParams.get("token");
+    const order = urlParams.get("order");
 
     // If we have token and order params, fetch order data
     if (token && order) {
-      // 🔐 Ensure we never rewrite to /successfully-paid for post-purchase access
-      postPurchaseLockRef.current = true;
-
       const loadOrderData = async () => {
         try {
-          // Persist for reload safety (URL may be cleaned)
-          try {
-            sessionStorage.setItem("postPurchaseToken", token);
-            sessionStorage.setItem("postPurchaseOrder", order);
-          } catch {}
-
           const apiUrl = `/api/payment/post-purchase?token=${encodeURIComponent(
             token
           )}&order=${encodeURIComponent(order)}`;
@@ -551,109 +497,29 @@ function App() {
                 "✅ Post-purchase link validated, loading order data"
               );
 
-              // If backend returns a finalized stored report, use it and disable randomization.
-              if (validateData.report) {
-                setHasStoredReport(true);
-                // Use stored hero profile (avatar + counts) so refresh is stable
-                if (validateData.report.heroProfile) {
-                  setProfile((prev) => {
-                    const next = { ...prev, ...validateData.report.heroProfile };
-                    // If older stored reports have the demo/default name, replace with username-derived label.
-                    const looksDefault =
-                      next?.name === INITIAL_PROFILE.name &&
-                      next?.username === INITIAL_PROFILE.username;
-                    if (looksDefault) {
-                      const u =
-                        (validateData.report.heroProfile?.username ||
-                          validateData.username ||
-                          next?.username ||
-                          "")
-                          .toString()
-                          .trim();
-                      if (u) next.name = u.replace(/^@/, "");
-                    }
-                    if (!next?.name) {
-                      const u =
-                        (validateData.report.heroProfile?.username ||
-                          validateData.username ||
-                          next?.username ||
-                          "")
-                          .toString()
-                          .trim();
-                      if (u) next.name = u.replace(/^@/, "");
-                    }
-                    return next;
-                  });
-                }
-                if (validateData.report.carouselCards) {
-                  setPaymentSuccessCards(validateData.report.carouselCards);
-                }
-                if (validateData.report.last7Summary) {
-                  setPaymentSuccessLast7Summary(validateData.report.last7Summary);
-                }
-                if (
-                  Array.isArray(validateData.report.last7Rows) &&
-                  validateData.report.last7Rows.length > 0
-                ) {
-                  setPaymentSuccessLast7Rows(validateData.report.last7Rows);
-                }
-              } else {
-                setHasStoredReport(false);
-              }
-
-              const hasCards =
-                Array.isArray(validateData.cards) && validateData.cards.length > 0;
-
               // Load order-specific data from backend (not localStorage)
-              if (hasCards) {
-                if (!cancelled) {
-                  setCards(validateData.cards);
-                  if (!validateData.report?.carouselCards) {
-                    setPaymentSuccessCards(validateData.cards);
-                  }
-                }
+              if (
+                validateData.cards &&
+                Array.isArray(validateData.cards) &&
+                validateData.cards.length > 0
+              ) {
+                setCards(validateData.cards);
+                setPaymentSuccessCards(validateData.cards);
               }
 
               if (validateData.profile) {
-                if (!cancelled) {
-                  setProfile((prev) => ({ ...prev, ...validateData.profile }));
-                }
+                setProfile((prev) => ({ ...prev, ...validateData.profile }));
               }
 
               if (validateData.username) {
-                if (!cancelled) {
-                  setUsernameInput(validateData.username.replace("@", ""));
-                }
+                setUsernameInput(validateData.username.replace("@", ""));
               }
 
               // Show payment success screen
-              if (!cancelled) {
-                setScreen(SCREEN.PAYMENT_SUCCESS);
-              }
+              setScreen(SCREEN.PAYMENT_SUCCESS);
 
               // Clean URL but keep /post-purchase path
               window.history.replaceState({}, "", "/post-purchase");
-
-              // If the user clicks the email link instantly, DB may not yet contain cards.
-              // Retry for a short time and populate cards when they become available.
-              if (!hasCards) {
-                for (let attempt = 0; attempt < 20; attempt += 1) {
-                  if (cancelled) break;
-                  await new Promise((r) => setTimeout(r, 2000));
-                  const retryRes = await fetch(apiUrl).catch(() => null);
-                  if (!retryRes || !retryRes.ok) continue;
-                  const retryData = await retryRes.json().catch(() => null);
-                  const retryCards =
-                    retryData && Array.isArray(retryData.cards) ? retryData.cards : [];
-                  if (retryData?.success && retryCards.length > 0) {
-                    if (!cancelled) {
-                      setCards(retryCards);
-                      setPaymentSuccessCards(retryCards);
-                    }
-                    break;
-                  }
-                }
-              }
             }
           }
         } catch (err) {
@@ -663,10 +529,6 @@ function App() {
 
       loadOrderData();
     }
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // Fetch HTML content for a snapshot
@@ -3197,9 +3059,6 @@ function App() {
 
   // Handle payment return URL - verify payment before showing success
   useEffect(() => {
-    // 🚫 DO NOT run payment return logic on post-purchase links
-    if (window.location.pathname.startsWith("/post-purchase")) return;
-
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get("order_id");
 
@@ -3218,26 +3077,6 @@ function App() {
         try {
           console.log("🔍 Verifying payment for order:", orderId);
 
-          // IMPORTANT: this effect has [] deps, so `cards/profile` here can be stale.
-          // Use refs and/or localStorage fallback so we always save real data before emailing.
-          const restored = (() => {
-            try {
-              return loadLastRun();
-            } catch {
-              return null;
-            }
-          })();
-          const cardsToSend =
-            (Array.isArray(cardsRef.current) && cardsRef.current.length > 0
-              ? cardsRef.current
-              : null) ||
-            (Array.isArray(restored?.cards) && restored.cards.length > 0
-              ? restored.cards
-              : cardsRef.current || []);
-          const profileToSend = restored?.profile || profileRef.current || profile;
-          const usernameToSend =
-            profileToSend?.username || profileRef.current?.username || profile?.username;
-
           // Send profile data with verification (POST request)
           const verifyResponse = await fetch(`/api/payment/verify`, {
             method: "POST",
@@ -3246,9 +3085,9 @@ function App() {
             },
             body: JSON.stringify({
               order_id: orderId,
-              username: usernameToSend,
-              cards: cardsToSend,
-              profile: profileToSend,
+              username: profile.username,
+              cards: cards,
+              profile: profile,
             }),
           });
 
@@ -3474,105 +3313,41 @@ function App() {
     }
   };
 
-  const handlePlaceOrder = async (e) => {
+  const handlePlaceOrder = (e) => {
     e.preventDefault();
     try {
       setPaymentLoading(true);
 
-      // IMPORTANT:
-      // - We must store the user's report BEFORE navigating away.
-      // - Fire-and-forget can be cancelled by browser navigation.
-      const restored = loadLastRun();
-      const rawCards =
-        (Array.isArray(cards) && cards.length > 0
-          ? cards
-          : Array.isArray(restored?.cards) && restored.cards.length > 0
-          ? restored.cards
-          : []);
-
-      // Full payload (limits handled by backend + reverse proxy)
-      const cardsToSend = rawCards;
-
-      const rawProfile = restored?.profile || profile;
-      // Prefer real username (user input) over INITIAL_PROFILE fallback
-      const usernameFromInput = (usernameInput || "").trim();
-      const usernameToSend =
-        (usernameFromInput
-          ? usernameFromInput.startsWith("@")
-            ? usernameFromInput
-            : `@${usernameFromInput}`
-          : (rawProfile?.username || "").trim()) || "";
-
-      // Build a strong "hero profile" from analysis (real avatar + counts)
-      const hero = analysis?.hero || {};
-      const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
-      const parseNum = (v) => {
-        const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
-        return Number.isFinite(n) ? n : null;
-      };
-      const pickStat = (labelIncludes) => {
-        const item = heroStats.find((s) =>
-          String(s?.label || "")
-            .toLowerCase()
-            .includes(labelIncludes)
+      // Store purchase intent so success page can fire Purchase pixel once
+      try {
+        const pending = {
+          id: `payu_${Date.now()}`,
+          value: 99 * quantity,
+          currency: "INR",
+          quantity,
+          ts: Date.now(),
+          provider: "payu",
+        };
+        window.localStorage.setItem(
+          "instaStalker_pending_purchase",
+          JSON.stringify(pending)
         );
-        return item ? parseNum(item.value) : null;
-      };
-
-      // Avoid persisting demo/default name ("Harshit") into paid reports.
-      const isDefaultProfile =
-        rawProfile?.name === INITIAL_PROFILE.name &&
-        rawProfile?.username === INITIAL_PROFILE.username;
-      const fallbackNameFromUsername = usernameToSend
-        ? usernameToSend.replace(/^@/, "")
-        : "";
-
-      const profileToSend = {
-        ...(rawProfile || {}),
-        name: hero.name || (isDefaultProfile ? "" : rawProfile?.name) || fallbackNameFromUsername,
-        username: usernameToSend,
-        posts: pickStat("post") ?? rawProfile?.posts ?? null,
-        followers: pickStat("follower") ?? rawProfile?.followers ?? null,
-        following: pickStat("following") ?? rawProfile?.following ?? null,
-        // Prefer analysis hero image if available
-        avatar: hero.profileImage || rawProfile?.avatar,
-      };
-
-      if (!paymentForm.email) {
-        throw new Error("Email is required");
-      }
-      if (!usernameToSend) {
-        throw new Error("Username is missing. Please generate the report again.");
-      }
-      if (!Array.isArray(cardsToSend) || cardsToSend.length === 0) {
-        throw new Error(
-          "Report data is not ready yet. Please wait for the report to finish loading, then try again."
-        );
+      } catch (_) {
+        // ignore storage errors
       }
 
-      const bypassRes = await fetch("/api/payment/bypass", {
+      // Fire-and-forget bypass call; do not block redirect
+      fetch("/api/payment/bypass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: paymentForm.email,
-          // We don't ask for name anymore; store email as identifier in email template.
-          fullName: paymentForm.email,
-          username: usernameToSend,
-          cards: cardsToSend,
-          profile: profileToSend,
+          fullName: paymentForm.fullName,
         }),
-      });
+      }).catch(() => {});
 
-      if (!bypassRes.ok) {
-        const text = await bypassRes.text().catch(() => "");
-        throw new Error(text || "Failed to generate report link");
-      }
-
-      // Redirect to PayU only after data is stored
+      // Redirect immediately to PayU
       window.location.href = "https://u.payu.in/XIhRIisGBtcW";
-    } catch (err) {
-      console.error("Place order error:", err);
-      alert(err?.message || "Failed to place order. Please try again.");
     } finally {
       setPaymentLoading(false);
     }
@@ -3640,8 +3415,7 @@ function App() {
               {/* Contact Form */}
               <div className="payment-form-section">
                 <h3 className="payment-form-title">Contact</h3>
-                {/* Only ask for email. Pressing Enter should place the order. */}
-                <form onSubmit={handlePlaceOrder} className="payment-form">
+                <form onSubmit={handlePaymentSubmit} className="payment-form">
                   <div className="payment-form-group">
                     <label htmlFor="email">E-mail*</label>
                     <input
@@ -3659,7 +3433,6 @@ function App() {
                     />
                   </div>
 
-                  {/*
                   <div className="payment-form-group">
                     <label htmlFor="fullName">Full name*</label>
                     <input
@@ -3697,7 +3470,6 @@ function App() {
                       />
                     </div>
                   </div>
-                  */}
                 </form>
               </div>
 
@@ -4253,8 +4025,6 @@ function App() {
   // Fetch results.html and extract cards when on payment success page
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    // If we have a stored report (post-purchase link), do not override it
-    if (hasStoredReport) return;
 
     const fetchResultsCards = async () => {
       try {
@@ -4409,7 +4179,7 @@ function App() {
     };
 
     fetchResultsCards();
-  }, [screen, snapshots, cards, hasStoredReport]);
+  }, [screen, snapshots, cards]);
 
   // Reset payment success carousel when cards change
   useEffect(() => {
@@ -4466,7 +4236,6 @@ function App() {
   // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    if (hasStoredReport) return;
 
     const visits = randBetween(1, 5);
     let screenshots = randBetween(1, 5);
@@ -4482,21 +4251,19 @@ function App() {
       profileVisits: visits,
       screenshots,
     });
-  }, [screen, hasStoredReport]);
+  }, [screen]);
 
   // Initialize 90-day profile visits stat on payment success (30–45, stable)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    if (hasStoredReport) return;
     if (paymentSuccess90DayVisits === null) {
       setPaymentSuccess90DayVisits(randBetween(30, 45));
     }
-  }, [screen, paymentSuccess90DayVisits, hasStoredReport]);
+  }, [screen, paymentSuccess90DayVisits]);
 
-  // Build 10-profile list for payment success with highlight rules
+  // Build 7-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    if (hasStoredReport) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
     const sourceCards = (
@@ -4527,7 +4294,7 @@ function App() {
       shuffled[j] = tmp;
     }
 
-    const TOTAL_ROWS = 10;
+    const TOTAL_ROWS = 7;
     const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
     // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
@@ -4558,18 +4325,16 @@ function App() {
 
     const rowCount = selected.length;
 
-    // Screenshots: highlight 3 profiles among rows 2–10 (index 1–9)
-    const screenshotIndices = new Set();
-    if (rowCount >= 2) {
-      const minIndex = 1;
-      const maxIndex = Math.min(9, rowCount - 1);
-      while (
-        screenshotIndices.size < 3 &&
-        screenshotIndices.size < maxIndex - minIndex + 1
-      ) {
-        screenshotIndices.add(randBetween(minIndex, maxIndex));
-      }
+    // Choose one row between 3rd–7th (index 2–6) to have screenshots = 1
+    let screenshotRowIndex = null;
+    if (rowCount >= 3) {
+      const minIndex = 2;
+      const maxIndex = Math.min(6, rowCount - 1);
+      screenshotRowIndex = randBetween(minIndex, maxIndex);
     }
+
+    // 30% chance that 2nd row also has screenshot = 1
+    const secondRowHasScreenshot = rowCount >= 2 && Math.random() < 0.3;
 
     const rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
       const username = card.username || "";
@@ -4584,14 +4349,20 @@ function App() {
       let visitsHighlighted = false;
       let screenshotsHighlighted = false;
 
-      // Visits: highlight first 4 profiles (rows 1–4)
-      if (index >= 0 && index <= 3) {
+      // First two profiles always have visits = 1 highlighted
+      if (index === 0 || index === 1) {
         visits = 1;
         visitsHighlighted = true;
       }
 
-      // Screenshots: highlight 3 profiles among rows 2–10
-      if (screenshotIndices.has(index)) {
+      // Exactly one of the rows 3–7 has screenshots = 1 highlighted
+      if (index === screenshotRowIndex) {
+        screenshots = 1;
+        screenshotsHighlighted = true;
+      }
+
+      // 30% chance that row 2 also has screenshots = 1 highlighted
+      if (index === 1 && secondRowHasScreenshot) {
         screenshots = 1;
         screenshotsHighlighted = true;
       }
@@ -4645,6 +4416,22 @@ function App() {
       "This user viewed your profile yesterday",
       "This user took screenshot of your profile",
     ];
+
+    const handleDownloadPDF = () => {
+      try {
+        const link = document.createElement("a");
+        link.href = "/Dont_Look_Back_Full.pdf";
+        link.download = "Dont_Look_Back_Full.pdf";
+        link.target = "_blank"; // Fallback: open in new tab if download fails
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error("Error downloading PDF:", error);
+        // Fallback: open PDF in new tab
+        window.open("/Dont_Look_Back_Full.pdf", "_blank");
+      }
+    };
 
     return (
       <section
@@ -5382,6 +5169,97 @@ function App() {
               )}
             </div>
           </section>
+
+          {/* PDF Download Section */}
+          <div
+            style={{
+              background: "#f9f9f9",
+              borderRadius: "16px",
+              padding: "clamp(20px, 4vw, 30px) clamp(15px, 3vw, 20px)",
+              textAlign: "center",
+              marginBottom: "clamp(20px, 4vw, 30px)",
+              border: "1px solid #e0e0e0",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "clamp(32px, 6vw, 48px)",
+                marginBottom: "clamp(12px, 3vw, 20px)",
+              }}
+            >
+              📄
+            </div>
+            <h2
+              style={{
+                fontSize: "clamp(22px, 4vw, 28px)",
+                fontWeight: "700",
+                color: "#1a1a1a",
+                marginBottom: "12px",
+              }}
+            >
+              Download your ebook
+            </h2>
+            <button
+              onClick={handleDownloadPDF}
+              className="primary-btn"
+              style={{
+                background: "#f43f3f",
+                color: "#fff",
+                border: "none",
+                borderRadius: "999px",
+                padding: "clamp(12px, 2.5vw, 16px) clamp(24px, 4vw, 32px)",
+                fontSize: "clamp(14px, 2.5vw, 18px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                boxShadow: "0 15px 40px rgba(244, 63, 63, 0.35)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                minWidth: "clamp(180px, 30vw, 200px)",
+                width: "100%",
+                maxWidth: "400px",
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = "translateY(-2px)";
+                e.target.style.boxShadow = "0 20px 50px rgba(244, 63, 63, 0.4)";
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = "translateY(0)";
+                e.target.style.boxShadow =
+                  "0 15px 40px rgba(244, 63, 63, 0.35)";
+              }}
+            >
+              pdf (dont look back) [download]
+            </button>
+          </div>
+
+          {/* Back to Home Button */}
+          <div style={{ textAlign: "center" }}>
+            <button
+              onClick={() => setScreen(SCREEN.LANDING)}
+              style={{
+                background: "transparent",
+                color: "#f43f3f",
+                border: "2px solid #f43f3f",
+                borderRadius: "999px",
+                padding: "clamp(10px, 2vw, 12px) clamp(20px, 3vw, 24px)",
+                fontSize: "clamp(14px, 2.5vw, 16px)",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                width: "100%",
+                maxWidth: "300px",
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = "#f43f3f";
+                e.target.style.color = "#fff";
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = "transparent";
+                e.target.style.color = "#f43f3f";
+              }}
+            >
+              Back to Home
+            </button>
+          </div>
         </div>
       </section>
     );
@@ -5414,7 +5292,7 @@ function App() {
       case SCREEN.PAYMENT:
         return renderPayment();
       case SCREEN.PAYMENT_SUCCESS:
-        return renderPaymentSuccess();
+        return <SuccessfullyPaid />;
       case SCREEN.CONTACT_US:
         return renderContactUs();
       case SCREEN.ERROR:

@@ -1,6 +1,69 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 export default function SuccessfullyPaid() {
+  const purchaseTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (purchaseTrackedRef.current) return;
+    purchaseTrackedRef.current = true;
+
+    const PENDING_KEY = "instaStalker_pending_purchase";
+
+    let pending = null;
+    try {
+      const raw = window.localStorage.getItem(PENDING_KEY);
+      pending = raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      pending = null;
+    }
+
+    // Prevent false Purchase events if user opens success page directly.
+    // Only fire if we have a pending purchase marker from the PayU redirect flow.
+    if (!pending || typeof pending !== "object") return;
+
+    const value =
+      typeof pending?.value === "number" && Number.isFinite(pending.value)
+        ? pending.value
+        : 99;
+    const currency = typeof pending?.currency === "string" ? pending.currency : "INR";
+    const purchaseId =
+      typeof pending?.id === "string" && pending.id.trim() ? pending.id.trim() : null;
+
+    const firedKey = purchaseId
+      ? `instaStalker_purchase_fired_${purchaseId}`
+      : "instaStalker_purchase_fired_payu";
+
+    try {
+      if (window.localStorage.getItem(firedKey)) return;
+      window.localStorage.setItem(firedKey, String(Date.now()));
+      window.localStorage.removeItem(PENDING_KEY); // prevent duplicate firing on refresh
+    } catch (_) {
+      // ignore storage errors
+    }
+
+    const tryTrack = (attempts = 0) => {
+      if (window.fbq && typeof window.fbq === "function") {
+        try {
+          window.fbq("track", "Purchase", { value, currency });
+          console.log("✅ Meta Pixel: Purchase tracked", { value, currency });
+        } catch (err) {
+          console.error("❌ Meta Pixel tracking error for Purchase:", err);
+        }
+        return;
+      }
+
+      if (attempts < 10) {
+        setTimeout(() => tryTrack(attempts + 1), 100);
+        return;
+      }
+
+      console.warn("⚠️ Meta Pixel: fbq not available after retries for Purchase");
+    };
+
+    tryTrack();
+  }, []);
+
   const container = {
     display: "flex",
     minHeight: "100vh",
