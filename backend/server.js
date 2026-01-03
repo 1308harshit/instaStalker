@@ -40,6 +40,7 @@ import {
 } from "./utils/mongodb.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
+import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 
 const app = express();
 app.use(
@@ -141,55 +142,92 @@ log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   API Version: ${CASHFREE_API_VERSION}`);
 
 // Email configuration
+// We support AWS SES (preferred) and SMTP (fallback).
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || "ses").toLowerCase(); // "ses" | "smtp"
+
+// Shared
+const BASE_URL = process.env.BASE_URL || "https://samjhona.com";
+const EMAIL_FROM_NAME = process.env.SES_FROM_NAME || "Samjhona Support";
+const EMAIL_FROM_EMAIL =
+  process.env.SES_FROM_EMAIL || "customercare@samjhona.com";
+const EMAIL_FROM = `"${EMAIL_FROM_NAME}" <${EMAIL_FROM_EMAIL}>`;
+
+// SES config
+const AWS_REGION = process.env.AWS_REGION;
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+
+// SMTP config (optional fallback)
 const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
 const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
-const BASE_URL = process.env.BASE_URL || "https://samjhona.com";
 
-// Create email transporter
-const emailTransporter = nodemailer.createTransport({
-  host: EMAIL_HOST,
-  port: EMAIL_PORT,
-  secure: EMAIL_PORT === 465,
-  auth:
-    EMAIL_USER && EMAIL_PASS
-      ? {
-          user: EMAIL_USER,
-          pass: EMAIL_PASS,
-        }
-      : undefined,
-});
+// Optional: enable/disable "email on payment success" (default OFF)
+const EMAIL_ON_PAYMENT_SUCCESS =
+  String(process.env.EMAIL_ON_PAYMENT_SUCCESS || "false").toLowerCase() ===
+  "true";
+
+function createEmailTransporter() {
+  if (EMAIL_PROVIDER === "smtp") {
+    if (!EMAIL_USER || !EMAIL_PASS) return null;
+    return nodemailer.createTransport({
+      host: EMAIL_HOST,
+      port: EMAIL_PORT,
+      secure: EMAIL_PORT === 465,
+      auth: { user: EMAIL_USER, pass: EMAIL_PASS },
+    });
+  }
+
+  // Default: SES
+  if (!AWS_REGION) return null;
+
+  const sesClient = new SESClient({
+    region: AWS_REGION,
+    credentials:
+      AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY
+        ? { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY }
+        : undefined, // allow IAM role / default provider chain in prod
+  });
+
+  return nodemailer.createTransport({
+    SES: { ses: sesClient, aws: { SendRawEmailCommand } },
+  });
+}
+
+const emailTransporter = createEmailTransporter();
 
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
-  if (!EMAIL_USER || !EMAIL_PASS) {
-    log("⚠️ Email not configured - skipping email send");
+  if (!emailTransporter) {
+    log(`⚠️ Email not configured (provider=${EMAIL_PROVIDER}) - skipping send`);
     return null;
   }
   try {
     // Log transport-level info for debugging (avoid printing sensitive values)
     log(
-      `🔧 Preparing to send email to ${email} via ${EMAIL_HOST}:${EMAIL_PORT} (user=${EMAIL_USER})`
+      `🔧 Preparing to send email to ${email} via provider=${EMAIL_PROVIDER} from=${EMAIL_FROM_EMAIL}`
     );
 
-    // Verify transporter connectivity (helpful to catch auth/connectivity issues early)
-    try {
-      await emailTransporter.verify();
-      log("✅ SMTP transporter verified");
-    } catch (verifyErr) {
-      log(`⚠️ SMTP verify failed: ${verifyErr.message}`);
+    // Verify transporter connectivity when supported (SMTP supports this; SES may not)
+    if (EMAIL_PROVIDER === "smtp") {
+      try {
+        await emailTransporter.verify();
+        log("✅ SMTP transporter verified");
+      } catch (verifyErr) {
+        log(`⚠️ SMTP verify failed: ${verifyErr.message}`);
+      }
     }
 
     const mailOptions = {
-      from: '"Samjhona Support" <customercare@samjhona.com>',
+      from: EMAIL_FROM,
       to: email,
       subject: "Your report link",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
           <p>Hi ${fullName || "there"},</p>
-          <p>Your payment is confirmed. Access your report anytime:</p>
+          <p>Access your report anytime:</p>
           <div style="margin: 30px 0;">
             <a href="${postPurchaseLink}" 
                style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
@@ -292,9 +330,9 @@ app.post("/api/payment/bypass", async (req, res) => {
     }
 
     const orderId = `bypass_${Date.now()}`;
-    const token = crypto.randomBytes(24).toString("hex");
-
-    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${token}&order=${orderId}`;
+    // IMPORTANT: Must match /api/payment/post-purchase validator fields
+    const accessToken = crypto.randomBytes(32).toString("hex");
+    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${orderId}`;
 
     // Optional DB save
     try {
@@ -302,19 +340,37 @@ app.post("/api/payment/bypass", async (req, res) => {
       if (db) {
         await db.collection("user_orders").insertOne({
           orderId,
-          token,
+          accessToken,
           email,
           fullName,
-          status: "bypassed",
+          // Mark as paid so the emailed /post-purchase link works (bypass via email)
+          status: "paid",
+          verifiedAt: new Date(),
+          postPurchaseLink,
+          emailSent: false,
           createdAt: new Date(),
         });
       }
     } catch (_) {}
 
     // Send email in background — DO NOT BLOCK RESPONSE
-    sendPostPurchaseEmail(email, fullName, postPurchaseLink).catch((err) => {
-      console.error("Email failed (non-blocking):", err.message);
-    });
+    sendPostPurchaseEmail(email, fullName, postPurchaseLink)
+      .then(async () => {
+        try {
+          const db = await connectDB();
+          if (db) {
+            db.collection("user_orders")
+              .updateOne(
+                { orderId },
+                { $set: { emailSent: true, emailSentAt: new Date() } }
+              )
+              .catch(() => {});
+          }
+        } catch (_) {}
+      })
+      .catch((err) => {
+        console.error("Email failed (non-blocking):", err.message);
+      });
 
     // Respond immediately so redirect is not blocked
     return res.json({ success: true });
@@ -693,15 +749,14 @@ app.post("/api/payment/verify", async (req, res) => {
 
             // Get order details for email
             const order = await collection.findOne({ orderId: order_id });
-            if (order && order.email) {
-              // Send email (non-blocking)
+            if (EMAIL_ON_PAYMENT_SUCCESS && order && order.email) {
+              // Optional: send email on payment success (disabled by default)
               sendPostPurchaseEmail(
                 order.email,
                 order.fullName || "Customer",
                 postPurchaseLink
               )
                 .then(() => {
-                  // Update emailSent flag
                   collection
                     .updateOne(
                       { orderId: order_id },
