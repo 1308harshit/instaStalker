@@ -40,7 +40,7 @@ import {
 } from "./utils/mongodb.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
-import fetch from "node-fetch";
+// Node 18+ provides global fetch; avoid node-fetch dependency
 
 const app = express();
 app.use(
