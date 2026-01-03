@@ -370,9 +370,22 @@ function App() {
     }
   }, []);
 
+  // Post-purchase entry point - always show success screen
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (window.location.pathname === "/post-purchase") {
+      setScreen(SCREEN.PAYMENT_SUCCESS);
+    }
+  }, []);
+
   // Clean URL after showing success screen (remove query params)
   useEffect(() => {
-    if (screen === SCREEN.PAYMENT_SUCCESS && typeof window !== "undefined") {
+    if (
+      screen === SCREEN.PAYMENT_SUCCESS &&
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/post-purchase")
+    ) {
       try {
         window.history.replaceState({}, "", "/successfully-paid");
       } catch (e) {
@@ -3059,6 +3072,9 @@ function App() {
 
   // Handle payment return URL - verify payment before showing success
   useEffect(() => {
+    // 🚫 DO NOT run payment return logic on post-purchase links
+    if (window.location.pathname.startsWith("/post-purchase")) return;
+
     const urlParams = new URLSearchParams(window.location.search);
     const orderId = urlParams.get("order_id");
 
