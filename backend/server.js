@@ -234,10 +234,16 @@ app.post("/api/payment/save-user", async (req, res) => {
 //  BYPASS PAYMENT — SEND EMAIL + REDIRECT TO PAYU
 app.post("/api/payment/bypass", async (req, res) => {
   try {
-    const { email, fullName } = req.body;
+    const { email, fullName, username, cards, profile } = req.body;
 
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
+    }
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" });
+    }
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return res.status(400).json({ error: "Report cards are required" });
     }
 
     const orderId = `order_${Date.now()}_${Math.random()
@@ -258,18 +264,36 @@ app.post("/api/payment/bypass", async (req, res) => {
           accessToken: token, // ✅ IMPORTANT
           email,
           fullName,
+          username,
+          cards,
+          profile: profile || null,
           status: "paid", // IMPORTANT
           createdAt: new Date(),
           verifiedAt: new Date(),
-          emailSent: true,
+          emailSent: false,
         });
       }
     } catch (_) {}
 
-    // Send email in background — DO NOT BLOCK RESPONSE
-    sendPostPurchaseEmail(email, fullName, postPurchaseLink).catch((err) => {
-      console.error("Email failed (non-blocking):", err.message);
-    });
+    // Send email after data is stored (small delay helps consistency)
+    setTimeout(() => {
+      sendPostPurchaseEmail(email, fullName, postPurchaseLink)
+        .then(async () => {
+          try {
+            const db = await connectDB();
+            if (!db) return;
+            await db
+              .collection("user_orders")
+              .updateOne(
+                { orderId },
+                { $set: { emailSent: true, emailSentAt: new Date() } }
+              );
+          } catch (_) {}
+        })
+        .catch((err) => {
+          console.error("Email failed (non-blocking):", err.message);
+        });
+    }, 5000);
 
     // Respond immediately so redirect is not blocked
     return res.json({ success: true });
@@ -635,8 +659,11 @@ app.post("/api/payment/verify", async (req, res) => {
 
           // Add profile data if provided
           if (username) updateData.username = username;
-          if (cards && Array.isArray(cards)) updateData.cards = cards;
-          if (profile) updateData.profile = profile;
+          if (Array.isArray(cards) && cards.length > 0) updateData.cards = cards;
+          // Avoid overwriting good data with empty/default objects
+          if (profile && typeof profile === "object" && Object.keys(profile).length > 0) {
+            updateData.profile = profile;
+          }
 
           const updateResult = await collection.updateOne(
             { orderId: order_id },

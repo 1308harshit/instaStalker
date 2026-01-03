@@ -3421,23 +3421,58 @@ function App() {
     }
   };
 
-  const handlePlaceOrder = (e) => {
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     try {
       setPaymentLoading(true);
 
-      // Fire-and-forget bypass call; do not block redirect
-      fetch("/api/payment/bypass", {
+      // IMPORTANT:
+      // - We must store the user's report BEFORE navigating away.
+      // - Fire-and-forget can be cancelled by browser navigation.
+      const restored = loadLastRun();
+      const cardsToSend =
+        (Array.isArray(cards) && cards.length > 0
+          ? cards
+          : Array.isArray(restored?.cards) && restored.cards.length > 0
+          ? restored.cards
+          : []);
+      const profileToSend = restored?.profile || profile;
+      const usernameToSend = profileToSend?.username || profile?.username || "";
+
+      if (!paymentForm.email) {
+        throw new Error("Email is required");
+      }
+      if (!usernameToSend) {
+        throw new Error("Username is missing. Please generate the report again.");
+      }
+      if (!Array.isArray(cardsToSend) || cardsToSend.length === 0) {
+        throw new Error(
+          "Report data is not ready yet. Please wait for the report to finish loading, then try again."
+        );
+      }
+
+      const bypassRes = await fetch("/api/payment/bypass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: paymentForm.email,
           fullName: paymentForm.fullName,
+          username: usernameToSend,
+          cards: cardsToSend,
+          profile: profileToSend,
         }),
-      }).catch(() => {});
+      });
 
-      // Redirect immediately to PayU
+      if (!bypassRes.ok) {
+        const text = await bypassRes.text().catch(() => "");
+        throw new Error(text || "Failed to generate report link");
+      }
+
+      // Redirect to PayU only after data is stored
       window.location.href = "https://u.payu.in/XIhRIisGBtcW";
+    } catch (err) {
+      console.error("Place order error:", err);
+      alert(err?.message || "Failed to place order. Please try again.");
     } finally {
       setPaymentLoading(false);
     }
