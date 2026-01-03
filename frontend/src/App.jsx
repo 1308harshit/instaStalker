@@ -3555,7 +3555,8 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: paymentForm.email,
-          fullName: paymentForm.fullName,
+          // We don't ask for name anymore; store email as identifier in email template.
+          fullName: paymentForm.email,
           username: usernameToSend,
           cards: cardsToSend,
           profile: profileToSend,
@@ -3639,7 +3640,8 @@ function App() {
               {/* Contact Form */}
               <div className="payment-form-section">
                 <h3 className="payment-form-title">Contact</h3>
-                <form onSubmit={handlePaymentSubmit} className="payment-form">
+                {/* Only ask for email. Pressing Enter should place the order. */}
+                <form onSubmit={handlePlaceOrder} className="payment-form">
                   <div className="payment-form-group">
                     <label htmlFor="email">E-mail*</label>
                     <input
@@ -3657,6 +3659,7 @@ function App() {
                     />
                   </div>
 
+                  {/*
                   <div className="payment-form-group">
                     <label htmlFor="fullName">Full name*</label>
                     <input
@@ -3694,6 +3697,7 @@ function App() {
                       />
                     </div>
                   </div>
+                  */}
                 </form>
               </div>
 

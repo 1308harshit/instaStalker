@@ -296,6 +296,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
   try {
+    const label = email || fullName || "there";
     const result = await resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: email,
@@ -303,7 +304,10 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
           <h2>Thank you for your purchase!</h2>
-          <p>Hi ${fullName || "there"},</p>
+          <p>Hi ${label},</p>
+          <p style="font-size:12px;color:#666;margin-top:4px;margin-bottom:14px;">
+            This link is unique to: <strong>${email}</strong>
+          </p>
           <p>Access your report using the link below:</p>
           <p>
             <a href="${postPurchaseLink}" 
