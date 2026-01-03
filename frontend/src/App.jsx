@@ -556,10 +556,34 @@ function App() {
                 setHasStoredReport(true);
                 // Use stored hero profile (avatar + counts) so refresh is stable
                 if (validateData.report.heroProfile) {
-                  setProfile((prev) => ({
-                    ...prev,
-                    ...validateData.report.heroProfile,
-                  }));
+                  setProfile((prev) => {
+                    const next = { ...prev, ...validateData.report.heroProfile };
+                    // If older stored reports have the demo/default name, replace with username-derived label.
+                    const looksDefault =
+                      next?.name === INITIAL_PROFILE.name &&
+                      next?.username === INITIAL_PROFILE.username;
+                    if (looksDefault) {
+                      const u =
+                        (validateData.report.heroProfile?.username ||
+                          validateData.username ||
+                          next?.username ||
+                          "")
+                          .toString()
+                          .trim();
+                      if (u) next.name = u.replace(/^@/, "");
+                    }
+                    if (!next?.name) {
+                      const u =
+                        (validateData.report.heroProfile?.username ||
+                          validateData.username ||
+                          next?.username ||
+                          "")
+                          .toString()
+                          .trim();
+                      if (u) next.name = u.replace(/^@/, "");
+                    }
+                    return next;
+                  });
                 }
                 if (validateData.report.carouselCards) {
                   setPaymentSuccessCards(validateData.report.carouselCards);
@@ -3494,9 +3518,18 @@ function App() {
         );
         return item ? parseNum(item.value) : null;
       };
+
+      // Avoid persisting demo/default name ("Harshit") into paid reports.
+      const isDefaultProfile =
+        rawProfile?.name === INITIAL_PROFILE.name &&
+        rawProfile?.username === INITIAL_PROFILE.username;
+      const fallbackNameFromUsername = usernameToSend
+        ? usernameToSend.replace(/^@/, "")
+        : "";
+
       const profileToSend = {
         ...(rawProfile || {}),
-        name: hero.name || rawProfile?.name,
+        name: hero.name || (isDefaultProfile ? "" : rawProfile?.name) || fallbackNameFromUsername,
         username: usernameToSend,
         posts: pickStat("post") ?? rawProfile?.posts ?? null,
         followers: pickStat("follower") ?? rawProfile?.followers ?? null,
