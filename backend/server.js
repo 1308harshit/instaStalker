@@ -237,8 +237,10 @@ app.post("/api/payment/bypass", async (req, res) => {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    const orderId = `bypass_${Date.now()}`;
-    const token = crypto.randomBytes(24).toString("hex");
+    const orderId = `order_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 10)}`;
+    const token = crypto.randomBytes(32).toString("hex");
 
     const postPurchaseLink = `${BASE_URL}/post-purchase?token=${token}&order=${orderId}`;
 
@@ -251,8 +253,10 @@ app.post("/api/payment/bypass", async (req, res) => {
           token,
           email,
           fullName,
-          status: "bypassed",
+          status: "paid", // IMPORTANT
           createdAt: new Date(),
+          verifiedAt: new Date(),
+          emailSent: true,
         });
       }
     } catch (_) {}
