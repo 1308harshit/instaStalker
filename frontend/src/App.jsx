@@ -295,6 +295,7 @@ const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
 };
 
 function App() {
+  const postPurchaseLockRef = useRef(false);
   const [screen, setScreen] = useState(SCREEN.LANDING);
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [usernameInput, setUsernameInput] = useState("");
@@ -375,6 +376,7 @@ function App() {
     if (typeof window === "undefined") return;
 
     if (window.location.pathname === "/post-purchase") {
+      postPurchaseLockRef.current = true; // 🔐 LOCK
       setScreen(SCREEN.PAYMENT_SUCCESS);
     }
   }, []);
@@ -384,13 +386,11 @@ function App() {
     if (
       screen === SCREEN.PAYMENT_SUCCESS &&
       typeof window !== "undefined" &&
-      !window.location.pathname.startsWith("/post-purchase")
+      !postPurchaseLockRef.current // ✅ ONLY normal payments
     ) {
       try {
         window.history.replaceState({}, "", "/successfully-paid");
-      } catch (e) {
-        // ignore
-      }
+      } catch {}
     }
   }, [screen]);
 
