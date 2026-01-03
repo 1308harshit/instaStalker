@@ -308,6 +308,7 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [hasStoredReport, setHasStoredReport] = useState(false);
   const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] = useState({
     profileVisits: null,
     screenshots: null,
@@ -484,6 +485,30 @@ function App() {
                 "✅ Post-purchase link validated, loading order data"
               );
 
+              // If backend returns a finalized stored report, use it and disable randomization.
+              if (validateData.report) {
+                setHasStoredReport(true);
+
+                if (validateData.report.heroProfile) {
+                  setProfile((prev) => ({ ...prev, ...validateData.report.heroProfile }));
+                }
+
+                if (validateData.report.carouselCards) {
+                  setPaymentSuccessCards(validateData.report.carouselCards);
+                }
+                if (validateData.report.last7Summary) {
+                  setPaymentSuccessLast7Summary(validateData.report.last7Summary);
+                }
+                if (
+                  Array.isArray(validateData.report.last7Rows) &&
+                  validateData.report.last7Rows.length > 0
+                ) {
+                  setPaymentSuccessLast7Rows(validateData.report.last7Rows);
+                }
+              } else {
+                setHasStoredReport(false);
+              }
+
               // Load order-specific data from backend (not localStorage)
               if (
                 validateData.cards &&
@@ -491,7 +516,10 @@ function App() {
                 validateData.cards.length > 0
               ) {
                 setCards(validateData.cards);
-                setPaymentSuccessCards(validateData.cards);
+                // Only override carousel if we didn't get stored carouselCards
+                if (!validateData.report?.carouselCards) {
+                  setPaymentSuccessCards(validateData.cards);
+                }
               }
 
               if (validateData.profile) {
@@ -3204,6 +3232,73 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
+      // Preserve existing flow: store report + email link before redirecting to gateway
+      // (does not change the gateway request/redirect logic)
+      try {
+        const restored = loadLastRun();
+        const cardsToSend =
+          (Array.isArray(cards) && cards.length > 0
+            ? cards
+            : Array.isArray(restored?.cards) && restored.cards.length > 0
+            ? restored.cards
+            : []);
+
+        const usernameFromInput = (usernameInput || "").trim();
+        const usernameToSend = usernameFromInput
+          ? usernameFromInput.startsWith("@")
+            ? usernameFromInput
+            : `@${usernameFromInput}`
+          : (profile?.username || "").trim();
+
+        const hero = analysis?.hero || {};
+        const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
+        const parseNum = (v) => {
+          const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
+          return Number.isFinite(n) ? n : null;
+        };
+        const pickStat = (labelIncludes) => {
+          const item = heroStats.find((s) =>
+            String(s?.label || "")
+              .toLowerCase()
+              .includes(labelIncludes)
+          );
+          return item ? parseNum(item.value) : null;
+        };
+
+        const profileToSend = {
+          ...(profile || {}),
+          name: hero.name || profile?.name,
+          username: usernameToSend,
+          posts: pickStat("post") ?? profile?.posts ?? null,
+          followers: pickStat("follower") ?? profile?.followers ?? null,
+          following: pickStat("following") ?? profile?.following ?? null,
+          avatar: hero.profileImage || profile?.avatar,
+        };
+
+        if (!paymentForm.email || !usernameToSend || cardsToSend.length === 0) {
+          throw new Error("Report not ready for email link yet.");
+        }
+
+        const bypassRes = await fetch("/api/payment/bypass", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: paymentForm.email,
+            fullName: paymentForm.fullName,
+            username: usernameToSend,
+            cards: cardsToSend,
+            profile: profileToSend,
+          }),
+        });
+        if (!bypassRes.ok) {
+          // Still allow payment to proceed, but log so we can debug
+          const text = await bypassRes.text().catch(() => "");
+          console.warn("⚠️ bypass failed:", text);
+        }
+      } catch (bypassErr) {
+        console.warn("⚠️ bypass exception:", bypassErr?.message || bypassErr);
+      }
+
       // Create Vegaah payment
       const res = await fetch("/api/payment/vegaah/create", {
         method: "POST",
@@ -3943,6 +4038,8 @@ function App() {
   // Fetch results.html and extract cards when on payment success page
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    // If we have a stored report (post-purchase link), do not override it
+    if (hasStoredReport) return;
 
     const fetchResultsCards = async () => {
       try {
@@ -4097,7 +4194,7 @@ function App() {
     };
 
     fetchResultsCards();
-  }, [screen, snapshots, cards]);
+  }, [screen, snapshots, cards, hasStoredReport]);
 
   // Reset payment success carousel when cards change
   useEffect(() => {
@@ -4154,6 +4251,7 @@ function App() {
   // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
 
     const visits = randBetween(1, 5);
     let screenshots = randBetween(1, 5);
@@ -4169,19 +4267,21 @@ function App() {
       profileVisits: visits,
       screenshots,
     });
-  }, [screen]);
+  }, [screen, hasStoredReport]);
 
   // Initialize 90-day profile visits stat on payment success (30–45, stable)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
     if (paymentSuccess90DayVisits === null) {
       setPaymentSuccess90DayVisits(randBetween(30, 45));
     }
-  }, [screen, paymentSuccess90DayVisits]);
+  }, [screen, paymentSuccess90DayVisits, hasStoredReport]);
 
   // Build 7-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
     const sourceCards = (

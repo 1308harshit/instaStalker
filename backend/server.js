@@ -53,9 +53,10 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json()); // For parsing JSON request bodies
+// Increase body size limit (report payloads can be large)
+app.use(express.json({ limit: "50mb" })); // For parsing JSON request bodies
 // Vegaah "merchant receipt URL" callback is typically application/x-www-form-urlencoded
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Keep static serving for backward compatibility (if files exist)
@@ -148,6 +149,151 @@ const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${message}`, data || "");
 };
+
+// -------------------------------
+// Stored report builder (Option A)
+// -------------------------------
+const normalizeUsername = (value = "") => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  return v.startsWith("@") ? v : `@${v}`;
+};
+
+const randIntInclusive = (min, max) => {
+  // crypto.randomInt is max-exclusive
+  return crypto.randomInt(min, max + 1);
+};
+
+function buildStoredReport({ cards = [], profile = null }) {
+  const safeCards = Array.isArray(cards) ? cards : [];
+  const heroProfile = profile && typeof profile === "object" ? profile : null;
+
+  // Prefer usable cards (non-locked, has username)
+  const usable = safeCards.filter((c) => !c?.isLocked && c?.username);
+
+  // Carousel cards: try strict first, then relax
+  const strict = usable.filter((c) => c?.image && !c?.blurImage);
+  const relaxedBlur = usable.filter((c) => c?.image);
+  const relaxedNoImage = usable;
+
+  const pickUniqueByUsername = (list, max) => {
+    const seen = new Set();
+    const out = [];
+    for (const c of list) {
+      const u = normalizeUsername(c?.username);
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      out.push({ ...c, username: u });
+      if (out.length >= max) break;
+    }
+    return out;
+  };
+
+  let carouselCards = pickUniqueByUsername(strict, 6);
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedBlur, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedNoImage, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+
+  // "Last 7 days" summary: fixed once
+  const visits = randIntInclusive(1, 5);
+  let screenshots = randIntInclusive(1, 5);
+  if (screenshots === visits) {
+    screenshots = (screenshots % 5) + 1;
+    if (screenshots === visits) screenshots = ((screenshots + 1) % 5) + 1;
+  }
+  const last7Summary = { profileVisits: visits, screenshots };
+
+  // 10-row table: pick 10 unique profiles and assign fixed highlight rules
+  const uniqueCards = pickUniqueByUsername(usable, 200);
+  // One-time shuffle for variety (stable because stored)
+  const shuffled = [...uniqueCards];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = randIntInclusive(0, i);
+    const tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
+  }
+
+  const TOTAL_ROWS = 10;
+  const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
+
+  // Padding to 10 rows (should be rare if cards exist)
+  while (selected.length < TOTAL_ROWS) {
+    const idx = selected.length + 1;
+    selected.push({
+      username: `@profile${idx}`,
+      title: "Instagram user",
+      image: null,
+    });
+  }
+
+  const rowCount = selected.length;
+  // Screenshots: highlight 3 profiles among rows 2–10 (index 1–9)
+  const screenshotIndices = new Set();
+  if (rowCount >= 2) {
+    const minIdx = 1;
+    const maxIdx = Math.min(9, rowCount - 1);
+    while (
+      screenshotIndices.size < 3 &&
+      screenshotIndices.size < maxIdx - minIdx + 1
+    ) {
+      screenshotIndices.add(randIntInclusive(minIdx, maxIdx));
+    }
+  }
+
+  const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
+    const username = normalizeUsername(card.username || "");
+    const name =
+      String((card.title || card.name || "") || "")
+        .trim()
+        .slice(0, 80) ||
+      username.replace(/^@/, "") ||
+      "Instagram user";
+    const image = card.image || card.avatar || null;
+
+    let rowVisits = 0;
+    let rowScreenshots = 0;
+    let visitsHighlighted = false;
+    let screenshotsHighlighted = false;
+
+    // Visits: highlight first 4 profiles (rows 1–4)
+    if (index >= 0 && index <= 3) {
+      rowVisits = 1;
+      visitsHighlighted = true;
+    }
+
+    // Screenshots: highlight 3 profiles among rows 2–10
+    if (screenshotIndices.has(index)) {
+      rowScreenshots = 1;
+      screenshotsHighlighted = true;
+    }
+
+    return {
+      id: `${username || "profile"}-${index}`,
+      name,
+      username,
+      image,
+      visits: rowVisits,
+      screenshots: rowScreenshots,
+      visitsHighlighted,
+      screenshotsHighlighted,
+    };
+  });
+
+  return {
+    version: 1,
+    generatedAt: new Date(),
+    heroProfile,
+    carouselCards,
+    last7Summary,
+    last7Rows,
+  };
+}
 
 // Vegaah signature helper function (per Vegaah_Payment_Gateway_API.pdf)
 // Request signature format (SHA256, NOT HMAC):
@@ -286,6 +432,131 @@ app.post("/api/payment/save-user", async (req, res) => {
     res.json({
       success: true,
       message: "User data received (save may have failed)",
+    });
+  }
+});
+
+// Create stored post-purchase link + email (gateway-agnostic)
+// This preserves the "Place order → email → /post-purchase summary" flow even if payment gateway changes.
+app.post("/api/payment/bypass", async (req, res) => {
+  try {
+    const { email, fullName, username, cards, profile } = req.body;
+
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    if (!username)
+      return res.status(400).json({ error: "Username is required" });
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return res.status(400).json({ error: "Report cards are required" });
+    }
+
+    const orderId = `order_${Date.now()}_${crypto
+      .randomBytes(4)
+      .toString("hex")}`;
+    const token = crypto.randomBytes(32).toString("hex");
+    const normalizedBase = String(BASE_URL || "").replace(/\/+$/, "");
+    const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
+      token
+    )}&order=${encodeURIComponent(orderId)}`;
+
+    const db = await connectDB();
+    if (!db) {
+      return res.status(500).json({ error: "Database not available" });
+    }
+
+    const report = buildStoredReport({ cards, profile });
+    const collection = db.collection(COLLECTION_NAME);
+    await collection.insertOne({
+      orderId,
+      accessToken: token,
+      email,
+      fullName: fullName || "",
+      username,
+      cards,
+      profile: profile || null,
+      report,
+      status: "paid",
+      createdAt: new Date(),
+      verifiedAt: new Date(),
+      emailSent: false,
+    });
+
+    // Send email after data is stored (small delay helps consistency)
+    setTimeout(() => {
+      sendPostPurchaseEmail(email, fullName || "there", postPurchaseLink)
+        .then(() =>
+          collection.updateOne(
+            { orderId },
+            { $set: { emailSent: true, emailSentAt: new Date() } }
+          )
+        )
+        .catch(() => {});
+    }, 2000);
+
+    return res.json({ success: true, orderId });
+  } catch (err) {
+    log("❌ Bypass error:", err?.message || String(err));
+    return res.status(500).json({ error: "Bypass failed" });
+  }
+});
+
+// Validate post-purchase link endpoint (used by email link /post-purchase)
+app.get("/api/payment/post-purchase", async (req, res) => {
+  try {
+    const { token, order } = req.query;
+
+    if (!token || !order) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing token or order parameter",
+      });
+    }
+
+    const db = await connectDB();
+    if (!db) {
+      return res.status(500).json({
+        success: false,
+        error: "Database not available",
+      });
+    }
+
+    const collection = db.collection(COLLECTION_NAME);
+    const orderDoc = await collection.findOne({
+      orderId: order,
+      accessToken: token,
+      status: "paid",
+    });
+
+    if (!orderDoc) {
+      return res.status(404).json({
+        success: false,
+        error: "Invalid or expired link",
+      });
+    }
+
+    // Backfill stored report if older orders don't have it
+    let report = orderDoc.report || null;
+    if (!report && Array.isArray(orderDoc.cards) && orderDoc.cards.length > 0) {
+      report = buildStoredReport({ cards: orderDoc.cards, profile: orderDoc.profile });
+      collection
+        .updateOne({ orderId: order }, { $set: { report } })
+        .catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      orderId: orderDoc.orderId,
+      email: orderDoc.email,
+      fullName: orderDoc.fullName,
+      username: orderDoc.username || null,
+      cards: orderDoc.cards || [],
+      profile: orderDoc.profile || null,
+      report: report,
+    });
+  } catch (error) {
+    log("❌ Error validating post-purchase link:", error?.message || String(error));
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Failed to validate link",
     });
   }
 });
