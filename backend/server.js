@@ -246,6 +246,44 @@ app.post("/api/payment/bypass", async (req, res) => {
       return res.status(400).json({ error: "Report cards are required" });
     }
 
+    // Defensive trimming to avoid huge Mongo docs / reverse-proxy limits
+    const safeStr = (v, max) =>
+      typeof v === "string" ? v.slice(0, max) : v;
+    const safeImage = (v) => {
+      if (typeof v !== "string") return "";
+      if (v.startsWith("data:image")) return "";
+      return v.slice(0, 800);
+    };
+    const safeCards = cards
+      .map((c) => {
+        const u = safeStr((c?.username || "").trim(), 64);
+        const isLocked = Boolean(c?.isLocked);
+        const lockText = safeStr((c?.lockText || "").trim(), 140);
+        if (!u && !isLocked) return null;
+        return {
+          username: u,
+          title: safeStr((c?.title || "").trim(), 120),
+          badge: safeStr((c?.badge || "").trim(), 80),
+          lockText,
+          image: safeImage(c?.image),
+          isLocked,
+          blurImage: Boolean(c?.blurImage),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 40);
+    const safeProfile =
+      profile && typeof profile === "object"
+        ? {
+            name: safeStr((profile?.name || "").trim(), 80),
+            username: safeStr((profile?.username || username || "").trim(), 64),
+            posts: profile?.posts ?? null,
+            followers: profile?.followers ?? null,
+            following: profile?.following ?? null,
+            avatar: safeImage(profile?.avatar),
+          }
+        : null;
+
     const orderId = `order_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 10)}`;
@@ -265,8 +303,8 @@ app.post("/api/payment/bypass", async (req, res) => {
           email,
           fullName,
           username,
-          cards,
-          profile: profile || null,
+          cards: safeCards,
+          profile: safeProfile,
           status: "paid", // IMPORTANT
           createdAt: new Date(),
           verifiedAt: new Date(),
