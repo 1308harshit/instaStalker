@@ -97,6 +97,148 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || "");
 };
 
+// -------------------------------
+// Stored report builder (Option A)
+// -------------------------------
+const normalizeUsername = (value = "") => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  return v.startsWith("@") ? v : `@${v}`;
+};
+
+const randIntInclusive = (min, max) => {
+  // crypto.randomInt is max-exclusive
+  return crypto.randomInt(min, max + 1);
+};
+
+function buildStoredReport({ cards = [], profile = null }) {
+  const safeCards = Array.isArray(cards) ? cards : [];
+  const heroProfile = profile && typeof profile === "object" ? profile : null;
+
+  // Prefer usable cards (non-locked, has username)
+  const usable = safeCards.filter((c) => !c?.isLocked && c?.username);
+
+  // Carousel cards: try strict first, then relax
+  const strict = usable.filter((c) => c?.image && !c?.blurImage);
+  const relaxedBlur = usable.filter((c) => c?.image);
+  const relaxedNoImage = usable;
+
+  const pickUniqueByUsername = (list, max) => {
+    const seen = new Set();
+    const out = [];
+    for (const c of list) {
+      const u = normalizeUsername(c?.username);
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      out.push({ ...c, username: u });
+      if (out.length >= max) break;
+    }
+    return out;
+  };
+
+  let carouselCards = pickUniqueByUsername(strict, 6);
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedBlur, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedNoImage, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+
+  // "Last 7 days" summary: fixed once
+  const visits = randIntInclusive(1, 5);
+  let screenshots = randIntInclusive(1, 5);
+  if (screenshots === visits) {
+    screenshots = (screenshots % 5) + 1;
+    if (screenshots === visits) screenshots = ((screenshots + 1) % 5) + 1;
+  }
+  const last7Summary = { profileVisits: visits, screenshots };
+
+  // 7-row table: pick 7 unique profiles and assign fixed highlight rules
+  const uniqueCards = pickUniqueByUsername(usable, 200);
+  // One-time shuffle for variety (stable because stored)
+  const shuffled = [...uniqueCards];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = randIntInclusive(0, i);
+    const tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
+  }
+
+  const TOTAL_ROWS = 7;
+  const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
+
+  // Padding to 7 rows (should be rare if cards exist)
+  while (selected.length < TOTAL_ROWS) {
+    const idx = selected.length + 1;
+    selected.push({
+      username: `@profile${idx}`,
+      title: "Instagram user",
+      image: null,
+    });
+  }
+
+  const rowCount = selected.length;
+  const screenshotRowIndex =
+    rowCount >= 3 ? randIntInclusive(2, Math.min(6, rowCount - 1)) : null;
+  const secondRowHasScreenshot = rowCount >= 2 && randIntInclusive(1, 100) <= 30;
+
+  const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
+    const username = normalizeUsername(card.username || "");
+    const name =
+      String((card.title || card.name || "") || "")
+        .trim()
+        .slice(0, 80) ||
+      username.replace(/^@/, "") ||
+      "Instagram user";
+    const image = card.image || card.avatar || null;
+
+    let rowVisits = 0;
+    let rowScreenshots = 0;
+    let visitsHighlighted = false;
+    let screenshotsHighlighted = false;
+
+    // First two profiles always have visits = 1 highlighted
+    if (index === 0 || index === 1) {
+      rowVisits = 1;
+      visitsHighlighted = true;
+    }
+
+    // Exactly one of the rows 3–7 has screenshots = 1 highlighted
+    if (screenshotRowIndex !== null && index === screenshotRowIndex) {
+      rowScreenshots = 1;
+      screenshotsHighlighted = true;
+    }
+
+    // 30% chance that row 2 also has screenshots = 1 highlighted
+    if (index === 1 && secondRowHasScreenshot) {
+      rowScreenshots = 1;
+      screenshotsHighlighted = true;
+    }
+
+    return {
+      id: `${username || "profile"}-${index}`,
+      name,
+      username,
+      image,
+      visits: rowVisits,
+      screenshots: rowScreenshots,
+      visitsHighlighted,
+      screenshotsHighlighted,
+    };
+  });
+
+  return {
+    version: 1,
+    generatedAt: new Date(),
+    heroProfile,
+    carouselCards,
+    last7Summary,
+    last7Rows,
+  };
+}
+
 // Log credentials at startup to verify environment configuration
 log(`🚀 Cashfree credentials loaded:`);
 log(`   Environment: ${CASHFREE_ENV}`);
@@ -261,6 +403,7 @@ app.post("/api/payment/bypass", async (req, res) => {
     try {
       const db = await connectDB();
       if (db) {
+        const report = buildStoredReport({ cards, profile });
         await db.collection("user_orders").insertOne({
           orderId,
           accessToken: token, // ✅ IMPORTANT
@@ -269,6 +412,7 @@ app.post("/api/payment/bypass", async (req, res) => {
           username,
           cards,
           profile: profile || null,
+          report,
           status: "paid", // IMPORTANT
           createdAt: new Date(),
           verifiedAt: new Date(),
@@ -645,6 +789,9 @@ app.post("/api/payment/verify", async (req, res) => {
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
 
+          // If report already exists for this order, do not regenerate it.
+          const existingOrder = await collection.findOne({ orderId: order_id });
+
           // Generate unique post-purchase link
           const accessToken = crypto.randomBytes(32).toString("hex");
           const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
@@ -665,6 +812,9 @@ app.post("/api/payment/verify", async (req, res) => {
           // Avoid overwriting good data with empty/default objects
           if (profile && typeof profile === "object" && Object.keys(profile).length > 0) {
             updateData.profile = profile;
+          }
+          if (!existingOrder?.report && Array.isArray(cards) && cards.length > 0) {
+            updateData.report = buildStoredReport({ cards, profile });
           }
 
           const updateResult = await collection.updateOne(
@@ -778,6 +928,7 @@ app.get("/api/payment/post-purchase", async (req, res) => {
         username: orderDoc.username || null,
         cards: orderDoc.cards || [],
         profile: orderDoc.profile || null,
+        report: orderDoc.report || null,
       });
     } catch (dbErr) {
       log(`❌ Database error validating post-purchase link: ${dbErr.message}`);

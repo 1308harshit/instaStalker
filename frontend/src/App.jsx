@@ -347,6 +347,7 @@ function App() {
   // Keep latest values available for effects with [] deps (e.g. payment return flow)
   const cardsRef = useRef([]);
   const profileRef = useRef(INITIAL_PROFILE);
+  const [hasStoredReport, setHasStoredReport] = useState(false);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -550,6 +551,25 @@ function App() {
                 "✅ Post-purchase link validated, loading order data"
               );
 
+              // If backend returns a finalized stored report, use it and disable randomization.
+              if (validateData.report) {
+                setHasStoredReport(true);
+                if (validateData.report.carouselCards) {
+                  setPaymentSuccessCards(validateData.report.carouselCards);
+                }
+                if (validateData.report.last7Summary) {
+                  setPaymentSuccessLast7Summary(validateData.report.last7Summary);
+                }
+                if (
+                  Array.isArray(validateData.report.last7Rows) &&
+                  validateData.report.last7Rows.length > 0
+                ) {
+                  setPaymentSuccessLast7Rows(validateData.report.last7Rows);
+                }
+              } else {
+                setHasStoredReport(false);
+              }
+
               const hasCards =
                 Array.isArray(validateData.cards) && validateData.cards.length > 0;
 
@@ -557,7 +577,9 @@ function App() {
               if (hasCards) {
                 if (!cancelled) {
                   setCards(validateData.cards);
-                  setPaymentSuccessCards(validateData.cards);
+                  if (!validateData.report?.carouselCards) {
+                    setPaymentSuccessCards(validateData.cards);
+                  }
                 }
               }
 
@@ -4168,6 +4190,8 @@ function App() {
   // Fetch results.html and extract cards when on payment success page
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    // If we have a stored report (post-purchase link), do not override it
+    if (hasStoredReport) return;
 
     const fetchResultsCards = async () => {
       try {
@@ -4322,7 +4346,7 @@ function App() {
     };
 
     fetchResultsCards();
-  }, [screen, snapshots, cards]);
+  }, [screen, snapshots, cards, hasStoredReport]);
 
   // Reset payment success carousel when cards change
   useEffect(() => {
@@ -4379,6 +4403,7 @@ function App() {
   // Randomize "Last 7 days" small stats on payment success (1–5 range, not equal)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
 
     const visits = randBetween(1, 5);
     let screenshots = randBetween(1, 5);
@@ -4394,19 +4419,21 @@ function App() {
       profileVisits: visits,
       screenshots,
     });
-  }, [screen]);
+  }, [screen, hasStoredReport]);
 
   // Initialize 90-day profile visits stat on payment success (30–45, stable)
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
     if (paymentSuccess90DayVisits === null) {
       setPaymentSuccess90DayVisits(randBetween(30, 45));
     }
-  }, [screen, paymentSuccess90DayVisits]);
+  }, [screen, paymentSuccess90DayVisits, hasStoredReport]);
 
   // Build 7-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (hasStoredReport) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
     const sourceCards = (
