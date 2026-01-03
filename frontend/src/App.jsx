@@ -4493,7 +4493,7 @@ function App() {
     }
   }, [screen, paymentSuccess90DayVisits, hasStoredReport]);
 
-  // Build 7-profile list for payment success with highlight rules
+  // Build 10-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
     if (hasStoredReport) return;
@@ -4527,7 +4527,7 @@ function App() {
       shuffled[j] = tmp;
     }
 
-    const TOTAL_ROWS = 7;
+    const TOTAL_ROWS = 10;
     const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
     // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
@@ -4558,16 +4558,18 @@ function App() {
 
     const rowCount = selected.length;
 
-    // Choose one row between 3rd–7th (index 2–6) to have screenshots = 1
-    let screenshotRowIndex = null;
-    if (rowCount >= 3) {
-      const minIndex = 2;
-      const maxIndex = Math.min(6, rowCount - 1);
-      screenshotRowIndex = randBetween(minIndex, maxIndex);
+    // Screenshots: highlight 3 profiles among rows 2–10 (index 1–9)
+    const screenshotIndices = new Set();
+    if (rowCount >= 2) {
+      const minIndex = 1;
+      const maxIndex = Math.min(9, rowCount - 1);
+      while (
+        screenshotIndices.size < 3 &&
+        screenshotIndices.size < maxIndex - minIndex + 1
+      ) {
+        screenshotIndices.add(randBetween(minIndex, maxIndex));
+      }
     }
-
-    // 30% chance that 2nd row also has screenshot = 1
-    const secondRowHasScreenshot = rowCount >= 2 && Math.random() < 0.3;
 
     const rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
       const username = card.username || "";
@@ -4582,20 +4584,14 @@ function App() {
       let visitsHighlighted = false;
       let screenshotsHighlighted = false;
 
-      // First two profiles always have visits = 1 highlighted
-      if (index === 0 || index === 1) {
+      // Visits: highlight first 4 profiles (rows 1–4)
+      if (index >= 0 && index <= 3) {
         visits = 1;
         visitsHighlighted = true;
       }
 
-      // Exactly one of the rows 3–7 has screenshots = 1 highlighted
-      if (index === screenshotRowIndex) {
-        screenshots = 1;
-        screenshotsHighlighted = true;
-      }
-
-      // 30% chance that row 2 also has screenshots = 1 highlighted
-      if (index === 1 && secondRowHasScreenshot) {
+      // Screenshots: highlight 3 profiles among rows 2–10
+      if (screenshotIndices.has(index)) {
         screenshots = 1;
         screenshotsHighlighted = true;
       }

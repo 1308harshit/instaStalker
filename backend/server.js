@@ -155,7 +155,7 @@ function buildStoredReport({ cards = [], profile = null }) {
   }
   const last7Summary = { profileVisits: visits, screenshots };
 
-  // 7-row table: pick 7 unique profiles and assign fixed highlight rules
+  // 10-row table: pick 10 unique profiles and assign fixed highlight rules
   const uniqueCards = pickUniqueByUsername(usable, 200);
   // One-time shuffle for variety (stable because stored)
   const shuffled = [...uniqueCards];
@@ -166,10 +166,10 @@ function buildStoredReport({ cards = [], profile = null }) {
     shuffled[j] = tmp;
   }
 
-  const TOTAL_ROWS = 7;
+  const TOTAL_ROWS = 10;
   const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
-  // Padding to 7 rows (should be rare if cards exist)
+  // Padding to 10 rows (should be rare if cards exist)
   while (selected.length < TOTAL_ROWS) {
     const idx = selected.length + 1;
     selected.push({
@@ -180,9 +180,15 @@ function buildStoredReport({ cards = [], profile = null }) {
   }
 
   const rowCount = selected.length;
-  const screenshotRowIndex =
-    rowCount >= 3 ? randIntInclusive(2, Math.min(6, rowCount - 1)) : null;
-  const secondRowHasScreenshot = rowCount >= 2 && randIntInclusive(1, 100) <= 30;
+  // Screenshots: highlight 3 profiles among rows 2–10 (index 1–9)
+  const screenshotIndices = new Set();
+  if (rowCount >= 2) {
+    const minIdx = 1;
+    const maxIdx = Math.min(9, rowCount - 1);
+    while (screenshotIndices.size < 3 && screenshotIndices.size < maxIdx - minIdx + 1) {
+      screenshotIndices.add(randIntInclusive(minIdx, maxIdx));
+    }
+  }
 
   const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
     const username = normalizeUsername(card.username || "");
@@ -199,20 +205,14 @@ function buildStoredReport({ cards = [], profile = null }) {
     let visitsHighlighted = false;
     let screenshotsHighlighted = false;
 
-    // First two profiles always have visits = 1 highlighted
-    if (index === 0 || index === 1) {
+    // Visits: highlight first 4 profiles (rows 1–4)
+    if (index >= 0 && index <= 3) {
       rowVisits = 1;
       visitsHighlighted = true;
     }
 
-    // Exactly one of the rows 3–7 has screenshots = 1 highlighted
-    if (screenshotRowIndex !== null && index === screenshotRowIndex) {
-      rowScreenshots = 1;
-      screenshotsHighlighted = true;
-    }
-
-    // 30% chance that row 2 also has screenshots = 1 highlighted
-    if (index === 1 && secondRowHasScreenshot) {
+    // Screenshots: highlight 3 profiles among rows 2–10
+    if (screenshotIndices.has(index)) {
       rowScreenshots = 1;
       screenshotsHighlighted = true;
     }
@@ -306,12 +306,14 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
           <h2>Thank you for your purchase!</h2>
           <p>Hi ${label},</p>
           <p>Access your report using the link below:</p>
+          
           <p>
             <a href="${postPurchaseLink}" 
                style="background:#ef4444;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
               Open my report
             </a>
           </p>
+          <p><strong>WAIT FOR FEW SECONDS FOR THE REPORT TO BE LOAD.</strong></p>
           <p style="font-size:12px;color:#666">
             If you don't see it, check spam.
           </p>
