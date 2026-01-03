@@ -3437,60 +3437,24 @@ function App() {
           ? restored.cards
           : []);
 
-      // Prevent 413 (Request Entity Too Large): trim payload aggressively.
-      const isDataImage = (value) =>
-        typeof value === "string" && value.startsWith("data:image");
-      const safeStr = (value, maxLen) =>
-        typeof value === "string" ? value.slice(0, maxLen) : value;
-      const safeImage = (value) => {
-        if (isDataImage(value)) return "";
-        return safeStr(value || "", 800);
-      };
-
-      // Store only what we need for the carousel + 7-day table.
-      const seenUsernames = new Set();
-      const cardsToSend = rawCards
-        .map((c) => {
-          const username = safeStr((c?.username || "").trim(), 64);
-          const title = safeStr((c?.title || "").trim(), 120);
-          const badge = safeStr((c?.badge || "").trim(), 80);
-          const lockText = safeStr((c?.lockText || "").trim(), 140);
-          const image = safeImage(c?.image);
-          const isLocked = Boolean(c?.isLocked);
-          const blurImage = Boolean(c?.blurImage);
-          if (!username && !isLocked) return null;
-          return { username, title, badge, lockText, image, isLocked, blurImage };
-        })
-        .filter(Boolean)
-        .filter((c) => {
-          const key = c.isLocked ? `locked::${c.lockText}` : `user::${c.username}`;
-          if (seenUsernames.has(key)) return false;
-          seenUsernames.add(key);
-          return true;
-        })
-        .slice(0, 40); // hard cap to keep payload small
+      // Full payload (limits handled by backend + reverse proxy)
+      const cardsToSend = rawCards;
 
       const rawProfile = restored?.profile || profile;
       // Prefer real username (user input) over INITIAL_PROFILE fallback
       const usernameFromInput = (usernameInput || "").trim();
       const usernameToSend =
-        safeStr(
-          (usernameFromInput
-            ? usernameFromInput.startsWith("@")
-              ? usernameFromInput
-              : `@${usernameFromInput}`
-            : rawProfile?.username || "").trim(),
-          64
-        ) || "";
+        (usernameFromInput
+          ? usernameFromInput.startsWith("@")
+            ? usernameFromInput
+            : `@${usernameFromInput}`
+          : (rawProfile?.username || "").trim()) || "";
 
       const profileToSend = {
-        name: safeStr((rawProfile?.name || "").trim(), 80),
+        ...(rawProfile || {}),
         username: usernameToSend,
-        posts: rawProfile?.posts ?? null,
-        followers: rawProfile?.followers ?? null,
-        following: rawProfile?.following ?? null,
-        // Never send base64 avatars; use URL if present
-        avatar: safeImage(rawProfile?.avatar || analysis?.hero?.profileImage || ""),
+        // Prefer analysis hero image if available
+        avatar: rawProfile?.avatar || analysis?.hero?.profileImage || rawProfile?.avatar,
       };
 
       if (!paymentForm.email) {
