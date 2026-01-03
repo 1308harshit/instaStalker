@@ -344,6 +344,9 @@ function App() {
   const paymentSuccessCarouselResetRef = useRef(false);
   const checkoutEventFiredRef = useRef(false);
   const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
+  // Keep latest values available for effects with [] deps (e.g. payment return flow)
+  const cardsRef = useRef([]);
+  const profileRef = useRef(INITIAL_PROFILE);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -370,6 +373,15 @@ function App() {
       setScreen(SCREEN.PAYMENT_SUCCESS);
     }
   }, []);
+
+  // Keep refs in sync with state (for one-time effects)
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   // Post-purchase entry point - always show success screen
   useEffect(() => {
@@ -493,6 +505,8 @@ function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    let cancelled = false;
+
     const urlParams = new URLSearchParams(window.location.search);
     let token = urlParams.get("token");
     let order = urlParams.get("order");
@@ -536,29 +550,57 @@ function App() {
                 "✅ Post-purchase link validated, loading order data"
               );
 
+              const hasCards =
+                Array.isArray(validateData.cards) && validateData.cards.length > 0;
+
               // Load order-specific data from backend (not localStorage)
-              if (
-                validateData.cards &&
-                Array.isArray(validateData.cards) &&
-                validateData.cards.length > 0
-              ) {
-                setCards(validateData.cards);
-                setPaymentSuccessCards(validateData.cards);
+              if (hasCards) {
+                if (!cancelled) {
+                  setCards(validateData.cards);
+                  setPaymentSuccessCards(validateData.cards);
+                }
               }
 
               if (validateData.profile) {
-                setProfile((prev) => ({ ...prev, ...validateData.profile }));
+                if (!cancelled) {
+                  setProfile((prev) => ({ ...prev, ...validateData.profile }));
+                }
               }
 
               if (validateData.username) {
-                setUsernameInput(validateData.username.replace("@", ""));
+                if (!cancelled) {
+                  setUsernameInput(validateData.username.replace("@", ""));
+                }
               }
 
               // Show payment success screen
-              setScreen(SCREEN.PAYMENT_SUCCESS);
+              if (!cancelled) {
+                setScreen(SCREEN.PAYMENT_SUCCESS);
+              }
 
               // Clean URL but keep /post-purchase path
               window.history.replaceState({}, "", "/post-purchase");
+
+              // If the user clicks the email link instantly, DB may not yet contain cards.
+              // Retry for a short time and populate cards when they become available.
+              if (!hasCards) {
+                for (let attempt = 0; attempt < 20; attempt += 1) {
+                  if (cancelled) break;
+                  await new Promise((r) => setTimeout(r, 2000));
+                  const retryRes = await fetch(apiUrl).catch(() => null);
+                  if (!retryRes || !retryRes.ok) continue;
+                  const retryData = await retryRes.json().catch(() => null);
+                  const retryCards =
+                    retryData && Array.isArray(retryData.cards) ? retryData.cards : [];
+                  if (retryData?.success && retryCards.length > 0) {
+                    if (!cancelled) {
+                      setCards(retryCards);
+                      setPaymentSuccessCards(retryCards);
+                    }
+                    break;
+                  }
+                }
+              }
             }
           }
         } catch (err) {
@@ -568,6 +610,10 @@ function App() {
 
       loadOrderData();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Fetch HTML content for a snapshot
@@ -3119,6 +3165,26 @@ function App() {
         try {
           console.log("🔍 Verifying payment for order:", orderId);
 
+          // IMPORTANT: this effect has [] deps, so `cards/profile` here can be stale.
+          // Use refs and/or localStorage fallback so we always save real data before emailing.
+          const restored = (() => {
+            try {
+              return loadLastRun();
+            } catch {
+              return null;
+            }
+          })();
+          const cardsToSend =
+            (Array.isArray(cardsRef.current) && cardsRef.current.length > 0
+              ? cardsRef.current
+              : null) ||
+            (Array.isArray(restored?.cards) && restored.cards.length > 0
+              ? restored.cards
+              : cardsRef.current || []);
+          const profileToSend = restored?.profile || profileRef.current || profile;
+          const usernameToSend =
+            profileToSend?.username || profileRef.current?.username || profile?.username;
+
           // Send profile data with verification (POST request)
           const verifyResponse = await fetch(`/api/payment/verify`, {
             method: "POST",
@@ -3127,9 +3193,9 @@ function App() {
             },
             body: JSON.stringify({
               order_id: orderId,
-              username: profile.username,
-              cards: cards,
-              profile: profile,
+              username: usernameToSend,
+              cards: cardsToSend,
+              profile: profileToSend,
             }),
           });
 
