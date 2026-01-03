@@ -38,7 +38,7 @@ import {
   getRecentSnapshot,
   closeDB,
 } from "./utils/mongodb.js";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import crypto from "crypto";
 
 const app = express();
@@ -141,94 +141,40 @@ log(`   API Base URL: ${CASHFREE_API_BASE_URL}`);
 log(`   API Version: ${CASHFREE_API_VERSION}`);
 
 // Email configuration
-const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
-const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
 const BASE_URL = process.env.BASE_URL || "https://samjhona.com";
 
-// Create email transporter
-const emailTransporter = nodemailer.createTransport({
-  host: EMAIL_HOST,
-  port: EMAIL_PORT,
-  secure: EMAIL_PORT === 465,
-  auth:
-    EMAIL_USER && EMAIL_PASS
-      ? {
-          user: EMAIL_USER,
-          pass: EMAIL_PASS,
-        }
-      : undefined,
-});
+// Create Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function to send post-purchase email
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
-  if (!EMAIL_USER || !EMAIL_PASS) {
-    log("⚠️ Email not configured - skipping email send");
-    return null;
-  }
   try {
-    // Log transport-level info for debugging (avoid printing sensitive values)
-    log(
-      `🔧 Preparing to send email to ${email} via ${EMAIL_HOST}:${EMAIL_PORT} (user=${EMAIL_USER})`
-    );
-
-    // Verify transporter connectivity (helpful to catch auth/connectivity issues early)
-    try {
-      await emailTransporter.verify();
-      log("✅ SMTP transporter verified");
-    } catch (verifyErr) {
-      log(`⚠️ SMTP verify failed: ${verifyErr.message}`);
-    }
-
-    const mailOptions = {
-      from: '"Samjhona Support" <customercare@samjhona.com>',
+    const result = await resend.emails.send({
+      from: process.env.EMAIL_FROM,
       to: email,
       subject: "Your report link",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2>Thank you for your purchase!</h2>
           <p>Hi ${fullName || "there"},</p>
-          <p>Your payment is confirmed. Access your report anytime:</p>
-          <div style="margin: 30px 0;">
+          <p>Access your report using the link below:</p>
+          <p>
             <a href="${postPurchaseLink}" 
-               style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+               style="background:#ef4444;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
               Open my report
             </a>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            You can bookmark this link or keep this email.
           </p>
-          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
-            <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
-              Important Notice:
-            </p>
-            <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
-              This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
-            </p>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            Support: <a href="mailto:customercare@samjhona.com" style="color: #f43f3f;">customercare@samjhona.com</a>
+          <p style="font-size:12px;color:#666">
+            If you don't see it, check spam.
           </p>
         </div>
       `,
-    };
+    });
 
-    // Log a brief preview (non-sensitive) to help debug delivery
-    log(
-      `📧 Sending email to: ${mailOptions.to} | subject: ${mailOptions.subject}`
-    );
-    const start = Date.now();
-    const info = await emailTransporter.sendMail(mailOptions);
-    const duration = ((Date.now() - start) / 1000).toFixed(2);
-    log(
-      `✅ Post-purchase email sent to ${email}: ${info.messageId} (took ${duration}s)`
-    );
-    return info;
+    console.log("✅ Email sent via Resend:", result.id);
+    return result;
   } catch (err) {
-    log(`❌ Error sending email: ${err.message}`);
-    // Print full error to stderr for more details in logs
-    console.error(err);
+    console.error("❌ Resend email failed:", err);
     return null;
   }
 }
