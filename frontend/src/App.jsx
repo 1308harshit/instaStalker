@@ -408,6 +408,60 @@ function App() {
     }
   }, [screen]);
 
+  // PayU success page: fire Purchase once on landing
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+
+    // Never fire Purchase for post-purchase (email link) flow
+    if (postPurchaseLockRef.current) return;
+
+    // Only for PayU landing path
+    if (window.location.pathname !== "/successfully-paid") return;
+
+    const PENDING_KEY = "instaStalker_pending_purchase";
+
+    let pending = null;
+    try {
+      pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "null");
+    } catch {
+      pending = null;
+    }
+
+    // Prevent false Purchase events if user opens the URL directly
+    if (!pending || typeof pending !== "object") return;
+
+    const purchaseId =
+      typeof pending.id === "string" && pending.id.trim()
+        ? pending.id.trim()
+        : "payu";
+    const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
+
+    try {
+      if (window.localStorage.getItem(firedKey)) return;
+      window.localStorage.setItem(firedKey, String(Date.now()));
+      window.localStorage.removeItem(PENDING_KEY);
+    } catch {
+      // ignore storage errors
+    }
+
+    const value =
+      typeof pending.value === "number" && Number.isFinite(pending.value)
+        ? pending.value
+        : 99;
+    const currency =
+      typeof pending.currency === "string" && pending.currency.trim()
+        ? pending.currency.trim()
+        : "INR";
+
+    trackMetaPixel("Purchase", {
+      value,
+      currency,
+      content_name: "Instagram Stalker Report",
+      content_category: "Digital Product",
+    });
+  }, [screen]);
+
   const isNarrowLayout = viewportWidth < 768;
 
   // Payment page state
@@ -3566,6 +3620,24 @@ function App() {
       if (!bypassRes.ok) {
         const text = await bypassRes.text().catch(() => "");
         throw new Error(text || "Failed to generate report link");
+      }
+
+      // Mark purchase intent so the PayU success landing can fire Purchase pixel once.
+      // This avoids duplicates and prevents false triggers on manual visits.
+      try {
+        const pending = {
+          id: `payu_${Date.now()}`,
+          value: 99 * quantity,
+          currency: "INR",
+          ts: Date.now(),
+          provider: "payu",
+        };
+        window.localStorage.setItem(
+          "instaStalker_pending_purchase",
+          JSON.stringify(pending)
+        );
+      } catch {
+        // ignore storage errors
       }
 
       // Redirect to PayU only after data is stored
