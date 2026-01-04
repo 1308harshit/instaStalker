@@ -31,7 +31,12 @@ const trackMetaPixel = (eventName, eventData = {}) => {
   const tryTrack = (attempts = 0) => {
     if (window.fbq && typeof window.fbq === "function") {
       try {
-        window.fbq("track", eventName, eventData);
+        // Use trackSingle for Purchase events with event_id to ensure proper deduplication
+        if (eventName === "Purchase" && eventData.event_id) {
+          window.fbq("trackSingle", "1752528628790870", eventName, eventData);
+        } else {
+          window.fbq("track", eventName, eventData);
+        }
         console.log(`✅ Meta Pixel: ${eventName} tracked`, eventData);
       } catch (err) {
         console.error(`❌ Meta Pixel tracking error for ${eventName}:`, err);
@@ -459,6 +464,9 @@ function App() {
       currency,
       content_name: "Instagram Stalker Report",
       content_category: "Digital Product",
+      event_id: purchaseId, // Required for deduplication
+      order_id: purchaseId, // Helps with conversion matching
+      content_ids: [purchaseId], // Product identifier
     });
   }, [screen]);
 
@@ -3344,6 +3352,9 @@ function App() {
                 currency: "INR",
                 content_name: "Instagram Stalker Report",
                 content_category: "Digital Product",
+                event_id: orderId, // Required for deduplication
+                order_id: orderId, // Helps with conversion matching
+                content_ids: [orderId], // Product identifier
               });
             }
 
