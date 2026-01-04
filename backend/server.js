@@ -1182,7 +1182,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
 
   try {
     log("🔥 Parsing request body...", { requestId });
-    const { amount, email, phone } = req.body;
+    const { amount, email, phone, existingOrderId } = req.body;
     
     log("🔥 Request body received:", {
       requestId,
@@ -1253,13 +1253,71 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       phone: String(phone).slice(0, 3) + "***",
     });
 
-    // Generate order ID
-    const orderId = `ORD_${Date.now()}`;
-    log("🧾 Order ID generated", { requestId, orderId });
+    // Generate order ID (Vegaah format)
+    const vegaahOrderId = `ORD_${Date.now()}`;
+    log("🧾 Vegaah Order ID generated", { requestId, vegaahOrderId, existingOrderId });
+    
+    // Link Vegaah payment to existing order if provided (from bypass endpoint)
+    if (existingOrderId) {
+      try {
+        const db = await connectDB();
+        if (db) {
+          const collection = db.collection(COLLECTION_NAME);
+          const updateResult = await collection.updateOne(
+            { orderId: existingOrderId },
+            { 
+              $set: { 
+                vegaahOrderId,
+                paymentMethod: "vegaah",
+                vegaahAmount: Number(amount),
+                vegaahStatus: "pending"
+              } 
+            }
+          );
+          if (updateResult.matchedCount > 0) {
+            log("✅ Linked Vegaah payment to existing order", { requestId, existingOrderId, vegaahOrderId });
+          } else {
+            log("⚠️ Existing order not found, creating new entry", { requestId, existingOrderId });
+            await collection.insertOne({
+              orderId: existingOrderId,
+              vegaahOrderId,
+              email,
+              phoneNumber: phone,
+              amount: Number(amount),
+              status: "pending",
+              paymentMethod: "vegaah",
+              createdAt: new Date(),
+            });
+          }
+        }
+      } catch (dbErr) {
+        log("⚠️ Failed to link Vegaah order (continuing anyway):", dbErr.message);
+      }
+    } else {
+      // Save new order entry if no existing orderId provided
+      try {
+        const db = await connectDB();
+        if (db) {
+          const collection = db.collection(COLLECTION_NAME);
+          await collection.insertOne({
+            vegaahOrderId,
+            email,
+            phoneNumber: phone,
+            amount: Number(amount),
+            status: "pending",
+            paymentMethod: "vegaah",
+            createdAt: new Date(),
+          });
+          log("✅ Vegaah order saved to database", { requestId, vegaahOrderId });
+        }
+      } catch (dbErr) {
+        log("⚠️ Failed to save Vegaah order to database (continuing anyway):", dbErr.message);
+      }
+    }
 
     // Vegaah signature is computed from (trackId|terminalId|password|merchantkey|amount|currency)
-    // Use orderId as trackId for uniqueness
-    const trackId = orderId;
+    // Use vegaahOrderId as trackId for uniqueness
+    const trackId = vegaahOrderId;
     const currency = "INR";
     const formattedAmount = formatVegaahAmount(amount);
     if (!formattedAmount) {
@@ -1305,7 +1363,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       amount: formattedAmount,
       currency,
       order: {
-        orderId,
+        orderId: vegaahOrderId,
         description: "Insta Reports purchase",
       },
       customer: {
@@ -1474,16 +1532,19 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
         redirectUrl,
         linkUrl: data.paymentLink.linkUrl,
         transactionId: data.transactionId,
+        vegaahOrderId,
       });
 
       log("🔥 ========== VEGAAH PAYMENT REQUEST SUCCESS ==========", {
         requestId,
         redirectUrl,
+        vegaahOrderId,
       });
 
       return res.json({
         redirectUrl,
         requestId,
+        vegaahOrderId, // Return order ID for frontend reference
       });
     }
 
@@ -1535,7 +1596,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
   }
 });
 
-app.all("/api/payment/vegaah/response", (req, res) => {
+app.all("/api/payment/vegaah/response", async (req, res) => {
   try {
     // Vegaah can either POST encrypted data as form params, or redirect with ?data=...
     // Examples from PDF show encrypted response like: data=<base64>&termId=...
@@ -1649,11 +1710,94 @@ app.all("/api/payment/vegaah/response", (req, res) => {
       paymentIdPresent: Boolean(paymentId),
     });
 
+    // Extract orderId from Vegaah response
+    const vegaahOrderId = parsed?.orderDetails?.orderId ?? parsed?.orderId ?? null;
+    log("🔍 Looking for order in database", { vegaahOrderId });
+
     // "Transaction Approved" example uses responseCode "001" in PDF
     const isSuccess =
       String(result).toUpperCase() === "SUCCESS" || String(responseCode) === "001";
 
-    return res.redirect(isSuccess ? "/payment-success" : "/payment-failed");
+    // If payment successful, find order and redirect to post-purchase page
+    if (isSuccess && vegaahOrderId) {
+      try {
+        const db = await connectDB();
+        if (db) {
+          const collection = db.collection(COLLECTION_NAME);
+          
+          // First try to find by vegaahOrderId
+          let order = await collection.findOne({ vegaahOrderId });
+          
+          // If not found, try to find by orderId (in case it was stored differently)
+          if (!order) {
+            order = await collection.findOne({ orderId: vegaahOrderId });
+          }
+          
+          // If still not found, try to find by email (from parsed response or most recent order)
+          if (!order) {
+            const customerEmail = parsed?.customerDetails?.customerEmail ?? parsed?.customerEmail ?? null;
+            if (customerEmail) {
+              // Find most recent order with report data for this email
+              order = await collection.findOne(
+                { 
+                  email: customerEmail,
+                  status: "paid",
+                  cards: { $exists: true, $ne: [] }
+                },
+                { sort: { createdAt: -1 } }
+              );
+              log("🔍 Searched by email", { 
+                customerEmail: customerEmail.slice(0, 3) + "***",
+                found: Boolean(order)
+              });
+            }
+          }
+          
+          if (order) {
+            log("✅ Order found in database", { 
+              orderId: order.orderId || order.vegaahOrderId,
+              hasAccessToken: Boolean(order.accessToken),
+              email: order.email ? order.email.slice(0, 3) + "***" : "N/A"
+            });
+            
+            // If order has accessToken, redirect to post-purchase page
+            if (order.accessToken && order.orderId) {
+              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(order.accessToken)}&order=${encodeURIComponent(order.orderId)}`;
+              log("✅ Redirecting to post-purchase page", { postPurchaseUrl });
+              return res.redirect(postPurchaseUrl);
+            }
+            
+            // If order exists but no accessToken yet, create one
+            if (order.orderId && !order.accessToken) {
+              const token = crypto.randomBytes(32).toString("hex");
+              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order.orderId)}`;
+              
+              // Update order with accessToken
+              await collection.updateOne(
+                { _id: order._id },
+                { $set: { accessToken: token, status: "paid", verifiedAt: new Date() } }
+              );
+              
+              log("✅ Created accessToken and redirecting", { postPurchaseUrl });
+              return res.redirect(postPurchaseUrl);
+            }
+          } else {
+            log("⚠️ Order not found in database", { vegaahOrderId });
+          }
+        }
+      } catch (dbErr) {
+        log("❌ Database error in response handler:", dbErr.message);
+      }
+    }
+
+    // Fallback redirects if order not found or payment failed
+    if (isSuccess) {
+      log("⚠️ Payment successful but order not found, redirecting to generic success page");
+      return res.redirect(`${POST_PURCHASE_BASE_URL}/payment-success`);
+    } else {
+      log("❌ Payment failed, redirecting to failure page");
+      return res.redirect(`${POST_PURCHASE_BASE_URL}/payment-failed`);
+    }
   } catch (err) {
     log("❌ Vegaah response handler error", {
       message: err?.message || String(err),
