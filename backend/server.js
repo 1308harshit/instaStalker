@@ -375,7 +375,7 @@ async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
           </p>
         </div>
         <p style="color: #666; font-size: 14px;">
-          Support: <a href="mailto:robertpranav369@gmail.com" style="color: #f43f3f;">robertpranav369@gmail.com</a>
+          Support: <a href="mailto:customercare@sensorahub.com" style="color: #f43f3f;">customercare@sensorahub.com</a>
         </p>
       </div>
     `;
