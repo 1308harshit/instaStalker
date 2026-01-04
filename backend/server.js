@@ -219,10 +219,10 @@ function buildStoredReport({ cards = [], profile = null }) {
     shuffled[j] = tmp;
   }
 
-  const TOTAL_ROWS = 10;
+  const TOTAL_ROWS = 7;
   const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
-  // Padding to 10 rows (should be rare if cards exist)
+  // Padding to 7 rows (should be rare if cards exist)
   while (selected.length < TOTAL_ROWS) {
     const idx = selected.length + 1;
     selected.push({
@@ -233,11 +233,11 @@ function buildStoredReport({ cards = [], profile = null }) {
   }
 
   const rowCount = selected.length;
-  // Screenshots: highlight 3 profiles among rows 2–10 (index 1–9)
+  // Screenshots: highlight 3 profiles among rows 2–7 (index 1–6)
   const screenshotIndices = new Set();
   if (rowCount >= 2) {
     const minIdx = 1;
-    const maxIdx = Math.min(9, rowCount - 1);
+    const maxIdx = Math.min(6, rowCount - 1);
     while (
       screenshotIndices.size < 3 &&
       screenshotIndices.size < maxIdx - minIdx + 1
@@ -267,7 +267,7 @@ function buildStoredReport({ cards = [], profile = null }) {
       visitsHighlighted = true;
     }
 
-    // Screenshots: highlight 3 profiles among rows 2–10
+    // Screenshots: highlight 3 profiles among rows 2–7
     if (screenshotIndices.has(index)) {
       rowScreenshots = 1;
       screenshotsHighlighted = true;
@@ -320,6 +320,8 @@ function generateVegaahRequestSignature({
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || "SensoraHub <customercare@sensorahub.com>";
 const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
+// Force sensorahub.com domain for post-purchase links
+const POST_PURCHASE_BASE_URL = "https://sensorahub.com";
 
 // Initialize Resend client
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
@@ -467,7 +469,7 @@ app.post("/api/payment/bypass", async (req, res) => {
       .randomBytes(4)
       .toString("hex")}`;
     const token = crypto.randomBytes(32).toString("hex");
-    const normalizedBase = String(BASE_URL || "").replace(/\/+$/, "");
+    const normalizedBase = String(POST_PURCHASE_BASE_URL || "").replace(/\/+$/, "");
     const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
       token
     )}&order=${encodeURIComponent(orderId)}`;
@@ -918,7 +920,7 @@ app.post("/api/payment/verify", async (req, res) => {
 
           // Generate unique post-purchase link
           const accessToken = crypto.randomBytes(32).toString("hex");
-          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${accessToken}&order=${order_id}`;
+          const postPurchaseLink = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${accessToken}&order=${order_id}`;
 
           const updateData = {
             status: "paid",
