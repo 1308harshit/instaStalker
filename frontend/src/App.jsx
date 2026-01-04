@@ -370,6 +370,67 @@ function App() {
   const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
 
+  // ✅ PayU success: fire Purchase pixel IMMEDIATELY on page load
+  // Fires before any screen state changes or path checks
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Never fire Purchase for post-purchase (email link) flow
+    if (postPurchaseLockRef.current) return;
+
+    const PENDING_KEY = "instaStalker_pending_purchase";
+
+    let pending = null;
+    try {
+      pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "null");
+    } catch {
+      pending = null;
+    }
+
+    // Prevent false Purchase events if user opens the URL directly
+    if (!pending || typeof pending !== "object") return;
+
+    const purchaseId =
+      typeof pending.id === "string" && pending.id.trim()
+        ? pending.id.trim()
+        : "payu";
+    const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
+
+    // Check if already fired to prevent duplicates
+    try {
+      if (window.localStorage.getItem(firedKey)) {
+        console.log("⚠️ Purchase pixel already fired for:", purchaseId);
+        return;
+      }
+      window.localStorage.setItem(firedKey, String(Date.now()));
+      window.localStorage.removeItem(PENDING_KEY);
+    } catch {
+      // ignore storage errors
+    }
+
+    const value =
+      typeof pending.value === "number" && Number.isFinite(pending.value)
+        ? pending.value
+        : 99;
+    const currency =
+      typeof pending.currency === "string" && pending.currency.trim()
+        ? pending.currency.trim()
+        : "INR";
+
+    // ✅ FIRE PURCHASE PIXEL (NOT PageView) - fires immediately on page load
+    trackMetaPixel("Purchase", {
+      value,
+      currency,
+      content_name: "Instagram Stalker Report",
+      content_category: "Digital Product",
+      event_id: purchaseId, // Required for deduplication (uses trackSingle)
+      order_id: purchaseId, // Helps with conversion matching
+      content_ids: [purchaseId], // Product identifier
+    });
+
+    console.log("✅ Purchase pixel fired immediately on page load for PayU:", purchaseId);
+  }, []); // ✅ Empty deps - fires immediately on mount, before screen changes
+
   // Detect PayU redirect path on initial load and show success screen
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -413,62 +474,64 @@ function App() {
     }
   }, [screen]);
 
-  // PayU success page: fire Purchase once on landing
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-
-    // Never fire Purchase for post-purchase (email link) flow
-    if (postPurchaseLockRef.current) return;
-
-    // Only for PayU landing path
-    if (window.location.pathname !== "/successfully-paid") return;
-
-    const PENDING_KEY = "instaStalker_pending_purchase";
-
-    let pending = null;
-    try {
-      pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "null");
-    } catch {
-      pending = null;
-    }
-
-    // Prevent false Purchase events if user opens the URL directly
-    if (!pending || typeof pending !== "object") return;
-
-    const purchaseId =
-      typeof pending.id === "string" && pending.id.trim()
-        ? pending.id.trim()
-        : "payu";
-    const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
-
-    try {
-      if (window.localStorage.getItem(firedKey)) return;
-      window.localStorage.setItem(firedKey, String(Date.now()));
-      window.localStorage.removeItem(PENDING_KEY);
-    } catch {
-      // ignore storage errors
-    }
-
-    const value =
-      typeof pending.value === "number" && Number.isFinite(pending.value)
-        ? pending.value
-        : 99;
-    const currency =
-      typeof pending.currency === "string" && pending.currency.trim()
-        ? pending.currency.trim()
-        : "INR";
-
-    trackMetaPixel("Purchase", {
-      value,
-      currency,
-      content_name: "Instagram Stalker Report",
-      content_category: "Digital Product",
-      event_id: purchaseId, // Required for deduplication
-      order_id: purchaseId, // Helps with conversion matching
-      content_ids: [purchaseId], // Product identifier
-    });
-  }, [screen]);
+  // ❌ REMOVED: Old PayU success page useEffect that waited for screen state
+  // This was causing the pixel to fire too late. The new immediate fire useEffect above handles this now.
+  // // PayU success page: fire Purchase once on landing
+  // useEffect(() => {
+  //   if (typeof window === "undefined") return;
+  //   if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+  //
+  //   // Never fire Purchase for post-purchase (email link) flow
+  //   if (postPurchaseLockRef.current) return;
+  //
+  //   // Only for PayU landing path
+  //   if (window.location.pathname !== "/successfully-paid") return;
+  //
+  //   const PENDING_KEY = "instaStalker_pending_purchase";
+  //
+  //   let pending = null;
+  //   try {
+  //     pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "null");
+  //   } catch {
+  //     pending = null;
+  //   }
+  //
+  //   // Prevent false Purchase events if user opens the URL directly
+  //   if (!pending || typeof pending !== "object") return;
+  //
+  //   const purchaseId =
+  //     typeof pending.id === "string" && pending.id.trim()
+  //       ? pending.id.trim()
+  //       : "payu";
+  //   const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
+  //
+  //   try {
+  //     if (window.localStorage.getItem(firedKey)) return;
+  //     window.localStorage.setItem(firedKey, String(Date.now()));
+  //     window.localStorage.removeItem(PENDING_KEY);
+  //   } catch {
+  //     // ignore storage errors
+  //   }
+  //
+  //   const value =
+  //     typeof pending.value === "number" && Number.isFinite(pending.value)
+  //       ? pending.value
+  //       : 99;
+  //   const currency =
+  //     typeof pending.currency === "string" && pending.currency.trim()
+  //       ? pending.currency.trim()
+  //       : "INR";
+  //
+  //   trackMetaPixel("Purchase", {
+  //     value,
+  //     currency,
+  //     content_name: "Instagram Stalker Report",
+  //     content_category: "Digital Product",
+  //     event_id: purchaseId, // Required for deduplication
+  //     order_id: purchaseId, // Helps with conversion matching
+  //     content_ids: [purchaseId], // Product identifier
+  //   });
+  // }, [screen]);
 
   const isNarrowLayout = viewportWidth < 768;
 
@@ -3342,21 +3405,22 @@ function App() {
               "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
             );
 
+            // ❌ COMMENTED OUT: Cashfree Purchase pixel fire (not using Cashfree right now)
             // Fire Purchase BEFORE screen change
-            if (!purchaseEventFiredRef.current.has(orderId)) {
-              const paidAmount = 99 * quantity;
-              purchaseEventFiredRef.current.add(orderId);
-
-              trackMetaPixel("Purchase", {
-                value: paidAmount,
-                currency: "INR",
-                content_name: "Instagram Stalker Report",
-                content_category: "Digital Product",
-                event_id: orderId, // Required for deduplication
-                order_id: orderId, // Helps with conversion matching
-                content_ids: [orderId], // Product identifier
-              });
-            }
+            // if (!purchaseEventFiredRef.current.has(orderId)) {
+            //   const paidAmount = 99 * quantity;
+            //   purchaseEventFiredRef.current.add(orderId);
+            //
+            //   trackMetaPixel("Purchase", {
+            //     value: paidAmount,
+            //     currency: "INR",
+            //     content_name: "Instagram Stalker Report",
+            //     content_category: "Digital Product",
+            //     event_id: orderId, // Required for deduplication
+            //     order_id: orderId, // Helps with conversion matching
+            //     content_ids: [orderId], // Product identifier
+            //   });
+            // }
 
             setScreen(SCREEN.PAYMENT_SUCCESS);
             window.history.replaceState({}, "", window.location.pathname);
