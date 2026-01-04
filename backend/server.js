@@ -38,7 +38,7 @@ import {
   getRecentSnapshot,
   closeDB,
 } from "./utils/mongodb.js";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import crypto from "crypto";
 // Node 18+ provides global fetch; avoid node-fetch dependency
 
@@ -316,73 +316,87 @@ function generateVegaahRequestSignature({
   return crypto.createHash("sha256").update(pipeSeparatedString).digest("hex");
 }
 
-// Email configuration
-const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
-const EMAIL_PORT = Number(process.env.EMAIL_PORT || 587);
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
+// Email configuration - Using Resend
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || "SensoraHub <customercare@sensorahub.com>";
 const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
 
-// Create email transporter
-const emailTransporter = nodemailer.createTransport({
-  host: EMAIL_HOST,
-  port: EMAIL_PORT,
-  secure: EMAIL_PORT === 465,
-  auth:
-    EMAIL_USER && EMAIL_PASS
-      ? {
-          user: EMAIL_USER,
-          pass: EMAIL_PASS,
-        }
-      : undefined,
-});
+// Initialize Resend client
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-// Helper function to send post-purchase email
+// Log Resend configuration at startup
+if (RESEND_API_KEY) {
+  log(`✅ Resend configured: API Key present (${RESEND_API_KEY.substring(0, 10)}...)`);
+  log(`✅ Email FROM: ${EMAIL_FROM}`);
+} else {
+  log(`⚠️ Resend API key not found - emails will not be sent`);
+}
+
+// Helper function to send post-purchase email using Resend
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
-  if (!EMAIL_USER || !EMAIL_PASS) {
-    log("⚠️ Email not configured - skipping email send");
+  if (!resend || !RESEND_API_KEY) {
+    log("⚠️ Resend not configured - skipping email send");
+    log(`   RESEND_API_KEY: ${RESEND_API_KEY ? "SET" : "NOT SET"}`);
+    return null;
+  }
+
+  if (!email) {
+    log("⚠️ Email address not provided - skipping email send");
     return null;
   }
 
   try {
-    const mailOptions = {
-      from: `"Insta Reports" <${EMAIL_USER}>`,
-      to: email,
-      subject: "Your report link",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
-          <p>Hi ${fullName || "there"},</p>
-          <p>Your payment is confirmed. Access your report anytime:</p>
-          <div style="margin: 30px 0;">
-            <a href="${postPurchaseLink}" 
-               style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-              Open my report
-            </a>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            You can bookmark this link or keep this email.
+    log(`📧 Preparing to send email to ${email} from ${EMAIL_FROM}`);
+    log(`📧 Post-purchase link: ${postPurchaseLink}`);
+
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #f43f3f;">Thank you for your purchase!</h2>
+        <p>Hi ${fullName || "there"},</p>
+        <p>Your payment is confirmed. Access your report anytime:</p>
+        <div style="margin: 30px 0;">
+          <a href="${postPurchaseLink}" 
+             style="background-color: #f43f3f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+            Open my report
+          </a>
+        </div>
+        <p><strong>WAIT FOR FEW SECONDS TO LOAD THE REPORT</strong></p>
+        <p style="color: #666; font-size: 14px;">
+          You can bookmark this link or keep this email.
+        </p>
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
+          <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
+            Important Notice:
           </p>
-          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; border-radius: 4px;">
-            <p style="color: #856404; font-size: 13px; margin: 0; font-weight: 600;">
-              Important Notice:
-            </p>
-            <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
-              This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
-            </p>
-          </div>
-          <p style="color: #666; font-size: 14px;">
-            Support: <a href="mailto:robertpranav369@gmail.com" style="color: #f43f3f;">robertpranav369@gmail.com</a>
+          <p style="color: #856404; font-size: 12px; margin: 8px 0 0 0; line-height: 1.5;">
+            This report is generated using automated AI analysis based on public engagement signals and behavioral patterns. Instagram does not provide official data about profile visitors. Results are estimates only and may not be fully accurate or represent actual individuals.
           </p>
         </div>
-      `,
-    };
+        <p style="color: #666; font-size: 14px;">
+          Support: <a href="mailto:robertpranav369@gmail.com" style="color: #f43f3f;">robertpranav369@gmail.com</a>
+        </p>
+      </div>
+    `;
 
-    const info = await emailTransporter.sendMail(mailOptions);
-    log(`✅ Post-purchase email sent to ${email}: ${info.messageId}`);
-    return info;
+    const { data, error } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: email,
+      subject: "Your report link",
+      html: emailHtml,
+    });
+
+    if (error) {
+      log(`❌ Resend error sending email to ${email}:`, error);
+      log(`❌ Error details: ${JSON.stringify(error)}`);
+      return null;
+    }
+
+    log(`✅ Post-purchase email sent successfully to ${email}`);
+    log(`✅ Resend email ID: ${data?.id || "N/A"}`);
+    return data;
   } catch (err) {
-    log(`❌ Error sending email: ${err.message}`);
+    log(`❌ Error sending email to ${email}: ${err.message}`);
+    log(`❌ Error stack: ${err.stack}`);
     return null;
   }
 }
