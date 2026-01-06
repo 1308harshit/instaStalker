@@ -870,23 +870,32 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
       )}&order=${encodeURIComponent(order.orderId)}`;
 
       // Send email with Instamojo longurl instead of post-purchase link
-      if (order.email) {
-        sendPostPurchaseEmail(
-          order.email,
-          order.fullName || "Customer",
-          order.instamojoLongUrl || postPurchaseUrl
-        )
-          .then(() => {
-            collection
-              .updateOne(
-                { orderId: order.orderId },
-                { $set: { emailSent: true, emailSentAt: new Date() } }
-              )
-              .catch(() => {});
-          })
-          .catch((emailErr) => {
-            log(`⚠️ Email sending failed: ${emailErr.message}`);
-          });
+      // Ensure we have a working link and data is stored before sending
+      if (order.email && order.instamojoLongUrl) {
+        // Double-check the order has all required data before sending email
+        const updatedOrder = await collection.findOne({
+          orderId: order.orderId,
+        });
+        if (updatedOrder && updatedOrder.instamojoLongUrl) {
+          sendPostPurchaseEmail(
+            order.email,
+            order.fullName || "Customer",
+            updatedOrder.instamojoLongUrl
+          )
+            .then(() => {
+              collection
+                .updateOne(
+                  { orderId: order.orderId },
+                  { $set: { emailSent: true, emailSentAt: new Date() } }
+                )
+                .catch(() => {});
+            })
+            .catch((emailErr) => {
+              log(`⚠️ Email sending failed: ${emailErr.message}`);
+            });
+        } else {
+          log("⚠️ Order data not fully stored, skipping email send");
+        }
       }
 
       log("✅ Redirecting to post-purchase", { postPurchaseUrl });
