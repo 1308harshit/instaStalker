@@ -3588,7 +3588,7 @@ function App() {
                   </div>
                 </div>
 
-                {showPaymentNotice && (
+                {/* {showPaymentNotice && (
                   <div
                     style={{
                       background: "#111",
@@ -3606,7 +3606,7 @@ function App() {
                       Redirecting in {paymentNoticeCounter}...
                     </div>
                   </div>
-                )}
+                )} */}
 
                 {/* Place Order Button */}
                 <button

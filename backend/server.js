@@ -528,15 +528,17 @@ app.post("/api/payment/bypass", async (req, res) => {
       emailSent: false,
     });
 
-    // Send email immediately after data is stored
-    sendPostPurchaseEmail(email, fullName || "there", postPurchaseLink)
-      .then(() =>
-        collection.updateOne(
-          { orderId },
-          { $set: { emailSent: true, emailSentAt: new Date() } }
+    // Send email after data is stored (small delay helps consistency)
+    setTimeout(() => {
+      sendPostPurchaseEmail(email, fullName || "there", postPurchaseLink)
+        .then(() =>
+          collection.updateOne(
+            { orderId },
+            { $set: { emailSent: true, emailSentAt: new Date() } }
+          )
         )
-      )
-      .catch(() => {});
+        .catch(() => {});
+    }, 2000);
 
     return res.json({ success: true, orderId });
   } catch (err) {
