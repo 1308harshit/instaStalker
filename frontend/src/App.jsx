@@ -530,6 +530,23 @@ function App() {
                 setUsernameInput(validateData.username.replace("@", ""));
               }
 
+              // Fire purchase pixel once when arriving via post-purchase link
+              const orderIdForPixel =
+                validateData.orderId || order || validateData.payment_request_id;
+              if (
+                orderIdForPixel &&
+                !purchaseEventFiredRef.current.has(orderIdForPixel)
+              ) {
+                purchaseEventFiredRef.current.add(orderIdForPixel);
+                trackMetaPixel("Purchase", {
+                  content_name: "Instagram Stalker Report",
+                  content_category: "Payment",
+                  value: 99,
+                  currency: "INR",
+                  order_id: orderIdForPixel,
+                });
+              }
+
               // Show payment success screen
               setScreen(SCREEN.PAYMENT_SUCCESS);
 
@@ -3203,6 +3220,8 @@ function App() {
     e.preventDefault();
     setPaymentLoading(true);
 
+    let existingOrderId;
+
     // Track AddPaymentInfo when payment form is submitted
     const amount = 99 * quantity;
     trackMetaPixel("AddPaymentInfo", {
@@ -3290,7 +3309,12 @@ function App() {
             profile: profileToSend,
           }),
         });
-        if (!bypassRes.ok) {
+        if (bypassRes.ok) {
+          const bypassData = await bypassRes.json().catch(() => ({}));
+          if (bypassData?.orderId) {
+            existingOrderId = bypassData.orderId;
+          }
+        } else {
           // Still allow payment to proceed, but log so we can debug
           const text = await bypassRes.text().catch(() => "");
           console.warn("⚠️ bypass failed:", text);
@@ -3299,22 +3323,24 @@ function App() {
         console.warn("⚠️ bypass exception:", bypassErr?.message || bypassErr);
       }
 
-      // Create Vegaah payment
-      const res = await fetch("/api/payment/vegaah/create", {
+      // Create Instamojo payment
+      const res = await fetch("/api/payment/instamojo/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: 99,
           email: paymentForm.email,
           phone: paymentForm.phoneNumber,
+          buyer_name: paymentForm.fullName,
+          existingOrderId,
         }),
       });
 
-      console.log("Vegaah API Response Status:", res.status);
-      console.log("Vegaah API Response OK:", res.ok);
+      console.log("Instamojo API Response Status:", res.status);
+      console.log("Instamojo API Response OK:", res.ok);
 
       const data = await res.json();
-      console.log("Vegaah API Response Data:", data);
+      console.log("Instamojo API Response Data:", data);
 
       if (!data.redirectUrl) {
         console.error("No redirectUrl in response:", data);
@@ -3335,7 +3361,7 @@ function App() {
         if (counter === 0) {
           clearInterval(countdownInterval);
           setShowPaymentNotice(false);
-          window.location.href = data.redirectUrl; // Vegaah redirect
+          window.location.href = data.redirectUrl; // Instamojo redirect
         }
       }, 1000);
     } catch (err) {
