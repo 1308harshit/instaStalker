@@ -3609,13 +3609,40 @@ function App() {
                 )} */}
 
                 {/* Place Order Button */}
-                <button
+                {/* <button
                   type="button"
                   className="primary-btn"
                   onClick={handlePaymentSubmit}
                   disabled={paymentLoading}
                 >
                   {paymentLoading ? "Redirecting..." : "PLACE ORDER"}
+                </button> */}
+
+                <button
+                    type="button"
+                    onClick={handlePaymentSubmit}
+                    disabled={paymentLoading}
+                    style={{
+                      width: "100%",
+                      padding: "16px 32px",
+                      background: paymentLoading ? "#93c5fd" : "#2563eb",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "18px",
+                      fontWeight: "700",
+                      cursor: paymentLoading ? "not-allowed" : "pointer",
+                      transition: "background 0.2s",
+                      marginTop: "24px",
+                    }}
+                    onMouseOver={(e) => {
+                      if (!paymentLoading) e.target.style.background = "#1d4ed8";
+                    }}
+                    onMouseOut={(e) => {
+                      if (!paymentLoading) e.target.style.background = "#2563eb";
+                    }}
+                  >
+                    {paymentLoading ? "Redirecting..." : "PLACE ORDER"}
                 </button>
 
                 {/* Disclaimers */}
