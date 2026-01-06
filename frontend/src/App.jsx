@@ -3352,7 +3352,7 @@ function App() {
       setShowPaymentNotice(true);
       setPaymentNoticeCounter(5);
 
-      let counter = 5;
+      let counter = 1;
 
       const countdownInterval = setInterval(() => {
         counter -= 1;
