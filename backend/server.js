@@ -97,6 +97,20 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || "");
 };
 
+// CRITICAL: Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  log(`❌ UNHANDLED REJECTION: ${reason}`);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - let PM2 handle restarts
+});
+
+process.on('uncaughtException', (error) => {
+  log(`❌ UNCAUGHT EXCEPTION: ${error.message}`);
+  console.error('Uncaught Exception:', error);
+  // Exit gracefully - PM2 will restart
+  process.exit(1);
+});
+
 // -------------------------------
 // Stored report builder (Option A)
 // -------------------------------

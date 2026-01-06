@@ -2,7 +2,7 @@
 import { launchBrowser } from "./browser.js";
 import { redis } from "../utils/redis.js";
 
-const MAX_BROWSERS = 4; // Controlled concurrency for 8 vCPU
+const MAX_BROWSERS = 2; // Controlled concurrency for 8 vCPU
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();

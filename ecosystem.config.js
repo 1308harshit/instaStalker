@@ -17,7 +17,7 @@ module.exports = {
         merge_logs: true,
         autorestart: true,
         watch: false,
-        max_memory_restart: "500M",
+        max_memory_restart: "800M",
         min_uptime: "10s",
         max_restarts: 10,
       },
