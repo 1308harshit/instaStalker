@@ -729,6 +729,9 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
     const longurl = responseData.payment_request.longurl;
     const paymentRequestId = responseData.payment_request.id;
 
+    // Log the actual URL we're getting from Instamojo
+    log("🔗 Instamojo longurl received:", { longurl, paymentRequestId });
+
     // Save Instamojo longurl in database
     try {
       const db = await connectDB();
@@ -877,10 +880,32 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
           orderId: order.orderId,
         });
         if (updatedOrder && updatedOrder.instamojoLongUrl) {
+          // Log what URL we're actually sending in email
+          let emailUrl = updatedOrder.instamojoLongUrl;
+
+          // If instamojoLongUrl is incomplete, construct full URL
+          if (emailUrl && !emailUrl.startsWith("http")) {
+            emailUrl = `https://www.instamojo.com${
+              emailUrl.startsWith("/") ? "" : "/"
+            }${emailUrl}`;
+          }
+
+          // Final fallback: use postPurchaseUrl if Instamojo URL seems invalid
+          if (!emailUrl || emailUrl.length < 20) {
+            log("⚠️ Instamojo URL seems incomplete, using post-purchase URL");
+            emailUrl = postPurchaseUrl;
+          }
+
+          log("📧 Sending email with URL:", {
+            originalInstamojoUrl: updatedOrder.instamojoLongUrl,
+            finalEmailUrl: emailUrl,
+            postPurchaseUrl: postPurchaseUrl,
+          });
+
           sendPostPurchaseEmail(
             order.email,
             order.fullName || "Customer",
-            updatedOrder.instamojoLongUrl
+            emailUrl
           )
             .then(() => {
               collection
