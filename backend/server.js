@@ -249,7 +249,7 @@ function buildStoredReport({ cards = [], profile = null }) {
   const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
     const username = normalizeUsername(card.username || "");
     const name =
-      String((card.title || card.name || "") || "")
+      String(card.title || card.name || "" || "")
         .trim()
         .slice(0, 80) ||
       username.replace(/^@/, "") ||
@@ -318,7 +318,8 @@ function generateVegaahRequestSignature({
 
 // Email configuration - Using Resend
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || "SensoraHub <customercare@sensorahub.com>";
+const EMAIL_FROM =
+  process.env.EMAIL_FROM || "SensoraHub <customercare@sensorahub.com>";
 const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
 // Force sensorahub.com domain for post-purchase links
 const POST_PURCHASE_BASE_URL = "https://sensorahub.com";
@@ -334,7 +335,12 @@ const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 // Log Resend configuration at startup
 if (RESEND_API_KEY) {
-  log(`✅ Resend configured: API Key present (${RESEND_API_KEY.substring(0, 10)}...)`);
+  log(
+    `✅ Resend configured: API Key present (${RESEND_API_KEY.substring(
+      0,
+      10
+    )}...)`
+  );
   log(`✅ Email FROM: ${EMAIL_FROM}`);
 } else {
   log(`⚠️ Resend API key not found - emails will not be sent`);
@@ -419,7 +425,10 @@ function validateInstamojoWebhook(data, macProvided, salt) {
     .map((key) => payload[key])
     .join("|");
 
-  const macCalculated = crypto.createHmac("sha1", salt).update(message).digest("hex");
+  const macCalculated = crypto
+    .createHmac("sha1", salt)
+    .update(message)
+    .digest("hex");
   return macCalculated === macProvided;
 }
 
@@ -489,7 +498,10 @@ app.post("/api/payment/bypass", async (req, res) => {
       .randomBytes(4)
       .toString("hex")}`;
     const token = crypto.randomBytes(32).toString("hex");
-    const normalizedBase = String(POST_PURCHASE_BASE_URL || "").replace(/\/+$/, "");
+    const normalizedBase = String(POST_PURCHASE_BASE_URL || "").replace(
+      /\/+$/,
+      ""
+    );
     const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
       token
     )}&order=${encodeURIComponent(orderId)}`;
@@ -539,8 +551,12 @@ app.post("/api/payment/bypass", async (req, res) => {
 // Instamojo payment endpoints
 // ===========================
 app.post("/api/payment/instamojo/create", async (req, res) => {
-  const requestId = `imojo_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
-  log("🔥 ========== INSTAMOJO PAYMENT REQUEST START ==========", { requestId });
+  const requestId = `imojo_${Date.now()}_${Math.random()
+    .toString(16)
+    .slice(2, 10)}`;
+  log("🔥 ========== INSTAMOJO PAYMENT REQUEST START ==========", {
+    requestId,
+  });
 
   try {
     // Validate configuration
@@ -563,10 +579,18 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
       amount: amount !== undefined ? String(amount) : "MISSING",
       email: email ? String(email).slice(0, 3) + "***" : "MISSING",
       phone: phone ? String(phone).slice(0, 3) + "***" : "MISSING",
-      buyer_name: buyer_name ? String(buyer_name).slice(0, 3) + "***" : "MISSING",
+      buyer_name: buyer_name
+        ? String(buyer_name).slice(0, 3) + "***"
+        : "MISSING",
     });
 
-    if (!amount || Number.isNaN(Number(amount)) || !email || !phone || !buyer_name) {
+    if (
+      !amount ||
+      Number.isNaN(Number(amount)) ||
+      !email ||
+      !phone ||
+      !buyer_name
+    ) {
       log("❌ Instamojo invalid request body", { requestId });
       return res.status(400).json({
         error: "Invalid request",
@@ -584,7 +608,10 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
       existingOrderId ||
       `order_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
     const accessToken = crypto.randomBytes(32).toString("hex");
-    const normalizedBase = String(POST_PURCHASE_BASE_URL || BASE_URL).replace(/\/+$/, "");
+    const normalizedBase = String(POST_PURCHASE_BASE_URL || BASE_URL).replace(
+      /\/+$/,
+      ""
+    );
     const redirectUrl = `${normalizedBase}/api/payment/instamojo/redirect`;
     const webhookUrl = `${normalizedBase}/api/payment/instamojo/webhook`;
     const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
@@ -702,6 +729,24 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
     const longurl = responseData.payment_request.longurl;
     const paymentRequestId = responseData.payment_request.id;
 
+    // Save Instamojo longurl in database
+    try {
+      const db = await connectDB();
+      if (db) {
+        const collection = db.collection(COLLECTION_NAME);
+        await collection.updateOne(
+          { orderId },
+          {
+            $set: {
+              instamojoLongUrl: longurl,
+            },
+          }
+        );
+      }
+    } catch (dbErr) {
+      log("⚠️ Failed to save instamojoLongUrl:", dbErr.message);
+    }
+
     // Persist payment_request_id
     try {
       const db = await connectDB();
@@ -764,7 +809,9 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
     }
     const collection = db.collection(COLLECTION_NAME);
 
-    const order = await collection.findOne({ instamojoPaymentRequestId: payment_request_id });
+    const order = await collection.findOne({
+      instamojoPaymentRequestId: payment_request_id,
+    });
     if (!order) {
       log("❌ Order not found for payment_request_id", { payment_request_id });
       return res.redirect(`${BASE_URL}/payment-failed`);
@@ -790,7 +837,10 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
           String(payment_status).toLowerCase() === "credit";
       }
     } catch (verifyErr) {
-      log("⚠️ Instamojo verify failed, falling back to query param", verifyErr.message);
+      log(
+        "⚠️ Instamojo verify failed, falling back to query param",
+        verifyErr.message
+      );
       isSuccess = String(payment_status).toLowerCase() === "credit";
     }
 
@@ -818,6 +868,27 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
       const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(
         token
       )}&order=${encodeURIComponent(order.orderId)}`;
+
+      // Send email with Instamojo longurl instead of post-purchase link
+      if (order.email) {
+        sendPostPurchaseEmail(
+          order.email,
+          order.fullName || "Customer",
+          order.instamojoLongUrl || postPurchaseUrl
+        )
+          .then(() => {
+            collection
+              .updateOne(
+                { orderId: order.orderId },
+                { $set: { emailSent: true, emailSentAt: new Date() } }
+              )
+              .catch(() => {});
+          })
+          .catch((emailErr) => {
+            log(`⚠️ Email sending failed: ${emailErr.message}`);
+          });
+      }
+
       log("✅ Redirecting to post-purchase", { postPurchaseUrl });
       return res.redirect(postPurchaseUrl);
     }
@@ -863,15 +934,23 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
       amount,
     });
 
-    if (String(payment_status).toLowerCase() === "credit" && payment_request_id) {
+    if (
+      String(payment_status).toLowerCase() === "credit" &&
+      payment_request_id
+    ) {
       const db = await connectDB();
       if (db) {
         const collection = db.collection(COLLECTION_NAME);
-        const order = await collection.findOne({ instamojoPaymentRequestId: payment_request_id });
+        const order = await collection.findOne({
+          instamojoPaymentRequestId: payment_request_id,
+        });
 
         if (order) {
-          const token = order.accessToken || crypto.randomBytes(32).toString("hex");
-          const normalizedBase = String(POST_PURCHASE_BASE_URL || BASE_URL).replace(/\/+$/, "");
+          const token =
+            order.accessToken || crypto.randomBytes(32).toString("hex");
+          const normalizedBase = String(
+            POST_PURCHASE_BASE_URL || BASE_URL
+          ).replace(/\/+$/, "");
           const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
             token
           )}&order=${encodeURIComponent(order.orderId)}`;
@@ -888,12 +967,15 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
                 postPurchaseLink,
                 email: order.email || buyer || null,
                 fullName: order.fullName || buyer_name || "",
-                phoneNumber: order.phoneNumber || buyer_phone || order.phone || "",
+                phoneNumber:
+                  order.phoneNumber || buyer_phone || order.phone || "",
               },
             }
           );
 
-          log("✅ Order updated via Instamojo webhook", { orderId: order.orderId });
+          log("✅ Order updated via Instamojo webhook", {
+            orderId: order.orderId,
+          });
         } else {
           log("⚠️ Instamojo webhook: order not found", { payment_request_id });
         }
@@ -944,7 +1026,10 @@ app.get("/api/payment/post-purchase", async (req, res) => {
     // Backfill stored report if older orders don't have it
     let report = orderDoc.report || null;
     if (!report && Array.isArray(orderDoc.cards) && orderDoc.cards.length > 0) {
-      report = buildStoredReport({ cards: orderDoc.cards, profile: orderDoc.profile });
+      report = buildStoredReport({
+        cards: orderDoc.cards,
+        profile: orderDoc.profile,
+      });
       collection
         .updateOne({ orderId: order }, { $set: { report } })
         .catch(() => {});
@@ -961,7 +1046,10 @@ app.get("/api/payment/post-purchase", async (req, res) => {
       report: report,
     });
   } catch (error) {
-    log("❌ Error validating post-purchase link:", error?.message || String(error));
+    log(
+      "❌ Error validating post-purchase link:",
+      error?.message || String(error)
+    );
     return res.status(500).json({
       success: false,
       error: error?.message || "Failed to validate link",
@@ -1564,7 +1652,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
   const requestId = `veg_${Date.now()}_${Math.random()
     .toString(16)
     .slice(2, 10)}`;
-  
+
   log("🔥 ========== VEGAAH PAYMENT REQUEST START ==========", { requestId });
   log("🔥 Request headers:", {
     requestId,
@@ -1575,7 +1663,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
   try {
     log("🔥 Parsing request body...", { requestId });
     const { amount, email, phone, existingOrderId } = req.body;
-    
+
     log("🔥 Request body received:", {
       requestId,
       amount: amount !== undefined ? String(amount) : "MISSING",
@@ -1596,9 +1684,7 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
 
     if (missing.length) {
       log("❌ Vegaah config missing", { requestId, missing });
-      return res
-        .status(500)
-        .json({ error: "Vegaah not configured", missing });
+      return res.status(500).json({ error: "Vegaah not configured", missing });
     }
 
     log("✅ All Vegaah env vars present", {
@@ -1628,13 +1714,14 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
         hasPhone: Boolean(phone),
         isAmountNaN: Number.isNaN(Number(amount)),
       });
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Invalid request",
         details: {
-          amount: amount === undefined || amount === null ? "missing" : typeof amount,
+          amount:
+            amount === undefined || amount === null ? "missing" : typeof amount,
           email: !email ? "missing" : "present",
           phone: !phone ? "missing" : "present",
-        }
+        },
       });
     }
 
@@ -1647,8 +1734,12 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
 
     // Generate order ID (Vegaah format)
     const vegaahOrderId = `ORD_${Date.now()}`;
-    log("🧾 Vegaah Order ID generated", { requestId, vegaahOrderId, existingOrderId });
-    
+    log("🧾 Vegaah Order ID generated", {
+      requestId,
+      vegaahOrderId,
+      existingOrderId,
+    });
+
     // Link Vegaah payment to existing order if provided (from bypass endpoint)
     if (existingOrderId) {
       try {
@@ -1657,19 +1748,26 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
           const collection = db.collection(COLLECTION_NAME);
           const updateResult = await collection.updateOne(
             { orderId: existingOrderId },
-            { 
-              $set: { 
+            {
+              $set: {
                 vegaahOrderId,
                 paymentMethod: "vegaah",
                 vegaahAmount: Number(amount),
-                vegaahStatus: "pending"
-              } 
+                vegaahStatus: "pending",
+              },
             }
           );
           if (updateResult.matchedCount > 0) {
-            log("✅ Linked Vegaah payment to existing order", { requestId, existingOrderId, vegaahOrderId });
+            log("✅ Linked Vegaah payment to existing order", {
+              requestId,
+              existingOrderId,
+              vegaahOrderId,
+            });
           } else {
-            log("⚠️ Existing order not found, creating new entry", { requestId, existingOrderId });
+            log("⚠️ Existing order not found, creating new entry", {
+              requestId,
+              existingOrderId,
+            });
             await collection.insertOne({
               orderId: existingOrderId,
               vegaahOrderId,
@@ -1683,7 +1781,10 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
           }
         }
       } catch (dbErr) {
-        log("⚠️ Failed to link Vegaah order (continuing anyway):", dbErr.message);
+        log(
+          "⚠️ Failed to link Vegaah order (continuing anyway):",
+          dbErr.message
+        );
       }
     } else {
       // Save new order entry if no existing orderId provided
@@ -1700,10 +1801,16 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
             paymentMethod: "vegaah",
             createdAt: new Date(),
           });
-          log("✅ Vegaah order saved to database", { requestId, vegaahOrderId });
+          log("✅ Vegaah order saved to database", {
+            requestId,
+            vegaahOrderId,
+          });
         }
       } catch (dbErr) {
-        log("⚠️ Failed to save Vegaah order to database (continuing anyway):", dbErr.message);
+        log(
+          "⚠️ Failed to save Vegaah order to database (continuing anyway):",
+          dbErr.message
+        );
       }
     }
 
@@ -1763,16 +1870,12 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
         mobileNumber: String(phone),
         // Vegaah validates billingAddressCountry; missing value can cause "Invalid Country" (e.g. responseCode 619)
         // Default to India as this app charges in INR
-        billingAddressStreet:
-          process.env.VEGAAH_BILLING_STREET || "NA",
-        billingAddressCity:
-          process.env.VEGAAH_BILLING_CITY || "NA",
-        billingAddressState:
-          process.env.VEGAAH_BILLING_STATE || "NA",
+        billingAddressStreet: process.env.VEGAAH_BILLING_STREET || "NA",
+        billingAddressCity: process.env.VEGAAH_BILLING_CITY || "NA",
+        billingAddressState: process.env.VEGAAH_BILLING_STATE || "NA",
         billingAddressPostalCode:
           process.env.VEGAAH_BILLING_POSTAL_CODE || "000000",
-        billingAddressCountry:
-          process.env.VEGAAH_BILLING_COUNTRY || "IN",
+        billingAddressCountry: process.env.VEGAAH_BILLING_COUNTRY || "IN",
       },
       returnUrl: process.env.VEGAAH_RETURN_URL,
     };
@@ -1781,7 +1884,9 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
       requestId,
       terminalId: payload.terminalId ? "***" : "MISSING",
       password: payload.password ? "***" : "MISSING",
-      signature: payload.signature ? payload.signature.slice(0, 10) + "..." : "MISSING",
+      signature: payload.signature
+        ? payload.signature.slice(0, 10) + "..."
+        : "MISSING",
       paymentType: payload.paymentType,
       amount: payload.amount,
       currency: payload.currency,
@@ -1873,7 +1978,9 @@ app.post("/api/payment/vegaah/create", async (req, res) => {
         responseCode: data.responseCode,
         orderDetails: data.orderDetails,
         additionalDetails: data.additionalDetails,
-        message: `Payment failed with response code: ${data.responseCode || "unknown"}`,
+        message: `Payment failed with response code: ${
+          data.responseCode || "unknown"
+        }`,
         requestId,
       });
     }
@@ -2103,12 +2210,14 @@ app.all("/api/payment/vegaah/response", async (req, res) => {
     });
 
     // Extract orderId from Vegaah response
-    const vegaahOrderId = parsed?.orderDetails?.orderId ?? parsed?.orderId ?? null;
+    const vegaahOrderId =
+      parsed?.orderDetails?.orderId ?? parsed?.orderId ?? null;
     log("🔍 Looking for order in database", { vegaahOrderId });
 
     // "Transaction Approved" example uses responseCode "001" in PDF
     const isSuccess =
-      String(result).toUpperCase() === "SUCCESS" || String(responseCode) === "001";
+      String(result).toUpperCase() === "SUCCESS" ||
+      String(responseCode) === "001";
 
     // If payment successful, find order and redirect to post-purchase page
     if (isSuccess && vegaahOrderId) {
@@ -2116,61 +2225,76 @@ app.all("/api/payment/vegaah/response", async (req, res) => {
         const db = await connectDB();
         if (db) {
           const collection = db.collection(COLLECTION_NAME);
-          
+
           // First try to find by vegaahOrderId
           let order = await collection.findOne({ vegaahOrderId });
-          
+
           // If not found, try to find by orderId (in case it was stored differently)
           if (!order) {
             order = await collection.findOne({ orderId: vegaahOrderId });
           }
-          
+
           // If still not found, try to find by email (from parsed response or most recent order)
           if (!order) {
-            const customerEmail = parsed?.customerDetails?.customerEmail ?? parsed?.customerEmail ?? null;
+            const customerEmail =
+              parsed?.customerDetails?.customerEmail ??
+              parsed?.customerEmail ??
+              null;
             if (customerEmail) {
               // Find most recent order with report data for this email
               order = await collection.findOne(
-                { 
+                {
                   email: customerEmail,
                   status: "paid",
-                  cards: { $exists: true, $ne: [] }
+                  cards: { $exists: true, $ne: [] },
                 },
                 { sort: { createdAt: -1 } }
               );
-              log("🔍 Searched by email", { 
+              log("🔍 Searched by email", {
                 customerEmail: customerEmail.slice(0, 3) + "***",
-                found: Boolean(order)
+                found: Boolean(order),
               });
             }
           }
-          
+
           if (order) {
-            log("✅ Order found in database", { 
+            log("✅ Order found in database", {
               orderId: order.orderId || order.vegaahOrderId,
               hasAccessToken: Boolean(order.accessToken),
-              email: order.email ? order.email.slice(0, 3) + "***" : "N/A"
+              email: order.email ? order.email.slice(0, 3) + "***" : "N/A",
             });
-            
+
             // If order has accessToken, redirect to post-purchase page
             if (order.accessToken && order.orderId) {
-              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(order.accessToken)}&order=${encodeURIComponent(order.orderId)}`;
+              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(
+                order.accessToken
+              )}&order=${encodeURIComponent(order.orderId)}`;
               log("✅ Redirecting to post-purchase page", { postPurchaseUrl });
               return res.redirect(postPurchaseUrl);
             }
-            
+
             // If order exists but no accessToken yet, create one
             if (order.orderId && !order.accessToken) {
               const token = crypto.randomBytes(32).toString("hex");
-              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(token)}&order=${encodeURIComponent(order.orderId)}`;
-              
+              const postPurchaseUrl = `${POST_PURCHASE_BASE_URL}/post-purchase?token=${encodeURIComponent(
+                token
+              )}&order=${encodeURIComponent(order.orderId)}`;
+
               // Update order with accessToken
               await collection.updateOne(
                 { _id: order._id },
-                { $set: { accessToken: token, status: "paid", verifiedAt: new Date() } }
+                {
+                  $set: {
+                    accessToken: token,
+                    status: "paid",
+                    verifiedAt: new Date(),
+                  },
+                }
               );
-              
-              log("✅ Created accessToken and redirecting", { postPurchaseUrl });
+
+              log("✅ Created accessToken and redirecting", {
+                postPurchaseUrl,
+              });
               return res.redirect(postPurchaseUrl);
             }
           } else {
@@ -2184,7 +2308,9 @@ app.all("/api/payment/vegaah/response", async (req, res) => {
 
     // Fallback redirects if order not found or payment failed
     if (isSuccess) {
-      log("⚠️ Payment successful but order not found, redirecting to generic success page");
+      log(
+        "⚠️ Payment successful but order not found, redirecting to generic success page"
+      );
       return res.redirect(`${POST_PURCHASE_BASE_URL}/payment-success`);
     } else {
       log("❌ Payment failed, redirecting to failure page");
