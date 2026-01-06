@@ -370,25 +370,78 @@ function App() {
   const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
 
-  // ✅ PayU success: fire Purchase pixel IMMEDIATELY on page load
-  // Fires before any screen state changes or path checks
+  // ✅ PayU success: fire Purchase pixel ONLY on /successfully-paid path with valid pending purchase
+  // STRICT VALIDATION: Only fires if all conditions are met
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     // Never fire Purchase for post-purchase (email link) flow
-    if (postPurchaseLockRef.current) return;
+    if (postPurchaseLockRef.current) {
+      console.log("🔐 Purchase pixel blocked: post-purchase flow");
+      return;
+    }
+
+    // ✅ CRITICAL FIX #1: Only fire on PayU success redirect path
+    const currentPath = window.location.pathname;
+    if (currentPath !== "/successfully-paid") {
+      console.log("🔒 Purchase pixel blocked: not on /successfully-paid path (current:", currentPath, ")");
+      return;
+    }
 
     const PENDING_KEY = "instaStalker_pending_purchase";
+    const PENDING_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes expiration
 
     let pending = null;
     try {
-      pending = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "null");
-    } catch {
-      pending = null;
+      const pendingRaw = window.localStorage.getItem(PENDING_KEY);
+      if (!pendingRaw) {
+        console.log("🔒 Purchase pixel blocked: no pending purchase found");
+        return;
+      }
+      pending = JSON.parse(pendingRaw);
+    } catch (err) {
+      console.warn("⚠️ Failed to parse pending purchase:", err);
+      // Clean up corrupted data
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+      return;
     }
 
     // Prevent false Purchase events if user opens the URL directly
-    if (!pending || typeof pending !== "object") return;
+    if (!pending || typeof pending !== "object") {
+      console.log("🔒 Purchase pixel blocked: invalid pending purchase data");
+      return;
+    }
+
+    // ✅ CRITICAL FIX #2: Check expiration (prevent stale purchases from firing)
+    const pendingTimestamp = typeof pending.ts === "number" ? pending.ts : null;
+    if (!pendingTimestamp) {
+      console.warn("⚠️ Pending purchase missing timestamp, cleaning up");
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+      return;
+    }
+
+    const now = Date.now();
+    const ageMs = now - pendingTimestamp;
+    if (ageMs > PENDING_EXPIRY_MS) {
+      console.warn("⚠️ Pending purchase expired (age:", Math.round(ageMs / 1000 / 60), "minutes), cleaning up");
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+      return;
+    }
+
+    // ✅ CRITICAL FIX #3: Additional validation - ensure pending purchase is recent (within 30 min)
+    if (ageMs < 0) {
+      console.warn("⚠️ Pending purchase has future timestamp, cleaning up");
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+      return;
+    }
 
     const purchaseId =
       typeof pending.id === "string" && pending.id.trim()
@@ -400,12 +453,17 @@ function App() {
     try {
       if (window.localStorage.getItem(firedKey)) {
         console.log("⚠️ Purchase pixel already fired for:", purchaseId);
+        // Clean up pending purchase even if already fired
+        window.localStorage.removeItem(PENDING_KEY);
         return;
       }
+      // Mark as fired BEFORE firing pixel (prevents race conditions)
       window.localStorage.setItem(firedKey, String(Date.now()));
+      // Remove pending purchase immediately to prevent re-firing
       window.localStorage.removeItem(PENDING_KEY);
-    } catch {
-      // ignore storage errors
+    } catch (err) {
+      console.error("❌ Storage error:", err);
+      return;
     }
 
     const value =
@@ -417,7 +475,7 @@ function App() {
         ? pending.currency.trim()
         : "INR";
 
-    // ✅ FIRE PURCHASE PIXEL (NOT PageView) - fires immediately on page load
+    // ✅ FIRE PURCHASE PIXEL - Only fires after all validations pass
     trackMetaPixel("Purchase", {
       value,
       currency,
@@ -428,8 +486,47 @@ function App() {
       content_ids: [purchaseId], // Product identifier
     });
 
-    console.log("✅ Purchase pixel fired immediately on page load for PayU:", purchaseId);
-  }, []); // ✅ Empty deps - fires immediately on mount, before screen changes
+    console.log("✅ Purchase pixel fired for PayU:", purchaseId, "(age:", Math.round(ageMs / 1000), "seconds)");
+  }, []); // Empty deps - fires immediately on mount, before screen changes
+
+  // ✅ Cleanup stale pending purchases on app load (prevents false fires)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const PENDING_KEY = "instaStalker_pending_purchase";
+    const PENDING_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+    try {
+      const pendingRaw = window.localStorage.getItem(PENDING_KEY);
+      if (!pendingRaw) return;
+
+      const pending = JSON.parse(pendingRaw);
+      if (!pending || typeof pending !== "object") {
+        // Clean up invalid data
+        window.localStorage.removeItem(PENDING_KEY);
+        return;
+      }
+
+      const pendingTimestamp = typeof pending.ts === "number" ? pending.ts : null;
+      if (!pendingTimestamp) {
+        // Clean up data without timestamp
+        window.localStorage.removeItem(PENDING_KEY);
+        return;
+      }
+
+      const ageMs = Date.now() - pendingTimestamp;
+      if (ageMs > PENDING_EXPIRY_MS || ageMs < 0) {
+        // Clean up expired or invalid timestamps
+        console.log("🧹 Cleaning up expired pending purchase (age:", Math.round(ageMs / 1000 / 60), "minutes)");
+        window.localStorage.removeItem(PENDING_KEY);
+      }
+    } catch (err) {
+      // Clean up corrupted data
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+    }
+  }, []); // Run once on mount
 
   // Detect PayU redirect path on initial load and show success screen
   useEffect(() => {
@@ -451,15 +548,20 @@ function App() {
   }, [profile]);
 
   // Post-purchase entry point - always show success screen
+  // ✅ CRITICAL FIX #6: Set postPurchaseLockRef FIRST before any other effects run
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     // Be tolerant of trailing slashes (e.g. /post-purchase/)
     if (window.location.pathname.startsWith("/post-purchase")) {
-      postPurchaseLockRef.current = true; // 🔐 LOCK
+      postPurchaseLockRef.current = true; // 🔐 LOCK - Set immediately to prevent race condition
+      // Clean up any pending purchase to prevent false fires
+      try {
+        window.localStorage.removeItem("instaStalker_pending_purchase");
+      } catch {}
       setScreen(SCREEN.PAYMENT_SUCCESS);
     }
-  }, []);
+  }, []); // Run FIRST to prevent race conditions
 
   // Clean URL after showing success screen (remove query params)
   useEffect(() => {
