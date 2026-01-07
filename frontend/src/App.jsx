@@ -580,15 +580,15 @@ function App() {
               ) {
                 purchaseEventFiredRef.current.add(orderIdForPixel);
                 const eventId = `purchase_${orderIdForPixel}`;
-                trackMetaPixel("Purchase", {
-                  content_name: "Instagram Stalker Report",
-                  content_category: "Payment",
-                  value: amountFromApi,
-                  currency: currencyFromApi,
-                  order_id: orderIdForPixel,
-                  event_id: eventId,
-                  quantity: quantityFromApi,
-                });
+                // trackMetaPixel("Purchase", {
+                //   content_name: "Instagram Stalker Report",
+                //   content_category: "Payment",
+                //   value: amountFromApi,
+                //   currency: currencyFromApi,
+                //   order_id: orderIdForPixel,
+                //   event_id: eventId,
+                //   quantity: quantityFromApi,
+                // });
                 rememberPurchasePixel();
               }
 
@@ -3184,7 +3184,7 @@ function App() {
             purchaseEventFiredRef.current.add(orderId);
 
             // Fire Purchase event only after successful payment verification
-            trackMetaPixel("Purchase", {
+            // trackMetaPixel("Purchase", {
               content_name: "Instagram Stalker Report",
               content_category: "Payment",
               value: 99,

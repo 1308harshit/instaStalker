@@ -1,3 +1,4 @@
+import sendMetaPurchasePixel from "./sendMetaPurchasePixel.js";
 // Load environment variables FIRST (before any other imports that need them)
 // Use dynamic import to load dotenv synchronously
 // Always load .env file, regardless of NODE_ENV (needed for PM2 production)
@@ -940,18 +941,132 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
 });
 
 // Instamojo webhook handler
+// app.post("/api/payment/instamojo/webhook", async (req, res) => {
+//   try {
+//     const data = req.body || {};
+//     const macProvided = data.mac;
+
+//     if (!macProvided) {
+//       log("❌ Instamojo webhook missing MAC");
+//       return res.status(400).send("Missing MAC");
+//     }
+
+//     if (!validateInstamojoWebhook(data, macProvided, INSTAMOJO_SALT)) {
+//       log("❌ Instamojo webhook MAC invalid");
+//       return res.status(400).send("Invalid MAC");
+//     }
+
+//     const {
+//       payment_id,
+//       payment_request_id,
+//       payment_status,
+//       amount,
+//       buyer,
+//       buyer_name,
+//       buyer_phone,
+//     } = data;
+
+//     log("✅ Instamojo webhook validated", {
+//       payment_id,
+//       payment_request_id,
+//       payment_status,
+//       amount,
+//     });
+
+//     if (
+//       String(payment_status).toLowerCase() === "credit" &&
+//       payment_request_id
+//     ) {
+//       const db = await connectDB();
+//       if (db) {
+//         const collection = db.collection(COLLECTION_NAME);
+//         const order = await collection.findOne({
+//           instamojoPaymentRequestId: payment_request_id,
+//         });
+
+//         if (order) {
+//           const token =
+//             order.accessToken || crypto.randomBytes(32).toString("hex");
+//           const normalizedBase = String(
+//             POST_PURCHASE_BASE_URL || BASE_URL
+//           ).replace(/\/+$/, "");
+//           const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
+//             token
+//           )}&order=${encodeURIComponent(order.orderId)}`;
+
+//           await collection.updateOne(
+//             { orderId: order.orderId },
+//             {
+//               $set: {
+//                 status: "paid",
+//                 verifiedAt: new Date(),
+//                 instamojoPaymentId: payment_id,
+//                 instamojoPaymentStatus: payment_status,
+//                 accessToken: token,
+//                 postPurchaseLink,
+//                 email: order.email || buyer || null,
+//                 fullName: order.fullName || buyer_name || "",
+//                 phoneNumber:
+//                   order.phoneNumber || buyer_phone || order.phone || "",
+//               },
+//             }
+//           );
+
+//           // Fire Meta Conversions API for Purchase
+//           try {
+//             await sendMetaPurchasePixel({
+//               pixelId: "1752528628790870",
+//               accessToken: process.env.META_ACCESS_TOKEN,
+//               eventId: order.orderId,
+//               value: order.amount || 99,
+//               currency: order.currency || "INR",
+//               orderId: order.orderId,
+//               quantity: order.quantity || 1,
+//               sourceUrl: POST_PURCHASE_BASE_URL,
+//               userData: {}, // Optionally use hashed email/phone
+//             });
+//           } catch (e) {
+//             log("⚠️ Meta Pixel backend fire failed:", e.message);
+//           }
+
+//           log("✅ Order updated via Instamojo webhook", {
+//             orderId: order.orderId,
+//           });
+//         } else {
+//           log("⚠️ Instamojo webhook: order not found", { payment_request_id });
+//         }
+//       }
+//     }
+
+//     return res.status(200).send("OK");
+//   } catch (err) {
+//     log("❌ Instamojo webhook handler error:", err?.message || String(err));
+//     return res.status(500).send("Error");
+//   }
+// });
+
+
+
+
 app.post("/api/payment/instamojo/webhook", async (req, res) => {
   try {
-    const data = req.body || {};
-    const macProvided = data.mac;
+    const payload = req.body;
+    const macProvided = payload.mac;
 
+    // 1️⃣ Validate MAC (VERY IMPORTANT)
     if (!macProvided) {
       log("❌ Instamojo webhook missing MAC");
-      return res.status(400).send("Missing MAC");
+      return res.status(400).send("Invalid webhook");
     }
 
-    if (!validateInstamojoWebhook(data, macProvided, INSTAMOJO_SALT)) {
-      log("❌ Instamojo webhook MAC invalid");
+    const isValidMac = validateInstamojoWebhook(
+      payload,
+      macProvided,
+      INSTAMOJO_SALT
+    );
+
+    if (!isValidMac) {
+      log("❌ Instamojo webhook MAC validation failed");
       return res.status(400).send("Invalid MAC");
     }
 
@@ -959,71 +1074,89 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
       payment_id,
       payment_request_id,
       payment_status,
-      amount,
       buyer,
-      buyer_name,
-      buyer_phone,
-    } = data;
-
-    log("✅ Instamojo webhook validated", {
-      payment_id,
-      payment_request_id,
-      payment_status,
       amount,
+      currency,
+    } = payload;
+
+    log("🔔 Instamojo webhook received", {
+      payment_request_id,
+      payment_id,
+      payment_status,
     });
 
-    if (
-      String(payment_status).toLowerCase() === "credit" &&
-      payment_request_id
-    ) {
-      const db = await connectDB();
-      if (db) {
-        const collection = db.collection(COLLECTION_NAME);
-        const order = await collection.findOne({
-          instamojoPaymentRequestId: payment_request_id,
-        });
-
-        if (order) {
-          const token =
-            order.accessToken || crypto.randomBytes(32).toString("hex");
-          const normalizedBase = String(
-            POST_PURCHASE_BASE_URL || BASE_URL
-          ).replace(/\/+$/, "");
-          const postPurchaseLink = `${normalizedBase}/post-purchase?token=${encodeURIComponent(
-            token
-          )}&order=${encodeURIComponent(order.orderId)}`;
-
-          await collection.updateOne(
-            { orderId: order.orderId },
-            {
-              $set: {
-                status: "paid",
-                verifiedAt: new Date(),
-                instamojoPaymentId: payment_id,
-                instamojoPaymentStatus: payment_status,
-                accessToken: token,
-                postPurchaseLink,
-                email: order.email || buyer || null,
-                fullName: order.fullName || buyer_name || "",
-                phoneNumber:
-                  order.phoneNumber || buyer_phone || order.phone || "",
-              },
-            }
-          );
-
-          log("✅ Order updated via Instamojo webhook", {
-            orderId: order.orderId,
-          });
-        } else {
-          log("⚠️ Instamojo webhook: order not found", { payment_request_id });
-        }
-      }
+    // 2️⃣ We ONLY care about successful payments
+    if (payment_status !== "Credit") {
+      log("⚠️ Ignoring non-credit webhook", { payment_status });
+      return res.status(200).send("Ignored");
     }
 
+    const db = await connectDB();
+    if (!db) {
+      log("❌ DB not available in webhook");
+      return res.status(500).send("DB unavailable");
+    }
+
+    const collection = db.collection(COLLECTION_NAME);
+
+    // 3️⃣ Find order
+    const order = await collection.findOne({
+      instamojoPaymentRequestId: payment_request_id,
+    });
+
+    if (!order) {
+      log("❌ Order not found for webhook", { payment_request_id });
+      return res.status(404).send("Order not found");
+    }
+
+    // 4️⃣ Idempotency guard (CRITICAL)
+    if (order.purchasePixelFired === true) {
+      log("⚠️ Purchase pixel already fired, skipping", {
+        orderId: order.orderId,
+      });
+      return res.status(200).send("Already processed");
+    }
+
+    // 5️⃣ Fire Meta Purchase (SERVER SIDE)
+    try {
+      await sendMetaPurchasePixel({
+        orderId: order.orderId,
+        value: Number(order.amount || amount || 99),
+        currency: order.currency || currency || "INR",
+        email: order.email,
+        phone: order.phoneNumber,
+      });
+
+      log("✅ Meta Purchase fired (server)", {
+        orderId: order.orderId,
+      });
+    } catch (pixelErr) {
+      log("❌ Meta Purchase failed", pixelErr.message);
+      // DO NOT return — payment is still valid
+    }
+
+    // 6️⃣ Update order as PAID + mark pixel fired
+    await collection.updateOne(
+      { orderId: order.orderId },
+      {
+        $set: {
+          status: "paid",
+          instamojoStatus: "credit",
+          instamojoPaymentId: payment_id,
+          purchasePixelFired: true,
+          purchasePixelFiredAt: new Date(),
+          paidAt: new Date(),
+        },
+      }
+    );
+
+    log("✅ Order marked as PAID", { orderId: order.orderId });
+
+    // 7️⃣ Always return 200 to Instamojo
     return res.status(200).send("OK");
   } catch (err) {
-    log("❌ Instamojo webhook handler error:", err?.message || String(err));
-    return res.status(500).send("Error");
+    log("❌ Instamojo webhook error", err?.message || String(err));
+    return res.status(500).send("Webhook error");
   }
 });
 
