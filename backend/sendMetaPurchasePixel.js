@@ -59,4 +59,4 @@ async function sendMetaPurchasePixel({
   return response.json();
 }
 
-module.exports = sendMetaPurchasePixel;
+export default sendMetaPurchasePixel;
