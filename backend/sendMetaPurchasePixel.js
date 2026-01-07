@@ -1,5 +1,4 @@
-const fetch = require("node-fetch");
-const crypto = require("crypto");
+import crypto from "crypto";
 
 const META_PIXEL_ID = "1752528628790870";
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
@@ -8,7 +7,7 @@ const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
 const sha256 = (value) =>
   crypto.createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 
-async function sendMetaPurchasePixel({
+export default async function sendMetaPurchasePixel({
   eventId,
   value,
   currency = "INR",
@@ -58,5 +57,3 @@ async function sendMetaPurchasePixel({
 
   return response.json();
 }
-
-export default sendMetaPurchasePixel;
