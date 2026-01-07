@@ -22,6 +22,35 @@ const API_BASE = (() => {
 })();
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
+// Helpers for Meta Pixel + purchase dedupe
+const PURCHASE_PIXEL_STORAGE_KEY = "purchase-pixel-fired";
+
+const loadStoredPurchases = () => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(PURCHASE_PIXEL_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter(Boolean));
+  } catch (err) {
+    console.warn("⚠️ Failed to load stored purchase pixels", err);
+    return new Set();
+  }
+};
+
+const persistStoredPurchases = (set) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      PURCHASE_PIXEL_STORAGE_KEY,
+      JSON.stringify(Array.from(set))
+    );
+  } catch (err) {
+    console.warn("⚠️ Failed to persist purchase pixels", err);
+  }
+};
+
 // Meta Pixel Helper Function
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
@@ -348,7 +377,7 @@ function App() {
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
   const checkoutEventFiredRef = useRef(false);
-  const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
+  const purchaseEventFiredRef = useRef(loadStoredPurchases()); // Track fired order IDs to prevent duplicates across session + persisted
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
@@ -412,6 +441,9 @@ function App() {
       return null;
     }
   };
+
+  const rememberPurchasePixel = () =>
+    persistStoredPurchases(purchaseEventFiredRef.current);
 
   // Track viewport width for responsive layout (stack sections on mobile)
   useEffect(() => {
@@ -533,18 +565,31 @@ function App() {
               // Fire purchase pixel once when arriving via post-purchase link
               const orderIdForPixel =
                 validateData.orderId || order || validateData.payment_request_id;
+              const quantityFromApi = Number(validateData.quantity || 1) || 1;
+              const amountFromApi =
+                Number(validateData.amount ?? 99 * quantityFromApi) ||
+                99 * quantityFromApi;
+              const currencyFromApi =
+                validateData.currency ||
+                validateData.order_currency ||
+                "INR";
+
               if (
                 orderIdForPixel &&
                 !purchaseEventFiredRef.current.has(orderIdForPixel)
               ) {
                 purchaseEventFiredRef.current.add(orderIdForPixel);
+                const eventId = `purchase_${orderIdForPixel}`;
                 trackMetaPixel("Purchase", {
                   content_name: "Instagram Stalker Report",
                   content_category: "Payment",
-                  value: 99,
-                  currency: "INR",
+                  value: amountFromApi,
+                  currency: currencyFromApi,
                   order_id: orderIdForPixel,
+                  event_id: eventId,
+                  quantity: quantityFromApi,
                 });
+                rememberPurchasePixel();
               }
 
               // Show payment success screen

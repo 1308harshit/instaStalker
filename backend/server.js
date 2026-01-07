@@ -526,6 +526,10 @@ app.post("/api/payment/bypass", async (req, res) => {
       createdAt: new Date(),
       verifiedAt: new Date(),
       emailSent: false,
+      // Store price details for downstream analytics (e.g., purchase pixel)
+      amount: 99,
+      currency: "INR",
+      quantity: 1,
     });
 
     // Send email after data is stored (small delay helps consistency)
@@ -1069,6 +1073,21 @@ app.get("/api/payment/post-purchase", async (req, res) => {
         .catch(() => {});
     }
 
+    // Provide pricing details (with safe fallbacks) for accurate pixel tracking
+    const quantity = Number(orderDoc.quantity || 1) || 1;
+    const amount =
+      Number(
+        orderDoc.amount ||
+          orderDoc.order_amount ||
+          orderDoc.instamojoAmount ||
+          (orderDoc.amountDetails && orderDoc.amountDetails.amount)
+      ) || 99;
+    const currency =
+      orderDoc.currency ||
+      orderDoc.order_currency ||
+      orderDoc.instamojoCurrency ||
+      "INR";
+
     return res.json({
       success: true,
       orderId: orderDoc.orderId,
@@ -1078,6 +1097,9 @@ app.get("/api/payment/post-purchase", async (req, res) => {
       cards: orderDoc.cards || [],
       profile: orderDoc.profile || null,
       report: report,
+      amount,
+      currency,
+      quantity,
     });
   } catch (error) {
     log(
