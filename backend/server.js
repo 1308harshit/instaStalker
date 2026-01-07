@@ -1,4 +1,4 @@
-import sendMetaPurchasePixel from "./sendMetaPurchasePixel.js";
+// import sendMetaPurchasePixel from "./sendMetaPurchasePixel.js";
 // Load environment variables FIRST (before any other imports that need them)
 // Use dynamic import to load dotenv synchronously
 // Always load .env file, regardless of NODE_ENV (needed for PM2 production)
@@ -1118,22 +1118,22 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
     }
 
     // 5️⃣ Fire Meta Purchase (SERVER SIDE)
-    try {
-      await sendMetaPurchasePixel({
-        orderId: order.orderId,
-        value: Number(order.amount || amount || 99),
-        currency: order.currency || currency || "INR",
-        email: order.email,
-        phone: order.phoneNumber,
-      });
+    // try {
+    //   await sendMetaPurchasePixel({
+    //     orderId: order.orderId,
+    //     value: Number(order.amount || amount || 99),
+    //     currency: order.currency || currency || "INR",
+    //     email: order.email,
+    //     phone: order.phoneNumber,
+    //   });
 
-      log("✅ Meta Purchase fired (server)", {
-        orderId: order.orderId,
-      });
-    } catch (pixelErr) {
-      log("❌ Meta Purchase failed", pixelErr.message);
-      // DO NOT return — payment is still valid
-    }
+    //   log("✅ Meta Purchase fired (server)", {
+    //     orderId: order.orderId,
+    //   });
+    // } catch (pixelErr) {
+    //   log("❌ Meta Purchase failed", pixelErr.message);
+    //   // DO NOT return — payment is still valid
+    // }
 
     // 6️⃣ Update order as PAID + mark pixel fired
     await collection.updateOne(

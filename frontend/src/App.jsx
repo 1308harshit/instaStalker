@@ -574,22 +574,47 @@ function App() {
                 validateData.order_currency ||
                 "INR";
 
+              // if (
+              //   orderIdForPixel &&
+              //   !purchaseEventFiredRef.current.has(orderIdForPixel)
+              // ) {
+              //   purchaseEventFiredRef.current.add(orderIdForPixel);
+              //   const eventId = `purchase_${orderIdForPixel}`;
+              //   // trackMetaPixel("Purchase", {
+              //   //   content_name: "Instagram Stalker Report",
+              //   //   content_category: "Payment",
+              //   //   value: amountFromApi,
+              //   //   currency: currencyFromApi,
+              //   //   order_id: orderIdForPixel,
+              //   //   event_id: eventId,
+              //   //   quantity: quantityFromApi,
+              //   // });
+              //   rememberPurchasePixel();
+              // }
+
               if (
                 orderIdForPixel &&
                 !purchaseEventFiredRef.current.has(orderIdForPixel)
               ) {
                 purchaseEventFiredRef.current.add(orderIdForPixel);
                 const eventId = `purchase_${orderIdForPixel}`;
-                // trackMetaPixel("Purchase", {
-                //   content_name: "Instagram Stalker Report",
-                //   content_category: "Payment",
-                //   value: amountFromApi,
-                //   currency: currencyFromApi,
-                //   order_id: orderIdForPixel,
-                //   event_id: eventId,
-                //   quantity: quantityFromApi,
-                // });
+              
+                // CASHFREE-STYLE PURCHASE FIRE
+                trackMetaPixel("Purchase", {
+                  content_name: "Instagram Stalker Report",
+                  content_category: "Payment",
+                  value: 99,
+                  currency: "INR",
+                  // order_id: orderIdForPixel,   
+                });
+              
                 rememberPurchasePixel();
+              
+                console.log(" Meta Purchase fired (frontend)", {
+                  orderId: orderIdForPixel,
+                  value: amountFromApi,
+                  currency: currencyFromApi,
+                });
               }
 
               // Show payment success screen
