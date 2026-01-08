@@ -1913,42 +1913,49 @@ function App() {
       <div className="landing-footer">
         <div className="landing-links">
           <a
-            href="https://sensorahub.com/contact.html"
+            href="https://samjhona.com/aboutus.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            About Us
+          </a>
+          <a
+            href="https://samjhona.com/contact.html"
             target="_blank"
             rel="noreferrer"
           >
             Contact Us
           </a>
           <a
-            href="https://sensorahub.com/terms-and-conditions.html"
+            href="https://samjhona.com/terms-and-conditions.html"
             target="_blank"
             rel="noreferrer"
           >
             Terms &amp; Conditions
           </a>
           <a
-            href="https://sensorahub.com/privacy-policy.html"
+            href="https://samjhona.com/privacy-policy.html"
             target="_blank"
             rel="noreferrer"
           >
             Privacy Policy
           </a>
           <a
-            href="https://sensorahub.com/shipping.html"
+            href="https://samjhona.com/shipping.html"
             target="_blank"
             rel="noreferrer"
           >
             Shipping Policy
           </a>
           <a
-            href="https://sensorahub.com/refund-and-cancellation.html"
+            href="https://samjhona.com/refund-and-cancellation.html"
             target="_blank"
             rel="noreferrer"
           >
             Refund &amp; Cancellation
           </a>
           <a
-            href="https://sensorahub.com/return.html"
+            href="https://samjhona.com/return.html"
             target="_blank"
             rel="noreferrer"
           >
