@@ -648,21 +648,15 @@ function App() {
                 purchaseEventFiredRef.current.add(orderIdForPixel);
                 const eventId = `purchase_${orderIdForPixel}`;
               
-                // CASHFREE-STYLE PURCHASE FIRE
+                // Minimal Purchase event - only cs_est parameter
                 trackMetaPixel("Purchase", {
-                  content_name: "Instagram Stalker Report",
-                  content_category: "Payment",
-                  value: 99,
-                  currency: "INR",
-                  // order_id: orderIdForPixel,   
+                  cs_est: true,
                 });
               
                 rememberPurchasePixel();
               
-                console.log(" Meta Purchase fired (frontend)", {
+                console.log("✅ Meta Purchase fired (frontend)", {
                   orderId: orderIdForPixel,
-                  value: amountFromApi,
-                  currency: currencyFromApi,
                 });
               }
 
