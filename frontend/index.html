@@ -13,7 +13,8 @@
     })(window,document,'script','dataLayer','GTM-PMRFSQJ9');</script> -->
     <!-- End Google Tag Manager -->
     
-    <!-- Facebook Pixel Code -->
+    <!-- Facebook Pixel Code - DISABLED (we only fire Purchase on post-purchase, loaded lazily in App.jsx) -->
+    <!--
     <script>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -24,16 +25,18 @@
     s.parentNode.insertBefore(t,s)}(window,document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '710646615238495');
-    // PageView is now handled in React App.jsx to fire only on landing page once
     </script>
+    -->
     <!-- End Facebook Pixel Code -->
   </head>
   <body>
-    <!-- Facebook Pixel Noscript -->
+    <!-- Facebook Pixel Noscript - DISABLED -->
+    <!--
     <noscript>
     <img height="1" width="1" style="display:none"
     src="https://www.facebook.com/tr?id=710646615238495&ev=PageView&noscript=1"/>
     </noscript>
+    -->
     <!-- End Facebook Pixel Noscript -->
     <!-- Google Tag Manager (noscript) - COMMENTED OUT -->
     <!-- <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PMRFSQJ9"
