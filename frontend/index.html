@@ -24,6 +24,8 @@
     s.parentNode.insertBefore(t,s)}(window,document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '710646615238495');
+    // CRITICAL: Disable ALL automatic events (SubscribedButtonClick, auto PageView, etc.)
+    fbq('set', 'autoConfig', false, '710646615238495');
     // PageView is handled in React App.jsx to fire only once on landing page
     </script>
     <!-- End Facebook Pixel Code -->

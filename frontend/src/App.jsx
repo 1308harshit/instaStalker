@@ -24,6 +24,8 @@ const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
 // Helpers for Meta Pixel + purchase dedupe
 const PURCHASE_PIXEL_STORAGE_KEY = "purchase-pixel-fired";
+const PAGEVIEW_FIRED_KEY = "pageview-fired";
+const INITIATECHECKOUT_FIRED_KEY = "initiatecheckout-fired";
 
 const loadStoredPurchases = () => {
   if (typeof window === "undefined") return new Set();
@@ -48,6 +50,46 @@ const persistStoredPurchases = (set) => {
     );
   } catch (err) {
     console.warn("⚠️ Failed to persist purchase pixels", err);
+  }
+};
+
+// Check if PageView has been fired (persisted across sessions)
+const hasPageViewFired = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(PAGEVIEW_FIRED_KEY) === "true";
+  } catch (err) {
+    return false;
+  }
+};
+
+// Mark PageView as fired
+const markPageViewFired = () => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PAGEVIEW_FIRED_KEY, "true");
+  } catch (err) {
+    console.warn("⚠️ Failed to persist PageView fired state", err);
+  }
+};
+
+// Check if InitiateCheckout has been fired (persisted across sessions)
+const hasInitiateCheckoutFired = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(INITIATECHECKOUT_FIRED_KEY) === "true";
+  } catch (err) {
+    return false;
+  }
+};
+
+// Mark InitiateCheckout as fired
+const markInitiateCheckoutFired = () => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(INITIATECHECKOUT_FIRED_KEY, "true");
+  } catch (err) {
+    console.warn("⚠️ Failed to persist InitiateCheckout fired state", err);
   }
 };
 
@@ -377,8 +419,8 @@ function App() {
   const carouselLoopingRef = useRef(false);
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
-  const checkoutEventFiredRef = useRef(false);
-  const pageViewFiredRef = useRef(false); // Track if PageView has been fired (only on landing page)
+  const checkoutEventFiredRef = useRef(hasInitiateCheckoutFired()); // Track if InitiateCheckout has been fired (persisted)
+  const pageViewFiredRef = useRef(hasPageViewFired()); // Track if PageView has been fired (persisted)
   const purchaseEventFiredRef = useRef(loadStoredPurchases()); // Track fired order IDs to prevent duplicates across session + persisted
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -458,11 +500,12 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Track PageView only on landing page and once
+  // Track PageView only on landing page and once (persisted across sessions)
   useEffect(() => {
-    // Only fire PageView on landing page and only once per session
+    // Only fire PageView on landing page and only once EVER (persisted in localStorage)
     if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
       pageViewFiredRef.current = true;
+      markPageViewFired(); // Persist to localStorage immediately
       trackMetaPixel("PageView", {
         content_name: screen,
         content_category: "Screen Navigation",
@@ -3037,9 +3080,10 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      // Track InitiateCheckout only once per session
+      // Track InitiateCheckout only once EVER (persisted in localStorage)
       if (!checkoutEventFiredRef.current) {
         checkoutEventFiredRef.current = true;
+        markInitiateCheckoutFired(); // Persist to localStorage immediately
 
         const amount = 99 * quantity;
 
