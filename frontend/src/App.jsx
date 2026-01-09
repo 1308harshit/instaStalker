@@ -377,6 +377,7 @@ function App() {
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
   const checkoutEventFiredRef = useRef(false);
+  const pageViewFiredRef = useRef(false); // Track if PageView has been fired (only on landing page)
   const purchaseEventFiredRef = useRef(loadStoredPurchases()); // Track fired order IDs to prevent duplicates across session + persisted
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -456,12 +457,16 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Track PageView on screen changes
+  // Track PageView only on landing page and once
   useEffect(() => {
-    trackMetaPixel("PageView", {
-      content_name: screen,
-      content_category: "Screen Navigation",
-    });
+    // Only fire PageView on landing page and only once per session
+    if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
+      pageViewFiredRef.current = true;
+      trackMetaPixel("PageView", {
+        content_name: screen,
+        content_category: "Screen Navigation",
+      });
+    }
   }, [screen]);
 
   // Restore last successful scrape when returning from payment
@@ -3065,7 +3070,7 @@ function App() {
       //   console.warn('⚠️ dataLayer not available. GTM may not be loaded yet.');
       // }
     }
-  }, [screen, quantity]);
+  }, [screen]); // Removed 'quantity' from dependencies to ensure InitiateCheckout fires only once
 
   // Countdown timer effect for payment and full report pages
   useEffect(() => {
@@ -3205,17 +3210,19 @@ function App() {
           console.log(" Payment verification response:", verifyData);
 
           if (verifyData.is_successful) {
-            // Mark this order as processed
-            purchaseEventFiredRef.current.add(orderId);
-
             // Fire Purchase event only after successful payment verification
-            // trackMetaPixel("Purchase", {
-              content_name: "Instagram Stalker Report",
-              content_category: "Payment",
-              value: 99,
-              currency: "INR",
-              order_id: orderId,
-            });
+            // Check to ensure we haven't already fired for this order
+            if (!purchaseEventFiredRef.current.has(orderId)) {
+              purchaseEventFiredRef.current.add(orderId);
+              trackMetaPixel("Purchase", {
+                content_name: "Instagram Stalker Report",
+                content_category: "Payment",
+                value: 99,
+                currency: "INR",
+                order_id: orderId,
+              });
+              rememberPurchasePixel();
+            }
 
             // Save last successful run for localStorage
             saveLastRun({
