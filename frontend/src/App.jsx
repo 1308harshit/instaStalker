@@ -52,40 +52,23 @@ const persistStoredPurchases = (set) => {
 };
 
 // Meta Pixel Helper Function
-// NOTE: Per requirement, ALL Meta pixel events are disabled except Purchase.
-// Also, we lazily initialize the pixel only when Purchase is fired (post-purchase).
+// Only allows: PageView, InitiateCheckout, and Purchase events
 const META_PIXEL_ID = "710646615238495";
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
 
-  // Disable all events except Purchase
-  if (eventName !== "Purchase") return;
+  // Only allow PageView, InitiateCheckout, and Purchase
+  const allowedEvents = ["PageView", "InitiateCheckout", "Purchase"];
+  if (!allowedEvents.includes(eventName)) {
+    console.warn(`⚠️ Meta Pixel: Event "${eventName}" is disabled. Only ${allowedEvents.join(", ")} are allowed.`);
+    return;
+  }
 
   try {
-    // Lazily bootstrap Meta Pixel only when needed
+    // Ensure fbq is available (should be loaded from index.html)
     if (!window.fbq) {
-      !(function (f, b, e, v, n, t, s) {
-        if (f.fbq) return;
-        n = f.fbq = function () {
-          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-        };
-        if (!f._fbq) f._fbq = n;
-        n.push = n;
-        n.loaded = !0;
-        n.version = "2.0";
-        n.queue = [];
-        t = b.createElement(e);
-        t.async = !0;
-        t.src = v;
-        s = b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t, s);
-      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
-    }
-
-    // Ensure init runs only once per page-load
-    if (!window.__metaPixelInited) {
-      window.fbq("init", META_PIXEL_ID);
-      window.__metaPixelInited = true;
+      console.warn(`⚠️ Meta Pixel: fbq not available for ${eventName}`);
+      return;
     }
 
     window.fbq("track", eventName, eventData);
@@ -475,17 +458,17 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Meta Pixel disabled: PageView
-  // useEffect(() => {
-  //   // Only fire PageView on landing page and only once per session
-  //   if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
-  //     pageViewFiredRef.current = true;
-  //     trackMetaPixel("PageView", {
-  //       content_name: screen,
-  //       content_category: "Screen Navigation",
-  //     });
-  //   }
-  // }, [screen]);
+  // Track PageView only on landing page and once
+  useEffect(() => {
+    // Only fire PageView on landing page and only once per session
+    if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
+      pageViewFiredRef.current = true;
+      trackMetaPixel("PageView", {
+        content_name: screen,
+        content_category: "Screen Navigation",
+      });
+    }
+  }, [screen]);
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
@@ -3049,22 +3032,22 @@ function App() {
     );
   };
 
-  // Scroll to top when navigating to payment page (Meta Pixel disabled: InitiateCheckout)
+  // Scroll to top when navigating to payment page + Track InitiateCheckout
   useEffect(() => {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      // Meta Pixel disabled: InitiateCheckout
-      // if (window.fbq && !checkoutEventFiredRef.current) {
-      //   checkoutEventFiredRef.current = true;
-      //
-      //   const amount = 99 * quantity;
-      //
-      //   trackMetaPixel("InitiateCheckout", {
-      //     value: amount,
-      //     currency: "INR",
-      //   });
-      // }
+      // Track InitiateCheckout only once per session
+      if (!checkoutEventFiredRef.current) {
+        checkoutEventFiredRef.current = true;
+
+        const amount = 99 * quantity;
+
+        trackMetaPixel("InitiateCheckout", {
+          value: amount,
+          currency: "INR",
+        });
+      }
 
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
       // const amount = 99 * quantity;

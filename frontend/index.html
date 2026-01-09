@@ -13,8 +13,7 @@
     })(window,document,'script','dataLayer','GTM-PMRFSQJ9');</script> -->
     <!-- End Google Tag Manager -->
     
-    <!-- Facebook Pixel Code - DISABLED (we only fire Purchase on post-purchase, loaded lazily in App.jsx) -->
-    <!--
+    <!-- Facebook Pixel Code -->
     <script>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -25,8 +24,8 @@
     s.parentNode.insertBefore(t,s)}(window,document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '710646615238495');
+    // PageView is handled in React App.jsx to fire only once on landing page
     </script>
-    -->
     <!-- End Facebook Pixel Code -->
   </head>
   <body>
