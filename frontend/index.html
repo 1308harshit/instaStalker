@@ -24,16 +24,20 @@
     s.parentNode.insertBefore(t,s)}(window,document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '1752528628790870');
-    fbq('track', 'PageView');
+    // CRITICAL: Disable ALL automatic events (SubscribedButtonClick, auto PageView, etc.)
+    fbq('set', 'autoConfig', false, '1752528628790870');
+    // PageView is handled in React App.jsx to fire only once on landing page
     </script>
     <!-- End Facebook Pixel Code -->
   </head>
   <body>
-    <!-- Facebook Pixel Noscript -->
+    <!-- Facebook Pixel Noscript - DISABLED -->
+    <!--
     <noscript>
     <img height="1" width="1" style="display:none"
     src="https://www.facebook.com/tr?id=1752528628790870&ev=PageView&noscript=1"/>
     </noscript>
+    -->
     <!-- End Facebook Pixel Noscript -->
     <!-- Google Tag Manager (noscript) - COMMENTED OUT -->
     <!-- <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PMRFSQJ9"

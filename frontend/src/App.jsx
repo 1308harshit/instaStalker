@@ -23,35 +23,102 @@ const API_BASE = (() => {
 })();
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
+// Helpers for Meta Pixel + purchase dedupe
+const PURCHASE_PIXEL_STORAGE_KEY = "purchase-pixel-fired";
+const PAGEVIEW_FIRED_KEY = "pageview-fired";
+const INITIATECHECKOUT_FIRED_KEY = "initiatecheckout-fired";
+
+const loadStoredPurchases = () => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(PURCHASE_PIXEL_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter(Boolean));
+  } catch (err) {
+    console.warn("⚠️ Failed to load stored purchase pixels", err);
+    return new Set();
+  }
+};
+
+const persistStoredPurchases = (set) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      PURCHASE_PIXEL_STORAGE_KEY,
+      JSON.stringify(Array.from(set))
+    );
+  } catch (err) {
+    console.warn("⚠️ Failed to persist purchase pixels", err);
+  }
+};
+
+// Check if PageView has been fired (persisted across sessions)
+const hasPageViewFired = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(PAGEVIEW_FIRED_KEY) === "true";
+  } catch (err) {
+    return false;
+  }
+};
+
+// Mark PageView as fired
+const markPageViewFired = () => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PAGEVIEW_FIRED_KEY, "true");
+  } catch (err) {
+    console.warn("⚠️ Failed to persist PageView fired state", err);
+  }
+};
+
+// Check if InitiateCheckout has been fired (persisted across sessions)
+const hasInitiateCheckoutFired = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(INITIATECHECKOUT_FIRED_KEY) === "true";
+  } catch (err) {
+    return false;
+  }
+};
+
+// Mark InitiateCheckout as fired
+const markInitiateCheckoutFired = () => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(INITIATECHECKOUT_FIRED_KEY, "true");
+  } catch (err) {
+    console.warn("⚠️ Failed to persist InitiateCheckout fired state", err);
+  }
+};
+
 // Meta Pixel Helper Function
+// Only allows: PageView, InitiateCheckout, and Purchase events
+const META_PIXEL_ID = "1752528628790870";
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
 
-  // Wait for fbq to be available (with retry logic)
-  const tryTrack = (attempts = 0) => {
-    if (window.fbq && typeof window.fbq === "function") {
-      try {
-        // Use trackSingle for Purchase events with event_id to ensure proper deduplication
-        if (eventName === "Purchase" && eventData.event_id) {
-          window.fbq("trackSingle", "1752528628790870", eventName, eventData);
-        } else {
-          window.fbq("track", eventName, eventData);
-        }
-        console.log(`✅ Meta Pixel: ${eventName} tracked`, eventData);
-      } catch (err) {
-        console.error(`❌ Meta Pixel tracking error for ${eventName}:`, err);
-      }
-    } else if (attempts < 10) {
-      // Retry after a short delay if fbq not yet loaded
-      setTimeout(() => tryTrack(attempts + 1), 100);
-    } else {
-      console.warn(
-        `⚠️ Meta Pixel: fbq not available after retries for ${eventName}`
-      );
-    }
-  };
+  // Only allow PageView, InitiateCheckout, and Purchase
+  const allowedEvents = ["PageView", "InitiateCheckout", "Purchase"];
+  if (!allowedEvents.includes(eventName)) {
+    console.warn(`⚠️ Meta Pixel: Event "${eventName}" is disabled. Only ${allowedEvents.join(", ")} are allowed.`);
+    return;
+  }
 
-  tryTrack();
+  try {
+    // Ensure fbq is available (should be loaded from index.html)
+    if (!window.fbq) {
+      console.warn(`⚠️ Meta Pixel: fbq not available for ${eventName}`);
+      return;
+    }
+
+    window.fbq("track", eventName, eventData);
+    console.log(`✅ Meta Pixel: ${eventName} tracked`, eventData);
+  } catch (err) {
+    console.error(`❌ Meta Pixel tracking error for ${eventName}:`, err);
+  }
 };
 
 const SCREEN = {
@@ -347,8 +414,9 @@ function App() {
   const carouselLoopingRef = useRef(false);
   const storiesCarouselLoopingRef = useRef(false);
   const paymentSuccessCarouselResetRef = useRef(false);
-  const checkoutEventFiredRef = useRef(false);
-  const purchaseEventFiredRef = useRef(new Set()); // Track fired order IDs to prevent duplicates
+  const checkoutEventFiredRef = useRef(hasInitiateCheckoutFired()); // Track if InitiateCheckout has been fired (persisted)
+  const pageViewFiredRef = useRef(hasPageViewFired()); // Track if PageView has been fired (persisted)
+  const purchaseEventFiredRef = useRef(loadStoredPurchases()); // Track fired order IDs to prevent duplicates across session + persisted
   // Keep latest values available for effects with [] deps (e.g. payment return flow)
   const cardsRef = useRef([]);
   const profileRef = useRef(INITIAL_PROFILE);
@@ -476,15 +544,14 @@ function App() {
         : "INR";
 
     // ✅ FIRE PURCHASE PIXEL - Only fires after all validations pass
+    // Minimal Purchase event - only cs_est parameter
     trackMetaPixel("Purchase", {
-      value,
-      currency,
-      content_name: "Instagram Stalker Report",
-      content_category: "Digital Product",
-      event_id: purchaseId, // Required for deduplication (uses trackSingle)
-      order_id: purchaseId, // Helps with conversion matching
-      content_ids: [purchaseId], // Product identifier
+      cs_est: true,
     });
+    
+    // Mark purchase as fired in our Set for consistency
+    purchaseEventFiredRef.current.add(purchaseId);
+    persistStoredPurchases(purchaseEventFiredRef.current);
 
     console.log("✅ Purchase pixel fired for PayU:", purchaseId, "(age:", Math.round(ageMs / 1000), "seconds)");
   }, []); // Empty deps - fires immediately on mount, before screen changes
@@ -690,12 +757,20 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Track PageView on screen changes
+  const rememberPurchasePixel = () =>
+    persistStoredPurchases(purchaseEventFiredRef.current);
+
+  // Track PageView only on landing page and once (persisted across sessions)
   useEffect(() => {
-    trackMetaPixel("PageView", {
-      content_name: screen,
-      content_category: "Screen Navigation",
-    });
+    // Only fire PageView on landing page and only once EVER (persisted in localStorage)
+    if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
+      pageViewFiredRef.current = true;
+      markPageViewFired(); // Persist to localStorage immediately
+      trackMetaPixel("PageView", {
+        content_name: screen,
+        content_category: "Screen Navigation",
+      });
+    }
   }, [screen]);
 
   // Restore last successful scrape when returning from payment
@@ -851,6 +926,29 @@ function App() {
                 if (!cancelled) {
                   setUsernameInput(validateData.username.replace("@", ""));
                 }
+              }
+
+              // Fire purchase pixel once when arriving via post-purchase link
+              const orderIdForPixel =
+                validateData.orderId || order || validateData.payment_request_id;
+              
+              if (
+                orderIdForPixel &&
+                !purchaseEventFiredRef.current.has(orderIdForPixel)
+              ) {
+                purchaseEventFiredRef.current.add(orderIdForPixel);
+                const eventId = `purchase_${orderIdForPixel}`;
+              
+                // Minimal Purchase event - only cs_est parameter
+                trackMetaPixel("Purchase", {
+                  cs_est: true,
+                });
+              
+                rememberPurchasePixel();
+              
+                console.log("✅ Meta Purchase fired (frontend)", {
+                  orderId: orderIdForPixel,
+                });
               }
 
               // Show payment success screen
@@ -1016,11 +1114,11 @@ function App() {
         Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
     ) {
       setScreen(SCREEN.PROFILE);
-      // Track ViewContent when profile is shown
-      trackMetaPixel("ViewContent", {
-        content_name: "Profile Confirmation",
-        content_category: "Profile",
-      });
+      // Track ViewContent when profile is shown - DISABLED
+      // trackMetaPixel("ViewContent", {
+      //   content_name: "Profile Confirmation",
+      //   content_category: "Profile",
+      // });
       setCanAdvanceFromProfile(false);
       clearTimeout(profileHoldTimerRef.current);
       profileHoldTimerRef.current = setTimeout(() => {
@@ -1186,11 +1284,11 @@ function App() {
     ) {
       setIsInQueue(false); // No longer in queue, results are ready
       setScreen(SCREEN.PREVIEW);
-      // Track ViewContent when preview is shown
-      trackMetaPixel("ViewContent", {
-        content_name: "Stalker Preview",
-        content_category: "Preview",
-      });
+      // Track ViewContent when preview is shown - DISABLED
+      // trackMetaPixel("ViewContent", {
+      //   content_name: "Stalker Preview",
+      //   content_category: "Preview",
+      // });
     }
   }, [
     analysis,
@@ -1584,11 +1682,11 @@ function App() {
     // Set analyzing screen immediately - don't wait for fetchCards
     setScreen(SCREEN.ANALYZING);
 
-    // Track Lead event when username is submitted
-    trackMetaPixel("Lead", {
-      content_name: "Username Submitted",
-      content_category: "User Input",
-    });
+    // Track Lead event when username is submitted - DISABLED
+    // trackMetaPixel("Lead", {
+    //   content_name: "Username Submitted",
+    //   content_category: "User Input",
+    // });
 
     // Fetch cards in background - don't block UI transitions
     fetchCards(formatted).catch((err) => {
@@ -1738,11 +1836,11 @@ function App() {
     setScreen(SCREEN.FULL_REPORT);
     setPaymentCountdown(900); // Reset to 15 minutes when entering full report
 
-    // Track ViewContent when full report is viewed
-    trackMetaPixel("ViewContent", {
-      content_name: "Full Report",
-      content_category: "Report",
-    });
+    // Track ViewContent when full report is viewed - DISABLED
+    // trackMetaPixel("ViewContent", {
+    //   content_name: "Full Report",
+    //   content_category: "Report",
+    // });
 
     try {
       const url = buildSnapshotUrl(fullReportStep.htmlPath);
@@ -3297,8 +3395,10 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      if (window.fbq && !checkoutEventFiredRef.current) {
+      // Track InitiateCheckout only once EVER (persisted in localStorage)
+      if (!checkoutEventFiredRef.current) {
         checkoutEventFiredRef.current = true;
+        markInitiateCheckoutFired(); // Persist to localStorage immediately
 
         const amount = 99 * quantity;
 
@@ -3588,14 +3688,14 @@ function App() {
     e.preventDefault();
     setPaymentLoading(true);
 
-    // Track AddPaymentInfo when payment form is submitted
-    const amount = 99 * quantity;
-    trackMetaPixel("AddPaymentInfo", {
-      content_name: "Payment Form Submitted",
-      content_category: "Payment",
-      value: amount,
-      currency: "INR",
-    });
+    // Track AddPaymentInfo when payment form is submitted - DISABLED
+    // const amount = 99 * quantity;
+    // trackMetaPixel("AddPaymentInfo", {
+    //   content_name: "Payment Form Submitted",
+    //   content_category: "Payment",
+    //   value: amount,
+    //   currency: "INR",
+    // });
 
     try {
       // Save user data to MongoDB
