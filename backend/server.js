@@ -325,6 +325,10 @@ const BASE_URL = process.env.BASE_URL || "https://sensorahub.com";
 // Force sensorahub.com domain for post-purchase links
 const POST_PURCHASE_BASE_URL = "https://sensorahub.com";
 
+// Email sending is temporarily disabled (per request).
+// Keep all email-related code in place, but do not send outbound emails.
+const EMAIL_SENDING_DISABLED = true;
+
 // Instamojo configuration
 const INSTAMOJO_API_KEY = process.env.INSTAMOJO_API_KEY || "";
 const INSTAMOJO_AUTH_TOKEN = process.env.INSTAMOJO_AUTH_TOKEN || "";
@@ -349,6 +353,10 @@ if (RESEND_API_KEY) {
 
 // Helper function to send post-purchase email using Resend
 async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
+  if (EMAIL_SENDING_DISABLED) {
+    // Intentionally do nothing (no outbound email).
+    return null;
+  }
   if (!resend || !RESEND_API_KEY) {
     log("⚠️ Resend not configured - skipping email send");
     log(`   RESEND_API_KEY: ${RESEND_API_KEY ? "SET" : "NOT SET"}`);
@@ -533,17 +541,20 @@ app.post("/api/payment/bypass", async (req, res) => {
       quantity: 1,
     });
 
-    // Send email after data is stored (small delay helps consistency)
-    setTimeout(() => {
-      sendPostPurchaseEmail(email, fullName || "there", postPurchaseLink)
-        .then(() =>
-          collection.updateOne(
-            { orderId },
-            { $set: { emailSent: true, emailSentAt: new Date() } }
-          )
-        )
-        .catch(() => {});
-    }, 2000);
+    // Email sending temporarily disabled (per request)
+    // if (!EMAIL_SENDING_DISABLED) {
+    //   // Send email after data is stored (small delay helps consistency)
+    //   setTimeout(() => {
+    //     sendPostPurchaseEmail(email, fullName || "there", postPurchaseLink)
+    //       .then(() =>
+    //         collection.updateOne(
+    //           { orderId },
+    //           { $set: { emailSent: true, emailSentAt: new Date() } }
+    //         )
+    //       )
+    //       .catch(() => {});
+    //   }, 2000);
+    // }
 
     return res.json({ success: true, orderId });
   } catch (err) {
@@ -877,9 +888,10 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
         token
       )}&order=${encodeURIComponent(order.orderId)}`;
 
+      // Email sending temporarily disabled (per request)
       // Send email with Instamojo longurl instead of post-purchase link
       // Ensure we have a working link and data is stored before sending
-      if (order.email && order.instamojoLongUrl) {
+      if (!EMAIL_SENDING_DISABLED && order.email && order.instamojoLongUrl) {
         // Double-check the order has all required data before sending email
         const updatedOrder = await collection.findOne({
           orderId: order.orderId,
@@ -1616,7 +1628,7 @@ app.post("/api/payment/verify", async (req, res) => {
 
             // Get order details for email
             const order = await collection.findOne({ orderId: order_id });
-            if (order && order.email) {
+            if (order && order.email && !EMAIL_SENDING_DISABLED) {
               // Send email (non-blocking)
               sendPostPurchaseEmail(
                 order.email,
