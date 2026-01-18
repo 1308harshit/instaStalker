@@ -10,16 +10,19 @@ import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
 
-const API_URL =
-  import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
+// Production API URL - hardcoded to sensorahub.com (NEVER localhost)
+const API_URL = import.meta.env.VITE_API_URL?.trim() || "https://sensorahub.com/api/stalkers";
+
 const API_BASE = (() => {
   try {
     const url = new URL(API_URL);
     return `${url.protocol}//${url.host}`;
   } catch (err) {
-    return "http://localhost:3000";
+    // Fallback to production domain
+    return "https://sensorahub.com";
   }
 })();
+
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
 // Helpers for Meta Pixel + purchase dedupe
