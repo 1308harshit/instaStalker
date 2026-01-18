@@ -11,16 +11,19 @@ import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
 
-const API_URL =
-  import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000/api/stalkers";
+// Production API URL - hardcoded to samjhona.com (NEVER localhost)
+const API_URL = import.meta.env.VITE_API_URL?.trim() || "https://samjhona.com/api/stalkers";
+
 const API_BASE = (() => {
   try {
     const url = new URL(API_URL);
     return `${url.protocol}//${url.host}`;
   } catch (err) {
-    return "http://localhost:3000";
+    // Fallback to production domain
+    return "https://samjhona.com";
   }
 })();
+
 const SNAPSHOT_BASE = import.meta.env.VITE_SNAPSHOT_BASE?.trim() || API_BASE;
 
 // Helpers for Meta Pixel + purchase dedupe
@@ -3245,37 +3248,6 @@ function App() {
               </div>
               <p>See who took SCREENSHOTS of your profile and stories</p>
             </div>
-          </div>
-
-          {/* Marketing Section */}
-          <div className="full-report-marketing">
-            <p className="full-report-more">And much more...</p>
-            <p className="full-report-system">
-              Our reporting system is the only truly functional system on the
-              market.
-            </p>
-            <p className="full-report-emotional">
-              We could charge what you've already spent on dates, clothes and
-              dinners that never led to anything.
-            </p>
-            <p className="full-report-disappointment">
-              Where you only got disappointed.
-            </p>
-
-            <div className="full-report-divider"></div>
-
-            <p className="full-report-not-going">
-              But we're not going to do that,
-            </p>
-            <h2 className="full-report-goal">We want you to have a goal</h2>
-            <p className="full-report-direction">
-              We're here giving you the only thing you're still missing,
-              direction.
-            </p>
-            <p className="full-report-certainty">
-              It's not worth humiliating yourself for someone who doesn't want
-              you, <strong>this is your chance to have certainty.</strong>
-            </p>
           </div>
 
           {/* Urgency Section */}
