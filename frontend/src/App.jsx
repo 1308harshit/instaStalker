@@ -2926,37 +2926,6 @@ function App() {
             </div>
           </div>
 
-          {/* Marketing Section */}
-          <div className="full-report-marketing">
-            <p className="full-report-more">And much more...</p>
-            <p className="full-report-system">
-              Our reporting system is the only truly functional system on the
-              market.
-            </p>
-            <p className="full-report-emotional">
-              We could charge what you've already spent on dates, clothes and
-              dinners that never led to anything.
-            </p>
-            <p className="full-report-disappointment">
-              Where you only got disappointed.
-            </p>
-
-            <div className="full-report-divider"></div>
-
-            <p className="full-report-not-going">
-              But we're not going to do that,
-            </p>
-            <h2 className="full-report-goal">We want you to have a goal</h2>
-            <p className="full-report-direction">
-              We're here giving you the only thing you're still missing,
-              direction.
-            </p>
-            <p className="full-report-certainty">
-              It's not worth humiliating yourself for someone who doesn't want
-              you, <strong>this is your chance to have certainty.</strong>
-            </p>
-          </div>
-
           {/* Urgency Section */}
           <div className="full-report-urgency">
             <div className="full-report-countdown">
