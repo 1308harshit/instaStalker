@@ -15,7 +15,7 @@ export async function scrape(username, onStep = null) {
   log(`🚀 Starting scrape for username: ${username}`);
   
   // Use shared browser pool - creates new page from existing browser instance
-  const page = await browserPool.createPage();
+  let page = await browserPool.createPage();
   log('✅ New page created from shared browser');
 
   const runId = `${Date.now()}`;
@@ -71,36 +71,11 @@ export async function scrape(username, onStep = null) {
     log('✅ Page loaded');
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Find and click "Get Your Free Report" button on landing
-    log('🔍 Looking for "Get Your Free Report" button on landing...');
-    const landingButtonSelector = "button:has-text('Get Your Free Report'), button:has-text('Reveal Stalkers')";
-    
+    // Step 2: Wait for username input field on landing and enter username
+    log(`⌨️  Waiting for username input field on landing...`);
     try {
-      // Wait for button with shorter timeout
-      await page.waitForSelector(landingButtonSelector, { 
-        timeout: 10000,
-        state: 'visible' 
-      });
-      log('✅ Landing CTA button found ("Get Your Free Report" / "Reveal Stalkers")');
-      
-      // Click immediately
-      await page.click(landingButtonSelector);
-      log('✅ Clicked landing CTA button');
-    } catch (err) {
-      log('❌ Error finding landing "Get Your Free Report" button:', err.message);
-      const buttons = await page.$$eval('button', buttons => 
-        buttons.map(b => b.textContent?.trim()).filter(Boolean)
-      );
-      log('📋 Available buttons on page:', buttons);
-      throw new Error(`Could not find landing "Get Your Free Report" button. Available buttons: ${buttons.join(', ')}`);
-    }
-
-    // Step 3: Wait for input field and enter username
-    log(`⌨️  Waiting for username input field...`);
-    try {
-      // Wait for input field to appear (after clicking Reveal Stalkers)
       const input = await page.waitForSelector('input[type="text"], input', { 
-        timeout: 8000,
+        timeout: 10000,
         state: 'visible' 
       });
       log('✅ Username input found');
@@ -109,8 +84,12 @@ export async function scrape(username, onStep = null) {
       await input.fill(username);
       log(`✅ Username "${username}" entered`);
       await captureStep("username-entry", { username });
+      
+      // Wait 1 second for button to become enabled
+      log('⏳ Waiting 1 second for button to become enabled...');
+      await page.waitForTimeout(1000);
     } catch (err) {
-      log('❌ Error finding username input:', err.message);
+      log('❌ Error finding username input on landing:', err.message);
       const inputs = await page.$$eval('input, textarea', inputs => 
         inputs.map(inp => ({
           type: inp.type,
@@ -120,20 +99,32 @@ export async function scrape(username, onStep = null) {
           className: inp.className
         }))
       );
-      log('📋 Available inputs on page:', inputs);
-      throw new Error(`Could not find username input. Available inputs: ${JSON.stringify(inputs)}`);
+      log('📋 Available inputs on landing page:', inputs);
+      throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
     }
 
-    // Step 4: Click "Get Your Free Report" button
+    // Step 3: Click "Get Your Free Report" button (enabled after username)
     log('🔍 Looking for "Get Your Free Report" button...');
     try {
+      // Wait for button to be visible and enabled
       const continueBtn = await page.waitForSelector(elements.continueBtn, { 
         timeout: 8000,
         state: 'visible' 
       });
       log('✅ "Get Your Free Report" button found');
       
-      // Click immediately
+      // Wait for button to be enabled (not disabled)
+      await page.waitForFunction(
+        (selector) => {
+          const btn = document.querySelector(selector);
+          return btn && !btn.disabled;
+        },
+        elements.continueBtn,
+        { timeout: 5000 }
+      );
+      log('✅ Button is now enabled');
+      
+      // Click the button
       await continueBtn.click();
       log('✅ Clicked "Get Your Free Report" button');
       
