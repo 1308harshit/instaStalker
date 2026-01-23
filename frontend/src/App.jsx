@@ -2028,6 +2028,13 @@ function App() {
             Contact Us
           </a>
           <a
+            href="https://samjhona.com/pricing.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Pricing
+          </a>
+          <a
             href="https://samjhona.com/terms-and-conditions.html"
             target="_blank"
             rel="noreferrer"
@@ -2049,11 +2056,18 @@ function App() {
             Shipping Policy
           </a>
           <a
-            href="https://samjhona.com/refund-and-cancellation.html"
+            href="https://samjhona.com/refund.html"
             target="_blank"
             rel="noreferrer"
           >
-            Refund &amp; Cancellation
+            Refund Policy
+          </a>
+          <a
+            href="https://samjhona.com/cancellation.html"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Cancellation Policy
           </a>
           <a
             href="https://samjhona.com/return.html"
