@@ -106,23 +106,11 @@ export async function scrape(username, onStep = null) {
     // Step 3: Click "Get Your Free Report" button (enabled after username)
     log('🔍 Looking for "Get Your Free Report" button...');
     try {
-      // Wait for button to be visible and enabled
       const continueBtn = await page.waitForSelector(elements.continueBtn, { 
         timeout: 8000,
         state: 'visible' 
       });
       log('✅ "Get Your Free Report" button found');
-      
-      // Wait for button to be enabled (not disabled)
-      await page.waitForFunction(
-        (selector) => {
-          const btn = document.querySelector(selector);
-          return btn && !btn.disabled;
-        },
-        elements.continueBtn,
-        { timeout: 5000 }
-      );
-      log('✅ Button is now enabled');
       
       // Click the button
       await continueBtn.click();
