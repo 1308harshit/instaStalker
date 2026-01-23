@@ -2069,13 +2069,13 @@ function App() {
           >
             Cancellation Policy
           </a>
-          <a
+          {/* <a
             href="https://samjhona.com/return.html"
             target="_blank"
             rel="noreferrer"
           >
             Return Policy
-          </a>
+          </a> */}
         </div>
       </div>
     </section>
