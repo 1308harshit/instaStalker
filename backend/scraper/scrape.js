@@ -71,28 +71,28 @@ export async function scrape(username, onStep = null) {
     log('✅ Page loaded');
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Find and click "Reveal Stalkers" button immediately (no start button exists)
-    log('🔍 Looking for "Reveal Stalkers" button...');
-    const revealButtonSelector = "button:has-text('Reveal Stalkers')";
+    // Step 2: Find and click "Get Your Free Report" button on landing
+    log('🔍 Looking for "Get Your Free Report" button on landing...');
+    const landingButtonSelector = "button:has-text('Get Your Free Report'), button:has-text('Reveal Stalkers')";
     
     try {
       // Wait for button with shorter timeout
-      await page.waitForSelector(revealButtonSelector, { 
+      await page.waitForSelector(landingButtonSelector, { 
         timeout: 10000,
         state: 'visible' 
       });
-      log('✅ "Reveal Stalkers" button found');
+      log('✅ Landing CTA button found ("Get Your Free Report" / "Reveal Stalkers")');
       
       // Click immediately
-      await page.click(revealButtonSelector);
-      log('✅ Clicked "Reveal Stalkers" button');
+      await page.click(landingButtonSelector);
+      log('✅ Clicked landing CTA button');
     } catch (err) {
-      log('❌ Error finding "Reveal Stalkers" button:', err.message);
+      log('❌ Error finding landing "Get Your Free Report" button:', err.message);
       const buttons = await page.$$eval('button', buttons => 
         buttons.map(b => b.textContent?.trim()).filter(Boolean)
       );
       log('📋 Available buttons on page:', buttons);
-      throw new Error(`Could not find "Reveal Stalkers" button. Available buttons: ${buttons.join(', ')}`);
+      throw new Error(`Could not find landing "Get Your Free Report" button. Available buttons: ${buttons.join(', ')}`);
     }
 
     // Step 3: Wait for input field and enter username
