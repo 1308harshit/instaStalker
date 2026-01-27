@@ -441,7 +441,7 @@ function validateInstamojoWebhook(data, macProvided, salt) {
   return macCalculated === macProvided;
 }
 
-// Save user data to MongoDB
+/* Save user data to MongoDB - COMMENTED OUT (bypass handles order + report; save-user was redundant for post-purchase summary)
 app.post("/api/payment/save-user", async (req, res) => {
   try {
     const { email, fullName, phoneNumber } = req.body;
@@ -489,6 +489,7 @@ app.post("/api/payment/save-user", async (req, res) => {
     });
   }
 });
+*/
 
 // Create stored post-purchase link + email (gateway-agnostic)
 // This preserves the "Place order → email → /post-purchase summary" flow even if payment gateway changes.
@@ -588,7 +589,16 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
         .json({ error: "Instamojo not configured", missing: missingConfig });
     }
 
-    const { amount, email, phone, buyer_name, existingOrderId } = req.body;
+    const {
+      amount,
+      email,
+      phone,
+      buyer_name,
+      existingOrderId,
+      cards,
+      profile,
+      username: usernameBody,
+    } = req.body;
 
     log("🔥 Instamojo request body received:", {
       requestId,
@@ -778,6 +788,46 @@ app.post("/api/payment/instamojo/create", async (req, res) => {
       }
     } catch (dbErr) {
       log("⚠️ Failed to save instamojoPaymentRequestId:", dbErr.message);
+    }
+
+    // Update order with report (cards, profile) in background — don't block redirect
+    const cardsToStore = Array.isArray(cards) ? cards : [];
+    const profileToStore =
+      profile && typeof profile === "object" ? profile : null;
+    const usernameToStore = String(usernameBody || "").trim() || null;
+    const fullNameToStore = String(buyer_name || "").trim() || null;
+    if (cardsToStore.length > 0) {
+      const orderIdBg = orderId;
+      setImmediate(() => {
+        (async () => {
+          try {
+            const db = await connectDB();
+            if (!db) return;
+            const report = buildStoredReport({
+              cards: cardsToStore,
+              profile: profileToStore,
+            });
+            await db.collection(COLLECTION_NAME).updateOne(
+              { orderId: orderIdBg },
+              {
+                $set: {
+                  cards: cardsToStore,
+                  profile: profileToStore,
+                  report,
+                  ...(usernameToStore && { username: usernameToStore }),
+                  ...(fullNameToStore && { fullName: fullNameToStore }),
+                },
+              }
+            );
+            log("✅ Background report update done", { orderId: orderIdBg });
+          } catch (e) {
+            log(
+              "❌ Background report update failed",
+              e?.message || String(e)
+            );
+          }
+        })();
+      });
     }
 
     log("✅ ========== INSTAMOJO PAYMENT REQUEST SUCCESS ==========", {

@@ -3312,8 +3312,6 @@ function App() {
     e.preventDefault();
     setPaymentLoading(true);
 
-    let existingOrderId;
-
     // Meta Pixel disabled: AddPaymentInfo
     // const amount = 99 * quantity;
     // trackMetaPixel("AddPaymentInfo", {
@@ -3324,7 +3322,7 @@ function App() {
     // });
 
     try {
-      // Save user data to MongoDB
+      /* Save user data to MongoDB — COMMENTED OUT (redirect + report save in parallel via instamojo/create)
       const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3342,80 +3340,54 @@ function App() {
           .catch(() => ({ error: "Unknown error" }));
         throw new Error(errorData.error || "Failed to save user data");
       }
+      */
 
-      // Preserve existing flow: store report + email link before redirecting to gateway
-      // (does not change the gateway request/redirect logic)
-      try {
-        const restored = loadLastRun();
-        const cardsToSend =
-          (Array.isArray(cards) && cards.length > 0
-            ? cards
-            : Array.isArray(restored?.cards) && restored.cards.length > 0
-            ? restored.cards
-            : []);
+      // Build report payload for instamojo/create (saved in background; redirect doesn't wait)
+      const restored = loadLastRun();
+      const cardsToSend =
+        (Array.isArray(cards) && cards.length > 0
+          ? cards
+          : Array.isArray(restored?.cards) && restored.cards.length > 0
+          ? restored.cards
+          : []);
 
-        const usernameFromInput = (usernameInput || "").trim();
-        const usernameToSend = usernameFromInput
-          ? usernameFromInput.startsWith("@")
-            ? usernameFromInput
-            : `@${usernameFromInput}`
-          : (profile?.username || "").trim();
+      const usernameFromInput = (usernameInput || "").trim();
+      const usernameToSend = usernameFromInput
+        ? usernameFromInput.startsWith("@")
+          ? usernameFromInput
+          : `@${usernameFromInput}`
+        : (profile?.username || "").trim();
 
-        const hero = analysis?.hero || {};
-        const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
-        const parseNum = (v) => {
-          const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
-          return Number.isFinite(n) ? n : null;
-        };
-        const pickStat = (labelIncludes) => {
-          const item = heroStats.find((s) =>
-            String(s?.label || "")
-              .toLowerCase()
-              .includes(labelIncludes)
-          );
-          return item ? parseNum(item.value) : null;
-        };
+      const hero = analysis?.hero || {};
+      const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
+      const parseNum = (v) => {
+        const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
+        return Number.isFinite(n) ? n : null;
+      };
+      const pickStat = (labelIncludes) => {
+        const item = heroStats.find((s) =>
+          String(s?.label || "")
+            .toLowerCase()
+            .includes(labelIncludes)
+        );
+        return item ? parseNum(item.value) : null;
+      };
 
-        const profileToSend = {
-          ...(profile || {}),
-          name: hero.name || profile?.name,
-          username: usernameToSend,
-          posts: pickStat("post") ?? profile?.posts ?? null,
-          followers: pickStat("follower") ?? profile?.followers ?? null,
-          following: pickStat("following") ?? profile?.following ?? null,
-          avatar: hero.profileImage || profile?.avatar,
-        };
+      const profileToSend = {
+        ...(profile || {}),
+        name: hero.name || profile?.name,
+        username: usernameToSend,
+        posts: pickStat("post") ?? profile?.posts ?? null,
+        followers: pickStat("follower") ?? profile?.followers ?? null,
+        following: pickStat("following") ?? profile?.following ?? null,
+        avatar: hero.profileImage || profile?.avatar,
+      };
 
-        if (!paymentForm.email || !usernameToSend || cardsToSend.length === 0) {
-          throw new Error("Report not ready for email link yet.");
-        }
-
-        const bypassRes = await fetch("/api/payment/bypass", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: paymentForm.email,
-            fullName: paymentForm.fullName,
-            username: usernameToSend,
-            cards: cardsToSend,
-            profile: profileToSend,
-          }),
-        });
-        if (bypassRes.ok) {
-          const bypassData = await bypassRes.json().catch(() => ({}));
-          if (bypassData?.orderId) {
-            existingOrderId = bypassData.orderId;
-          }
-        } else {
-          // Still allow payment to proceed, but log so we can debug
-          const text = await bypassRes.text().catch(() => "");
-          console.warn("⚠️ bypass failed:", text);
-        }
-      } catch (bypassErr) {
-        console.warn("⚠️ bypass exception:", bypassErr?.message || bypassErr);
+      if (!paymentForm.email || !usernameToSend || cardsToSend.length === 0) {
+        throw new Error("Report not ready for email link yet.");
       }
 
-      // Create Instamojo payment
+      // Create Instamojo payment + redirect immediately; report saved in background
       const res = await fetch("/api/payment/instamojo/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3424,7 +3396,9 @@ function App() {
           email: paymentForm.email,
           phone: paymentForm.phoneNumber,
           buyer_name: paymentForm.fullName,
-          existingOrderId,
+          cards: cardsToSend,
+          profile: profileToSend,
+          username: usernameToSend,
         }),
       });
 
