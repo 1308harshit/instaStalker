@@ -71,36 +71,11 @@ export async function scrape(username, onStep = null) {
     log('✅ Page loaded');
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Find and click "Reveal Stalkers" button immediately (no start button exists)
-    log('🔍 Looking for "Reveal Stalkers" button...');
-    const revealButtonSelector = "button:has-text('Reveal Stalkers')";
-    
+    // Step 2: Wait for username input field on landing and enter username
+    log(`⌨️  Waiting for username input field on landing...`);
     try {
-      // Wait for button with shorter timeout
-      await page.waitForSelector(revealButtonSelector, { 
-        timeout: 10000,
-        state: 'visible' 
-      });
-      log('✅ "Reveal Stalkers" button found');
-      
-      // Click immediately
-      await page.click(revealButtonSelector);
-      log('✅ Clicked "Reveal Stalkers" button');
-    } catch (err) {
-      log('❌ Error finding "Reveal Stalkers" button:', err.message);
-      const buttons = await page.$$eval('button', buttons => 
-        buttons.map(b => b.textContent?.trim()).filter(Boolean)
-      );
-      log('📋 Available buttons on page:', buttons);
-      throw new Error(`Could not find "Reveal Stalkers" button. Available buttons: ${buttons.join(', ')}`);
-    }
-
-    // Step 3: Wait for input field and enter username
-    log(`⌨️  Waiting for username input field...`);
-    try {
-      // Wait for input field to appear (after clicking Reveal Stalkers)
       const input = await page.waitForSelector('input[type="text"], input', { 
-        timeout: 8000,
+        timeout: 10000,
         state: 'visible' 
       });
       log('✅ Username input found');
@@ -109,8 +84,12 @@ export async function scrape(username, onStep = null) {
       await input.fill(username);
       log(`✅ Username "${username}" entered`);
       await captureStep("username-entry", { username });
+      
+      // Wait 1 second for button to become enabled
+      log('⏳ Waiting 1 second for button to become enabled...');
+      await page.waitForTimeout(1000);
     } catch (err) {
-      log('❌ Error finding username input:', err.message);
+      log('❌ Error finding username input on landing:', err.message);
       const inputs = await page.$$eval('input, textarea', inputs => 
         inputs.map(inp => ({
           type: inp.type,
@@ -120,35 +99,84 @@ export async function scrape(username, onStep = null) {
           className: inp.className
         }))
       );
-      log('📋 Available inputs on page:', inputs);
-      throw new Error(`Could not find username input. Available inputs: ${JSON.stringify(inputs)}`);
+      log('📋 Available inputs on landing page:', inputs);
+      throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
     }
 
-    // Step 4: Click first "Continue" button
-    log('🔍 Looking for Continue button...');
+    // Step 3: Click "Get Your Free Report" button (enabled after username)
+    log('🔍 Looking for "Get Your Free Report" button...');
     try {
       const continueBtn = await page.waitForSelector(elements.continueBtn, { 
         timeout: 8000,
         state: 'visible' 
       });
-      log('✅ Continue button found');
+      log('✅ "Get Your Free Report" button found');
       
-      // Click immediately - no wait
+      // Click the button
       await continueBtn.click();
-      log('✅ Clicked Continue button');
+      log('✅ Clicked "Get Your Free Report" button');
       
-      // Minimal wait for page to update (just 100ms)
-      await page.waitForTimeout(100);
-      log("⏳ Waiting for analyzing view...");
-      try {
-        await page.waitForSelector("text=Analyzing", { timeout: 8000 });
-        await captureStep("analyzing");
-      } catch (waitErr) {
-        log("⚠️  Could not capture analyzing view:", waitErr.message);
-      }
+      // Wait for page to update/navigate
+      await page.waitForTimeout(500);
     } catch (err) {
-      log('❌ Error finding Continue button:', err.message);
-      throw new Error(`Could not find Continue button: ${err.message}`);
+      log('❌ Error finding "Get Your Free Report" button:', err.message);
+      throw new Error(`Could not find "Get Your Free Report" button: ${err.message}`);
+    }
+
+    // Step 4.5: Click "Start My Analysis" button
+    log('🔍 Looking for "Start My Analysis" button...');
+    try {
+      const startAnalysisBtn = await page.waitForSelector(elements.startAnalysisBtn, {
+        timeout: 10000,
+        state: 'visible'
+      });
+      log('✅ "Start My Analysis" button found');
+      
+      await startAnalysisBtn.click();
+      log('✅ Clicked "Start My Analysis" button');
+      
+      await page.waitForTimeout(500);
+    } catch (err) {
+      log('❌ Error finding "Start My Analysis" button:', err.message);
+      try {
+        log('🔍 Trying alternative selectors for "Start My Analysis"...');
+        const altSelectors = [
+          'button:has-text("Start")',
+          'button[class*="start"]',
+          'button[class*="analysis"]',
+        ];
+        let found = false;
+        for (const selector of altSelectors) {
+          try {
+            const btn = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+            const text = await btn.textContent();
+            if (text && /start.*analysis/i.test(text)) {
+              await btn.click();
+              log(`✅ Clicked "Start My Analysis" button using alternative: ${selector}`);
+              found = true;
+              await page.waitForTimeout(500);
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+        if (!found) {
+          throw new Error(`Could not find "Start My Analysis" button with any selector`);
+        }
+      } catch (altErr) {
+        log('❌ Could not find "Start My Analysis" button:', altErr.message);
+        throw new Error(`Could not find "Start My Analysis" button: ${err.message}`);
+      }
+    }
+
+    // Step 5: Wait for analyzing view (after clicking Start My Analysis)
+    log("⏳ Waiting for analyzing view...");
+    try {
+      await page.waitForSelector("text=Analyzing", { timeout: 8000 });
+      await captureStep("analyzing");
+    } catch (waitErr) {
+      log("⚠️  Could not capture analyzing view:", waitErr.message);
     }
 
     // Step 5: Click "Continue, the profile is correct" button
