@@ -3246,12 +3246,6 @@ function App() {
               profile: profile,
               username: profile.username,
             });
-                value: paidAmount,
-                currency: "INR",
-                content_name: "Instagram Stalker Report",
-                content_category: "Digital Product",
-              });
-            }
 
             setScreen(SCREEN.PAYMENT_SUCCESS);
             window.history.replaceState({}, "", window.location.pathname);
@@ -3259,9 +3253,9 @@ function App() {
             // Payment not successful - stay on payment page (silent fail)
             console.log(
               "⚠️ Payment not successful - order_status:",
-              paymentData.order_status,
+              verifyData.order_status,
               "payment_status:",
-              paymentData.payment_status
+              verifyData.payment_status
             );
             setScreen(SCREEN.PAYMENT);
           }
