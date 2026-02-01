@@ -85,9 +85,9 @@ export async function scrape(username, onStep = null) {
       log(`✅ Username "${username}" entered`);
       await captureStep("username-entry", { username });
       
-      // Wait 1 second for button to become enabled
+      // Wait 3 second for button to become enabled
       log('⏳ Waiting 1 second for button to become enabled...');
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(3000);
     } catch (err) {
       log('❌ Error finding username input on landing:', err.message);
       const inputs = await page.$$eval('input, textarea', inputs => 
