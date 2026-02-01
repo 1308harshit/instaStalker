@@ -1,5 +1,5 @@
 // backend/scraper/browserPool.js
-import { launchBrowser } from "./browser.js";
+import { launchBrowser, STEALTH_CONTEXT_OPTIONS } from "./browser.js";
 import { redis } from "../utils/redis.js";
 
 const MAX_BROWSERS = 2; // Controlled concurrency for 8 vCPU
@@ -102,13 +102,15 @@ class BrowserPool {
   /**
    * Create a new page (context) for scraping
    * Each request gets its own isolated page from alternating browsers
+   * Uses stealth context options to avoid bot detection on target sites
    */
   async createPage() {
     this.lastActivityTime = Date.now();
-    // Get next browser index (round-robin)
     const browserIndex = this.getNextBrowserIndex();
     const browser = await this.getBrowser(browserIndex);
-    const page = await browser.newPage();
+    const context = await browser.newContext(STEALTH_CONTEXT_OPTIONS);
+    const page = await context.newPage();
+    page.on("close", () => context.close());
     
     // Track tab creation in Redis
     let tabCount = "?";

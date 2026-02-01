@@ -62,47 +62,68 @@ export async function scrape(username, onStep = null) {
   };
 
   try {
-    // Step 1: Navigate to page - wait for full load + React hydration
+    // Step 1: Navigate to page - wait for network idle + React hydration
     log('📍 Navigating to page...');
     await page.goto("https://oseguidorsecreto.com/pv-en", {
-      waitUntil: "load",
-      timeout: 20000,
+      waitUntil: "networkidle",
+      timeout: 30000,
     });
     log('✅ Page loaded');
-    await page.waitForTimeout(2500); // Wait for React to hydrate
+    await page.waitForTimeout(3000); // Wait for React to hydrate
     await captureStep("landing", { url: page.url() });
 
     // Step 2: Wait for username input field on landing and enter username
     log(`⌨️  Waiting for username input field on landing...`);
-    try {
-      const input = await page.waitForSelector('input[type="text"], input', { 
-        timeout: 10000,
-        state: 'visible' 
-      });
-      log('✅ Username input found');
-      
-      // Fill username immediately
-      await input.fill(username);
-      log(`✅ Username "${username}" entered`);
-      await captureStep("username-entry", { username });
-      
-      // Wait 3 seconds for button to become enabled
-      log('⏳ Waiting 3 seconds for button to become enabled...');
-      await page.waitForTimeout(3000);
-    } catch (err) {
-      log('❌ Error finding username input on landing:', err.message);
-      const inputs = await page.$$eval('input, textarea', inputs => 
-        inputs.map(inp => ({
-          type: inp.type,
-          placeholder: inp.placeholder,
-          name: inp.name,
-          id: inp.id,
-          className: inp.className
-        }))
-      );
-      log('📋 Available inputs on landing page:', inputs);
-      throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
+    const inputSelectors = [
+      'input[placeholder*="username" i]',
+      'input[placeholder*="Username" i]',
+      'input[placeholder*="Ex" i]',
+      'input[type="text"]:not([type="hidden"])',
+      'input:not([type="hidden"])',
+    ];
+    let input = null;
+    for (const sel of inputSelectors) {
+      try {
+        input = await page.waitForSelector(sel, { timeout: 3000, state: 'visible' });
+        if (input) {
+          log(`✅ Username input found (selector: ${sel})`);
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
     }
+    if (!input) {
+      try {
+        input = await page.waitForSelector('input[type="text"], input', { 
+          timeout: 5000,
+          state: 'visible' 
+        });
+        log('✅ Username input found (fallback)');
+      } catch (fallbackErr) {
+        const inputs = await page.$$eval('input, textarea', inputs => 
+          inputs.map(inp => ({
+            type: inp.type,
+            placeholder: inp.placeholder,
+            name: inp.name,
+            id: inp.id,
+            className: inp.className
+          }))
+        );
+        log('❌ Error finding username input on landing:', fallbackErr.message);
+        log('📋 Available inputs on landing page:', inputs);
+        throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
+      }
+    }
+    
+    // Fill username immediately
+    await input.fill(username);
+    log(`✅ Username "${username}" entered`);
+    await captureStep("username-entry", { username });
+    
+    // Wait 3 seconds for button to become enabled
+    log('⏳ Waiting 3 seconds for button to become enabled...');
+    await page.waitForTimeout(3000);
 
     // Step 3: Click "Get Your Free Report" button (enabled after username)
     log('🔍 Looking for "Get Your Free Report" button...');
