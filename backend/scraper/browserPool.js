@@ -101,14 +101,16 @@ class BrowserPool {
 
   /**
    * Create a new page (context) for scraping
-   * Each request gets its own isolated page from alternating browsers
+   * Each request gets its own isolated context (fresh cookies) to avoid
+   * landing on cached "Processing data" instead of username input
    */
   async createPage() {
     this.lastActivityTime = Date.now();
-    // Get next browser index (round-robin)
     const browserIndex = this.getNextBrowserIndex();
     const browser = await this.getBrowser(browserIndex);
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    page.on("close", () => context.close().catch(() => {}));
     
     // Track tab creation in Redis
     let tabCount = "?";
