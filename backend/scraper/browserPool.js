@@ -198,8 +198,10 @@ class BrowserPool {
   async forceRestart(index) {
     try {
       if (this.browsers[index] && this.browsers[index].isConnected()) {
-        // Browser close will trigger 'disconnected' event which decrements counter
-        await this.browsers[index].close();
+        await Promise.race([
+          this.browsers[index].close(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('close timeout')), 5000)),
+        ]).catch((err) => log(`⚠️ Error closing old browser ${index}:`, err.message));
       }
     } catch (err) {
       log(`⚠️ Error closing old browser ${index}:`, err.message);

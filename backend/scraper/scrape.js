@@ -80,6 +80,7 @@ export async function scrape(username, onStep = null) {
       'input[placeholder*="Ex" i]',
       'input[type="text"]:not([type="hidden"])',
       'input:not([type="hidden"])',
+      '[contenteditable="true"]',  
     ];
     let input = null;
     for (const sel of inputSelectors) {
@@ -112,6 +113,17 @@ export async function scrape(username, onStep = null) {
         );
         log('❌ Error finding username input on landing:', fallbackErr.message);
         log('📋 Available inputs on landing page:', inputs);
+
+        // Save debug HTML when inputs are empty (likely bot detection / different page served)
+        try {
+          const html = await page.content();
+          const debugPath = `landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`;
+          await writeFile(debugPath, html, 'utf8');
+          log(`📸 Debug: saved landing HTML to ${debugPath} (${html.length} chars) - inspect to see what page was served`);
+        } catch (debugErr) {
+          log('⚠️ Could not save debug HTML:', debugErr.message);
+        }
+
         throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
       }
     }

@@ -30,8 +30,12 @@ redis.get("active_tabs").then((val) => {
 });
 
 redis.get("active_browsers").then((val) => {
-  if (val === null) {
+  const n = parseInt(val, 10);
+  if (val === null || isNaN(n) || n > 20) {
     redis.set("active_browsers", "0");
+    if (n > 20) {
+      console.log(`⚠️ Reset active_browsers from ${n} to 0 (stale/drifted counter)`);
+    }
   }
 }).catch(() => {
   // Ignore if Redis is not available
