@@ -123,21 +123,25 @@ export async function scrape(username, onStep = null) {
       throw new Error(`Could not find "Get Your Free Report" button: ${err.message}`);
     }
 
-    // Step 4.5: Click "Start My Analysis" button
+    // Step 4.5: Click "Start My Analysis" button (NEW STEP)
     log('🔍 Looking for "Start My Analysis" button...');
     try {
+      // Wait for the new page to load and button to appear
       const startAnalysisBtn = await page.waitForSelector(elements.startAnalysisBtn, {
         timeout: 10000,
         state: 'visible'
       });
       log('✅ "Start My Analysis" button found');
       
+      // Click the button
       await startAnalysisBtn.click();
       log('✅ Clicked "Start My Analysis" button');
       
+      // Wait for page to update
       await page.waitForTimeout(500);
     } catch (err) {
       log('❌ Error finding "Start My Analysis" button:', err.message);
+      // Try alternative selectors
       try {
         log('🔍 Trying alternative selectors for "Start My Analysis"...');
         const altSelectors = [
@@ -145,6 +149,7 @@ export async function scrape(username, onStep = null) {
           'button[class*="start"]',
           'button[class*="analysis"]',
         ];
+
         let found = false;
         for (const selector of altSelectors) {
           try {
@@ -161,11 +166,12 @@ export async function scrape(username, onStep = null) {
             continue;
           }
         }
+
         if (!found) {
           throw new Error(`Could not find "Start My Analysis" button with any selector`);
         }
       } catch (altErr) {
-        log('❌ Could not find "Start My Analysis" button:', altErr.message);
+        log('❌ Could not find "Start My Analysis" button with alternative selectors:', altErr.message);
         throw new Error(`Could not find "Start My Analysis" button: ${err.message}`);
       }
     }
@@ -428,4 +434,3 @@ export async function scrape(username, onStep = null) {
     throw error;
   }
 }
-
