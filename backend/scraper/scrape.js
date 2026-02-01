@@ -62,13 +62,14 @@ export async function scrape(username, onStep = null) {
   };
 
   try {
-    // Step 1: Navigate to page - use domcontentloaded for faster load
+    // Step 1: Navigate to page - wait for full load + React hydration
     log('📍 Navigating to page...');
     await page.goto("https://oseguidorsecreto.com/pv-en", {
-      waitUntil: "domcontentloaded",
+      waitUntil: "load",
       timeout: 20000,
     });
     log('✅ Page loaded');
+    await page.waitForTimeout(2500); // Wait for React to hydrate
     await captureStep("landing", { url: page.url() });
 
     // Step 2: Wait for username input field on landing and enter username
@@ -85,8 +86,8 @@ export async function scrape(username, onStep = null) {
       log(`✅ Username "${username}" entered`);
       await captureStep("username-entry", { username });
       
-      // Wait 3 second for button to become enabled
-      log('⏳ Waiting 1 second for button to become enabled...');
+      // Wait 3 seconds for button to become enabled
+      log('⏳ Waiting 3 seconds for button to become enabled...');
       await page.waitForTimeout(3000);
     } catch (err) {
       log('❌ Error finding username input on landing:', err.message);
