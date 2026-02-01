@@ -1,11 +1,7 @@
-import path from "path";
-import { fileURLToPath } from "url";
 import { browserPool } from "./browserPool.js";
 import { elements } from "./selectors.js";
 import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
 import { writeFile } from "fs/promises";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEBUG_SCRAPE = process.env.DEBUG_SCRAPE === "1";
 
@@ -19,7 +15,7 @@ export async function scrape(username, onStep = null) {
   log(`🚀 Starting scrape for username: ${username}`);
   
   // Use shared browser pool - creates new page from existing browser instance
-  const page = await browserPool.createPage();
+  let page = await browserPool.createPage();
   log('✅ New page created from shared browser');
 
   const runId = `${Date.now()}`;
@@ -66,82 +62,46 @@ export async function scrape(username, onStep = null) {
   };
 
   try {
-    // Step 1: Navigate to page - wait for network idle for full hydration
+    // Step 1: Navigate to page - use domcontentloaded for faster load
     log('📍 Navigating to page...');
     await page.goto("https://oseguidorsecreto.com/pv-en", {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
       timeout: 20000,
     });
     log('✅ Page loaded');
-    // Stabilization delay for animations / delayed rendering
-    log('⏳ Stabilization delay (1.5s) for full hydration...');
-    await page.waitForTimeout(1500);
     await captureStep("landing", { url: page.url() });
 
     // Step 2: Wait for username input field on landing and enter username
-    const usernameSelectors = [
-      'input[placeholder="username"]',
-      'form input[type="text"]',
-    ];
     log(`⌨️  Waiting for username input field on landing...`);
-    let input = null;
-    const inputWaitOptions = { state: "visible", timeout: 8000 };
-
-    for (const selector of usernameSelectors) {
-      try {
-        log(`   Trying selector: ${selector}`);
-        input = await page.waitForSelector(selector, inputWaitOptions);
-        if (input) {
-          log(`✅ Username input found with selector: ${selector}`);
-          break;
-        }
-      } catch {
-        // Selector failed or timed out, try next
-        continue;
-      }
-    }
-
-    if (!input) {
-      // Detailed diagnostics before failing
-      const inputDiagnostics = await page.$$eval("input, textarea", (elements) =>
-        elements.map((el) => ({
-          tag: el.tagName.toLowerCase(),
-          type: el.type || "(none)",
-          placeholder: el.placeholder || "(none)",
-          name: el.name || "(none)",
-          id: el.id || "(none)",
-          visible: el.offsetParent !== null && !el.hidden && el.offsetWidth > 0,
+    try {
+      const input = await page.waitForSelector('input[type="text"], input', { 
+        timeout: 10000,
+        state: 'visible' 
+      });
+      log('✅ Username input found');
+      
+      // Fill username immediately
+      await input.fill(username);
+      log(`✅ Username "${username}" entered`);
+      await captureStep("username-entry", { username });
+      
+      // Wait 1 second for button to become enabled
+      log('⏳ Waiting 1 second for button to become enabled...');
+      await page.waitForTimeout(1000);
+    } catch (err) {
+      log('❌ Error finding username input on landing:', err.message);
+      const inputs = await page.$$eval('input, textarea', inputs => 
+        inputs.map(inp => ({
+          type: inp.type,
+          placeholder: inp.placeholder,
+          name: inp.name,
+          id: inp.id,
+          className: inp.className
         }))
       );
-      log("📋 Input diagnostics - all <input>/<textarea> elements:", inputDiagnostics);
-
-      try {
-        const debugPath = path.join(__dirname, "..", "landing-debug.png");
-        await page.screenshot({ path: debugPath, fullPage: true });
-        log("📸 Debug screenshot saved to landing-debug.png");
-      } catch (screenshotErr) {
-        log("⚠️  Could not save landing-debug.png:", screenshotErr.message);
-      }
-
-      throw new Error(
-        `Could not find visible username input on landing. Page may not have hydrated yet or input is hidden. Diagnostics: ${JSON.stringify(inputDiagnostics)}`
-      );
+      log('📋 Available inputs on landing page:', inputs);
+      throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
     }
-
-    // Fill username
-    await input.fill(username);
-    const hasValue = await input.evaluate((el) => el.value && el.value.length > 0);
-    if (!hasValue) {
-      throw new Error(
-        "Username input still empty after fill - possible race or read-only field"
-      );
-    }
-    log(`✅ Username "${username}" entered`);
-    await captureStep("username-entry", { username });
-
-    // Wait 1 second for button to become enabled
-    log("⏳ Waiting 1 second for button to become enabled...");
-    await page.waitForTimeout(1000);
 
     // Step 3: Click "Get Your Free Report" button (enabled after username)
     log('🔍 Looking for "Get Your Free Report" button...');
@@ -192,7 +152,7 @@ export async function scrape(username, onStep = null) {
             const text = await btn.textContent();
             if (text && /start.*analysis/i.test(text)) {
               await btn.click();
-              log(`✅ Clicked "Start My Analysis" button using alternative: ${selector}`);
+              log(`✅ Clicked "Start My Analysis" button using alternative selector: ${selector}`);
               found = true;
               await page.waitForTimeout(500);
               break;

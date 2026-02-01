@@ -2,7 +2,7 @@
 import { launchBrowser } from "./browser.js";
 import { redis } from "../utils/redis.js";
 
-const MAX_BROWSERS = 4; // Controlled concurrency for 8 vCPU
+const MAX_BROWSERS = 2; // Controlled concurrency for 8 vCPU
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
@@ -101,16 +101,14 @@ class BrowserPool {
 
   /**
    * Create a new page (context) for scraping
-   * Each request gets its own isolated context (fresh cookies) to avoid
-   * landing on cached "Processing data" instead of username input
+   * Each request gets its own isolated page from alternating browsers
    */
   async createPage() {
     this.lastActivityTime = Date.now();
+    // Get next browser index (round-robin)
     const browserIndex = this.getNextBrowserIndex();
     const browser = await this.getBrowser(browserIndex);
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    page.on("close", () => context.close().catch(() => {}));
+    const page = await browser.newPage();
     
     // Track tab creation in Redis
     let tabCount = "?";
