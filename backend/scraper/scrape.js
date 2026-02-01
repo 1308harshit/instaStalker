@@ -69,7 +69,7 @@ export async function scrape(username, onStep = null) {
     // Step 1: Navigate to page - wait for network idle for full hydration
     log('📍 Navigating to page...');
     await page.goto("https://oseguidorsecreto.com/pv-en", {
-      waitUntil: "networkidle2",
+      waitUntil: "networkidle",
       timeout: 20000,
     });
     log('✅ Page loaded');
