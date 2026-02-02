@@ -80,27 +80,66 @@ export async function scrape(username, onStep = null) {
 
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Find username input (visible on landing; button is disabled until username entered)
-    log(`⌨️  Waiting for username input (placeholder="username")...`);
+    // Step 2: Initially NO input - must click placeholder area first to reveal/focus it
+    // Flow: click placeholder → input appears/activates → type username → button enables → click button
+    const placeholderSelectors = [
+      'div:has-text("Your Instagram")',
+      'div:has-text("@ username")',
+      'label:has-text("username")',
+      'label:has-text("Instagram")',
+      '[class*="rounded-full"]:has-text("username")',
+      'button:has-text("Get Your Free Report")', // fallback: button click may reveal form
+    ];
     const inputSelectors = [
       'input[placeholder="username"]',
       'input[placeholder*="username" i]',
-      'input[placeholder*="Username" i]',
       'input[type="text"]:not([type="hidden"])',
       'input:not([type="hidden"])',
     ];
+    const shortWait = 1500;
     let input = null;
-    for (const sel of inputSelectors) {
+
+    const tryFindInput = async () => {
+      for (const sel of inputSelectors) {
+        try {
+          const el = await page.waitForSelector(sel, { timeout: shortWait, state: 'visible' });
+          if (el) {
+            log(`✅ Username input found (selector: ${sel})`);
+            return el;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      return null;
+    };
+
+    // First: click placeholder area to reveal/activate the input (initially no input exists)
+    log('🖱️  Clicking placeholder area to reveal input...');
+    let placeholderClicked = false;
+    for (const sel of placeholderSelectors) {
       try {
-        input = await page.waitForSelector(sel, { timeout: 5000, state: 'visible' });
-        if (input) {
-          log(`✅ Username input found (selector: ${sel})`);
+        const el = await page.$(sel);
+        if (el) {
+          await el.click();
+          log(`✅ Clicked placeholder (${sel})`);
+          placeholderClicked = true;
+          await page.waitForTimeout(1000);
           break;
         }
       } catch (e) {
         continue;
       }
     }
+    if (!placeholderClicked) {
+      log('⚠️ No placeholder found, clicking center of form area...');
+      await page.mouse.click(400, 380);
+      await page.waitForTimeout(1000);
+    }
+
+    log(`⌨️  Waiting for username input...`);
+    input = await tryFindInput();
+
     if (!input) {
       const inputs = await page.$$eval('input, textarea', inputs =>
         inputs.map(inp => ({
@@ -117,12 +156,12 @@ export async function scrape(username, onStep = null) {
         await writeFile(debugPath, html, 'utf8');
         log(`📸 Debug: saved HTML to ${debugPath}`);
       } catch (debugErr) {}
-      throw new Error(`Could not find username input. Available inputs: ${JSON.stringify(inputs)}`);
+      throw new Error(`Could not find username input. Target site may be blocking automated access (inputs: ${JSON.stringify(inputs)})`);
     }
 
-    // Click input first (simulate human focus), then type
+    // Click input to focus (triggers CSS change), then type username slowly
     await input.click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300);
     const cleanUsername = username.replace(/^@/, '');
     await input.evaluate((el) => {
       if ('value' in el) el.value = '';
@@ -130,7 +169,7 @@ export async function scrape(username, onStep = null) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await page.waitForTimeout(200);
-    await input.pressSequentially(cleanUsername, { delay: 80 });
+    await input.pressSequentially(cleanUsername, { delay: 100 }); // type slowly
     log(`✅ Username "${username}" typed`);
     await captureStep("username-entry", { username });
 
