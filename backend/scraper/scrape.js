@@ -69,7 +69,7 @@ export async function scrape(username, onStep = null) {
       timeout: 30000,
     });
     log('✅ Page loaded');
-    await page.waitForTimeout(3000); // Wait for React to hydrate
+    await page.waitForTimeout(5000); // Wait for React to hydrate (increased for slow loads)
 
     // Simulate human: click somewhere on page first (x, y) before interacting
     const clickX = 350 + Math.floor(Math.random() * 60) - 30;
@@ -98,15 +98,17 @@ export async function scrape(username, onStep = null) {
       'input[type="text"]:not([type="hidden"])',
       'input:not([type="hidden"])',
     ];
-    const shortWait = 1500;
+    const INPUT_WAIT_MS = 4000; // per selector
+    const MAX_RETRIES = 2; // reload and retry if no input
     let input = null;
 
-    const tryFindInput = async () => {
-      for (const sel of inputSelectors) {
+    const tryFindInput = async (longWait = false) => {
+      for (let i = 0; i < inputSelectors.length; i++) {
+        const timeout = (longWait && i === 0) ? 12000 : INPUT_WAIT_MS; // 12s for primary on final attempt
         try {
-          const el = await page.waitForSelector(sel, { timeout: shortWait, state: 'visible' });
+          const el = await page.waitForSelector(inputSelectors[i], { timeout, state: 'visible' });
           if (el) {
-            log(`✅ Username input found (selector: ${sel})`);
+            log(`✅ Username input found (selector: ${inputSelectors[i]})`);
             return el;
           }
         } catch (e) {
@@ -116,36 +118,50 @@ export async function scrape(username, onStep = null) {
       return null;
     };
 
-    // First: click placeholder area to reveal/activate the input (initially no input exists)
-    log('🖱️  Clicking placeholder area to reveal input...');
-    let placeholderClicked = false;
-    for (const sel of placeholderSelectors) {
-      try {
-        const el = await page.$(sel);
-        if (el) {
-          await el.click();
-          log(`✅ Clicked placeholder (${sel})`);
-          placeholderClicked = true;
-          await page.waitForTimeout(1000);
-          break;
+    const doPlaceholderClickAndWait = async () => {
+      log('🖱️  Clicking placeholder area to reveal input...');
+      let placeholderClicked = false;
+      for (const sel of placeholderSelectors) {
+        try {
+          const el = await page.$(sel);
+          if (el) {
+            await el.click();
+            log(`✅ Clicked placeholder (${sel})`);
+            placeholderClicked = true;
+            await page.waitForTimeout(2000); // wait longer for input to appear
+            break;
+          }
+        } catch (e) {
+          continue;
         }
-      } catch (e) {
-        continue;
+      }
+      if (!placeholderClicked) {
+        log('⚠️ No placeholder found, clicking at input box position...');
+        await page.mouse.click(400, 400);
+        await page.waitForTimeout(2000);
+      } else {
+        log('🖱️  Clicking at input field position...');
+        await page.mouse.click(400, 400);
+        await page.waitForTimeout(1500);
+      }
+    };
+
+    // Retry loop: sometimes page needs reload or longer wait
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 1) {
+        log(`🔄 Retry ${attempt}/${MAX_RETRIES}: reloading page...`);
+        await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+        await page.waitForTimeout(5000);
+        await captureStep("landing-retry", { url: page.url(), retry: attempt });
+      }
+      await doPlaceholderClickAndWait();
+      log(`⌨️  Waiting for username input (attempt ${attempt})...`);
+      input = await tryFindInput(attempt === MAX_RETRIES); // longer wait on final attempt
+      if (input) break;
+      if (attempt < MAX_RETRIES) {
+        log(`⚠️ Input not found, will retry...`);
       }
     }
-    if (!placeholderClicked) {
-      log('⚠️ No placeholder found, clicking at input box position (center of form)...');
-      await page.mouse.click(400, 400); // typical input position
-      await page.waitForTimeout(1000);
-    } else {
-      // Double-click: also click at input box position (where placeholder shows)
-      log('🖱️  Clicking at input field position...');
-      await page.mouse.click(400, 400);
-      await page.waitForTimeout(500);
-    }
-
-    log(`⌨️  Waiting for username input...`);
-    input = await tryFindInput();
 
     if (!input) {
       const inputs = await page.$$eval('input, textarea', inputs =>
