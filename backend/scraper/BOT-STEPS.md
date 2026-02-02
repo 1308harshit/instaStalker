@@ -1,31 +1,16 @@
 # Bot steps for oseguidorsecreto.com/pv-en
 
-**From user (Feb 2026)**
+**Robust approach (Feb 2026)**
 
-## Landing page structure
-
-- **Initially NO input** – input appears/activates only after clicking the placeholder area
-- Placeholder area: div/label with "Your Instagram" or "@ username"
-- Click placeholder → CSS change → input becomes usable
-- **"Get Your Free Report" button** is **disabled** until username is entered
-- After typing username, React re-enables the button
-
-## Correct bot flow
+## Flow (no placeholder clicking)
 
 1. **Navigate** to `https://oseguidorsecreto.com/pv-en`
-2. **Wait** for load + 3s hydration
-3. **Click** somewhere on page (human sim)
-4. **Capture** landing snapshot
-5. **Click placeholder area** (div "Your Instagram", "@ username", or button fallback) – reveals/activates input
-6. **Wait** 1s for input to appear
-7. **Find** username input (`input[placeholder="username"]`)
-8. **Click** input (focus – triggers CSS change)
-9. **Type** username slowly (100ms per char)
-10. **Wait** 3s for button to become enabled
-11. **Click** "Get Your Free Report"
-12. **Click** "Start My Analysis"
-13. **Wait** for analyzing view
-14. **Click** "Continue, the profile is correct"
-15. **Wait** for processing
-16. **Wait** for result cards
-17. **Extract** card data
+2. **Wait** for load + 5s hydration
+3. **Capture** landing snapshot
+4. **Wait for input** via `waitForFunction` (DOM attached, bypasses CSS visibility tricks)
+5. **Fill input** via `page.evaluate` (JS set value + dispatch input/change) – no typing = fewer bot signals
+6. **Capture** `username-filled-dom-stable`
+7. **Wait for button** via `waitForFunction` (React state: enabled when input has value)
+8. **Click** "Get Your Free Report"
+9. **Click** "Start My Analysis"
+10. **Continue** (profile confirm, processing, results)

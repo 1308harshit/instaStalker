@@ -70,152 +70,51 @@ export async function scrape(username, onStep = null) {
     });
     log('✅ Page loaded');
     await page.waitForTimeout(5000); // Wait for React to hydrate
-    await page.waitForTimeout(3000); // Extra 3s: let input render (server may be slower than manual load)
-
-    // Simulate human: click somewhere on page first (x, y) before interacting
-    const clickX = 350 + Math.floor(Math.random() * 60) - 30;
-    const clickY = 280 + Math.floor(Math.random() * 60) - 30;
-    log(`🖱️  Simulating human: clicking at (${clickX}, ${clickY})...`);
-    await page.mouse.click(clickX, clickY);
-    await page.waitForTimeout(500);
 
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Initially NO input - must click placeholder area (username) first to reveal/focus it
-    // Flow: click username placeholder → input appears/activates → type → button enables → click button
-    const placeholderSelectors = [
-      '[placeholder="username"]',
-      'input[placeholder="username"]',
-      'text="@ username"',
-      'div:has-text("@ username")',
-      'label:has-text("username")',
-      'label:has-text("Your Instagram")',
-      '[class*="rounded-full"]:not(button)',  // input area only, NOT the button
-      'div:has-text("Your Instagram")',
-      'button:has-text("Get Your Free Report")',  // last resort
-    ];
-    const inputSelectors = [
-      'input[placeholder="username"]',
-      'input[placeholder*="username" i]',
-      'input[type="text"]:not([type="hidden"])',
-      'input:not([type="hidden"])',
-    ];
-    const INPUT_WAIT_MS = 4000; // per selector
-    const MAX_RETRIES = 2; // reload and retry if no input
-    let input = null;
-
-    const tryFindInput = async (longWait = false) => {
-      for (let i = 0; i < inputSelectors.length; i++) {
-        const timeout = (longWait && i === 0) ? 12000 : INPUT_WAIT_MS; // 12s for primary on final attempt
-        try {
-          const el = await page.waitForSelector(inputSelectors[i], { timeout, state: 'visible' });
-          if (el) {
-            log(`✅ Username input found (selector: ${inputSelectors[i]})`);
-            return el;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      return null;
-    };
-
-    const doPlaceholderClickAndWait = async () => {
-      log('🖱️  Clicking placeholder area to reveal input...');
-      let placeholderClicked = false;
-      for (const sel of placeholderSelectors) {
-        try {
-          const el = await page.$(sel);
-          if (el) {
-            await el.click();
-            log(`✅ Clicked placeholder (${sel})`);
-            placeholderClicked = true;
-            await page.waitForTimeout(2000); // wait longer for input to appear
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      if (!placeholderClicked) {
-        log('⚠️ No placeholder found, clicking at input box position...');
-        await page.mouse.click(400, 400);
-        await page.waitForTimeout(2000);
-      } else {
-        log('🖱️  Clicking at input field position...');
-        await page.mouse.click(400, 400);
-        await page.waitForTimeout(1500);
-      }
-    };
-
-    // Retry loop: sometimes page needs reload or longer wait
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 1) {
-        log(`🔄 Retry ${attempt}/${MAX_RETRIES}: reloading page...`);
-        await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
-        await page.waitForTimeout(5000);
-        await captureStep("landing-retry", { url: page.url(), retry: attempt });
-      }
-      await doPlaceholderClickAndWait();
-      log(`⌨️  Waiting for username input (attempt ${attempt})...`);
-      input = await tryFindInput(attempt === MAX_RETRIES); // longer wait on final attempt
-      if (input) break;
-      if (attempt < MAX_RETRIES) {
-        log(`⚠️ Input not found, will retry...`);
-      }
-    }
-
-    if (!input) {
+    // Step 2: Wait for input in DOM (attached, not visible - bypasses CSS tricks)
+    log('⌨️  Waiting for username input...');
+    try {
+      await page.waitForFunction(() => {
+        const i = document.querySelector('input[placeholder="username"]');
+        return i && !i.disabled;
+      }, { timeout: 15000 });
+    } catch (e) {
       const inputs = await page.$$eval('input, textarea', inputs =>
-        inputs.map(inp => ({
-          type: inp.type,
-          placeholder: inp.placeholder,
-          name: inp.name,
-          id: inp.id
-        }))
+        inputs.map(inp => ({ type: inp.type, placeholder: inp.placeholder, name: inp.name, id: inp.id }))
       );
-      log('❌ Error finding username input. Available inputs:', inputs);
+      log('❌ Input not found. Available inputs:', inputs);
       try {
-        const html = await page.content();
-        const debugPath = `landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`;
-        await writeFile(debugPath, html, 'utf8');
-        log(`📸 Debug: saved HTML to ${debugPath}`);
-      } catch (debugErr) {}
-      throw new Error(`Could not find username input. Target site may be blocking automated access (inputs: ${JSON.stringify(inputs)})`);
+        await writeFile(`landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`, await page.content(), 'utf8');
+      } catch (_) {}
+      throw new Error(`Could not find username input (inputs: ${JSON.stringify(inputs)})`);
     }
+    log('✅ Username input found');
 
-    // Click input to focus (triggers CSS change), then type username slowly
-    await input.click();
-    await page.waitForTimeout(300);
+    // Step 3: Fill input via JS (no typing = fewer bot signals)
     const cleanUsername = username.replace(/^@/, '');
-    await input.evaluate((el) => {
-      if ('value' in el) el.value = '';
-      else el.textContent = '';
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await page.waitForTimeout(200);
-    await input.click(); // ensure focus before typing
-    await page.keyboard.type(cleanUsername, { delay: 100 }); // type slowly (ElementHandle has no pressSequentially)
-    log(`✅ Username "${username}" typed`);
-    await captureStep("username-entry", { username });
+    await page.evaluate((username) => {
+      const input = document.querySelector('input[placeholder="username"]');
+      input.focus();
+      input.value = username;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, cleanUsername);
+    log(`✅ Username "${cleanUsername}" filled`);
+    await captureStep("username-filled-dom-stable", { username: cleanUsername });
 
-    // Step 3: Wait for "Get Your Free Report" button to become enabled (it starts disabled)
+    // Step 4: Wait for button to become enabled (React state: input.value.length > 0)
     log('⏳ Waiting for "Get Your Free Report" button to become enabled...');
-    await page.waitForTimeout(3000); // React needs time to re-render after input
-    let continueBtn = await page.$('button:has-text("Get Your Free Report"):not([disabled])');
-    if (!continueBtn) {
-      log('⚠️ Button still disabled, waiting 2s more...');
-      await page.waitForTimeout(2000);
-      continueBtn = await page.$('button:has-text("Get Your Free Report"):not([disabled])');
+    try {
+      await page.waitForFunction(() => {
+        const btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('Get Your Free Report'));
+        return btn && !btn.disabled;
+      }, { timeout: 8000 });
+    } catch (e) {
+      throw new Error('Get Your Free Report button did not become enabled');
     }
-    if (!continueBtn) {
-      continueBtn = await page.$('button:has-text("Get Your Free Report")');
-      if (continueBtn) log('⚠️ Clicking button (may still be disabled)');
-    }
-    if (!continueBtn) {
-      throw new Error('Could not find "Get Your Free Report" button');
-    }
-    await continueBtn.click();
+    await page.click('button:has-text("Get Your Free Report")');
     log('✅ Clicked "Get Your Free Report"');
     await page.waitForTimeout(1000);
 
@@ -225,7 +124,7 @@ export async function scrape(username, onStep = null) {
       // Wait for the new page to load and button to appear
       const startAnalysisBtn = await page.waitForSelector(elements.startAnalysisBtn, {
         timeout: 10000,
-        state: 'visible'
+        state: 'attached'
       });
       log('✅ "Start My Analysis" button found');
       
@@ -249,7 +148,7 @@ export async function scrape(username, onStep = null) {
         let found = false;
         for (const selector of altSelectors) {
           try {
-            const btn = await page.waitForSelector(selector, { timeout: 3000, state: 'visible' });
+            const btn = await page.waitForSelector(selector, { timeout: 3000, state: 'attached' });
             const text = await btn.textContent();
             if (text && /start.*analysis/i.test(text)) {
               await btn.click();
@@ -315,7 +214,7 @@ export async function scrape(username, onStep = null) {
           const locator = page.locator(`button:has-text("${buttonText}")`).first();
           
           // Wait for button to be visible
-          await locator.waitFor({ state: 'visible', timeout: 3000 });
+          await locator.waitFor({ state: 'attached', timeout: 3000 });
           
           // Check if it's actually visible
           const isVisible = await locator.isVisible();
@@ -392,12 +291,12 @@ export async function scrape(username, onStep = null) {
     }
 
     // Step 6: Wait for analysis to complete and cards to appear (~35 seconds)
-    // Use ultra-aggressive polling - check every 100ms for fastest detection
+    // Poll for cards (300ms interval - balances speed vs CPU/detection)
     log('⏳ Waiting for analysis to complete (this takes ~35 seconds)...');
     
     const analysisStartTime = Date.now();
     const maxWaitTime = 60000; // Max 60 seconds
-    const pollInterval = 100; // Check every 100ms - ultra fast!
+    const pollInterval = 300;
     let cardsFound = false;
     let lastLogTime = 0;
     
