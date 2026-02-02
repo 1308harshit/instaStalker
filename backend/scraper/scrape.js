@@ -84,14 +84,15 @@ export async function scrape(username, onStep = null) {
     // Step 2: Initially NO input - must click placeholder area (username) first to reveal/focus it
     // Flow: click username placeholder → input appears/activates → type → button enables → click button
     const placeholderSelectors = [
-      'text="@ username"',
-      'div:has-text("@ username")',
       '[placeholder="username"]',
       'input[placeholder="username"]',
+      'text="@ username"',
+      'div:has-text("@ username")',
       'label:has-text("username")',
-      '[class*="rounded-full"]',
+      'label:has-text("Your Instagram")',
+      '[class*="rounded-full"]:not(button)',  // input area only, NOT the button
       'div:has-text("Your Instagram")',
-      'button:has-text("Get Your Free Report")',
+      'button:has-text("Get Your Free Report")',  // last resort
     ];
     const inputSelectors = [
       'input[placeholder="username"]',
