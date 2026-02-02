@@ -80,20 +80,19 @@ export async function scrape(username, onStep = null) {
 
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Wait for username input field on landing and enter username
-    log(`⌨️  Waiting for username input field on landing...`);
+    // Step 2: Find username input (visible on landing; button is disabled until username entered)
+    log(`⌨️  Waiting for username input (placeholder="username")...`);
     const inputSelectors = [
+      'input[placeholder="username"]',
       'input[placeholder*="username" i]',
       'input[placeholder*="Username" i]',
-      'input[placeholder*="Ex" i]',
       'input[type="text"]:not([type="hidden"])',
       'input:not([type="hidden"])',
-      '[contenteditable="true"]',  
     ];
     let input = null;
     for (const sel of inputSelectors) {
       try {
-        input = await page.waitForSelector(sel, { timeout: 3000, state: 'visible' });
+        input = await page.waitForSelector(sel, { timeout: 5000, state: 'visible' });
         if (input) {
           log(`✅ Username input found (selector: ${sel})`);
           break;
@@ -103,75 +102,57 @@ export async function scrape(username, onStep = null) {
       }
     }
     if (!input) {
+      const inputs = await page.$$eval('input, textarea', inputs =>
+        inputs.map(inp => ({
+          type: inp.type,
+          placeholder: inp.placeholder,
+          name: inp.name,
+          id: inp.id
+        }))
+      );
+      log('❌ Error finding username input. Available inputs:', inputs);
       try {
-        input = await page.waitForSelector('input[type="text"], input', { 
-          timeout: 5000,
-          state: 'visible' 
-        });
-        log('✅ Username input found (fallback)');
-      } catch (fallbackErr) {
-        const inputs = await page.$$eval('input, textarea', inputs => 
-          inputs.map(inp => ({
-            type: inp.type,
-            placeholder: inp.placeholder,
-            name: inp.name,
-            id: inp.id,
-            className: inp.className
-          }))
-        );
-        log('❌ Error finding username input on landing:', fallbackErr.message);
-        log('📋 Available inputs on landing page:', inputs);
-
-        // Save debug HTML when inputs are empty (likely bot detection / different page served)
-        try {
-          const html = await page.content();
-          const debugPath = `landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`;
-          await writeFile(debugPath, html, 'utf8');
-          log(`📸 Debug: saved landing HTML to ${debugPath} (${html.length} chars) - inspect to see what page was served`);
-        } catch (debugErr) {
-          log('⚠️ Could not save debug HTML:', debugErr.message);
-        }
-
-        throw new Error(`Could not find username input on landing. Available inputs: ${JSON.stringify(inputs)}`);
-      }
+        const html = await page.content();
+        const debugPath = `landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`;
+        await writeFile(debugPath, html, 'utf8');
+        log(`📸 Debug: saved HTML to ${debugPath}`);
+      } catch (debugErr) {}
+      throw new Error(`Could not find username input. Available inputs: ${JSON.stringify(inputs)}`);
     }
-    
-    // Type username character-by-character (simulates human typing, avoids paste detection)
-    const cleanUsername = username.replace(/^@/, '');
+
+    // Click input first (simulate human focus), then type
     await input.click();
+    await page.waitForTimeout(200);
+    const cleanUsername = username.replace(/^@/, '');
     await input.evaluate((el) => {
       if ('value' in el) el.value = '';
       else el.textContent = '';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
     await input.pressSequentially(cleanUsername, { delay: 80 });
-    log(`✅ Username "${username}" typed (char-by-char)`);
+    log(`✅ Username "${username}" typed`);
     await captureStep("username-entry", { username });
-    
-    // Wait 3 seconds for button to become enabled
-    log('⏳ Waiting 3 seconds for button to become enabled...');
-    await page.waitForTimeout(3000);
 
-    // Step 3: Click "Get Your Free Report" button (enabled after username)
-    log('🔍 Looking for "Get Your Free Report" button...');
-    try {
-      const continueBtn = await page.waitForSelector(elements.continueBtn, { 
-        timeout: 8000,
-        state: 'visible' 
-      });
-      log('✅ "Get Your Free Report" button found');
-      
-      // Click the button
-      await continueBtn.click();
-      log('✅ Clicked "Get Your Free Report" button');
-      
-      // Wait for page to update/navigate
-      await page.waitForTimeout(500);
-    } catch (err) {
-      log('❌ Error finding "Get Your Free Report" button:', err.message);
-      throw new Error(`Could not find "Get Your Free Report" button: ${err.message}`);
+    // Step 3: Wait for "Get Your Free Report" button to become enabled (it starts disabled)
+    log('⏳ Waiting for "Get Your Free Report" button to become enabled...');
+    await page.waitForTimeout(3000); // React needs time to re-render after input
+    let continueBtn = await page.$('button:has-text("Get Your Free Report"):not([disabled])');
+    if (!continueBtn) {
+      log('⚠️ Button still disabled, waiting 2s more...');
+      await page.waitForTimeout(2000);
+      continueBtn = await page.$('button:has-text("Get Your Free Report"):not([disabled])');
     }
+    if (!continueBtn) {
+      continueBtn = await page.$('button:has-text("Get Your Free Report")');
+      if (continueBtn) log('⚠️ Clicking button (may still be disabled)');
+    }
+    if (!continueBtn) {
+      throw new Error('Could not find "Get Your Free Report" button');
+    }
+    await continueBtn.click();
+    log('✅ Clicked "Get Your Free Report"');
+    await page.waitForTimeout(1000);
 
     // Step 4.5: Click "Start My Analysis" button (NEW STEP)
     log('🔍 Looking for "Start My Analysis" button...');
