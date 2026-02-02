@@ -92,19 +92,21 @@ export async function scrape(username, onStep = null) {
     }
     log('✅ Username input found');
 
-    // Step 3: Fill input via JS (no typing = fewer bot signals)
+    // Step 3: Fill input - JS set value + ONE trusted keystroke (React needs trusted event)
     const cleanUsername = username.replace(/^@/, '');
+    await page.focus('input[placeholder="username"]');
     await page.evaluate((username) => {
       const input = document.querySelector('input[placeholder="username"]');
-      input.focus();
       input.value = username;
       input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
     }, cleanUsername);
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Backspace');
     log(`✅ Username "${cleanUsername}" filled`);
     await captureStep("username-filled-dom-stable", { username: cleanUsername });
 
     // Step 4: Wait for button to become enabled (React state: input.value.length > 0)
+    await page.waitForTimeout(300); // React may debounce validation
     log('⏳ Waiting for "Get Your Free Report" button to become enabled...');
     try {
       await page.waitForFunction(() => {
