@@ -80,15 +80,17 @@ export async function scrape(username, onStep = null) {
 
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Initially NO input - must click placeholder area first to reveal/focus it
-    // Flow: click placeholder → input appears/activates → type username → button enables → click button
+    // Step 2: Initially NO input - must click placeholder area (username) first to reveal/focus it
+    // Flow: click username placeholder → input appears/activates → type → button enables → click button
     const placeholderSelectors = [
-      'div:has-text("Your Instagram")',
+      'text="@ username"',
       'div:has-text("@ username")',
+      '[placeholder="username"]',
+      'input[placeholder="username"]',
       'label:has-text("username")',
-      'label:has-text("Instagram")',
-      '[class*="rounded-full"]:has-text("username")',
-      'button:has-text("Get Your Free Report")', // fallback: button click may reveal form
+      '[class*="rounded-full"]',
+      'div:has-text("Your Instagram")',
+      'button:has-text("Get Your Free Report")',
     ];
     const inputSelectors = [
       'input[placeholder="username"]',
@@ -132,9 +134,14 @@ export async function scrape(username, onStep = null) {
       }
     }
     if (!placeholderClicked) {
-      log('⚠️ No placeholder found, clicking center of form area...');
-      await page.mouse.click(400, 380);
+      log('⚠️ No placeholder found, clicking at input box position (center of form)...');
+      await page.mouse.click(400, 400); // typical input position
       await page.waitForTimeout(1000);
+    } else {
+      // Double-click: also click at input box position (where placeholder shows)
+      log('🖱️  Clicking at input field position...');
+      await page.mouse.click(400, 400);
+      await page.waitForTimeout(500);
     }
 
     log(`⌨️  Waiting for username input...`);
