@@ -47,7 +47,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://samjhona.com",
+      "https://sensorahub.com",
       "http://localhost:5173",
       "http://localhost:3000",
     ],

@@ -152,7 +152,7 @@ const INVALID_USERNAME_REGEX = /unknown/i;
 const NON_EN_SUMMARY_REGEX =
   /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
-const QUEUE_MESSAGE = "You are in the queue";
+const QUEUE_MESSAGE = "You are in the queue, refresh if no output within 1 minute";
 const LAST_RUN_KEY = "stalker-last-run";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
