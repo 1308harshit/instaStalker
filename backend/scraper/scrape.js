@@ -69,7 +69,8 @@ export async function scrape(username, onStep = null) {
       timeout: 30000,
     });
     log('✅ Page loaded');
-    await page.waitForTimeout(5000); // Wait for React to hydrate (increased for slow loads)
+    await page.waitForTimeout(5000); // Wait for React to hydrate
+    await page.waitForTimeout(3000); // Extra 3s: let input render (server may be slower than manual load)
 
     // Simulate human: click somewhere on page first (x, y) before interacting
     const clickX = 350 + Math.floor(Math.random() * 60) - 30;
