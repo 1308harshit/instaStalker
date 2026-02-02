@@ -176,7 +176,8 @@ export async function scrape(username, onStep = null) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await page.waitForTimeout(200);
-    await input.pressSequentially(cleanUsername, { delay: 100 }); // type slowly
+    await input.click(); // ensure focus before typing
+    await page.keyboard.type(cleanUsername, { delay: 100 }); // type slowly (ElementHandle has no pressSequentially)
     log(`✅ Username "${username}" typed`);
     await captureStep("username-entry", { username });
 
