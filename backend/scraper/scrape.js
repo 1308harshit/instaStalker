@@ -70,6 +70,14 @@ export async function scrape(username, onStep = null) {
     });
     log('✅ Page loaded');
     await page.waitForTimeout(3000); // Wait for React to hydrate
+
+    // Simulate human: click somewhere on page first (x, y) before interacting
+    const clickX = 350 + Math.floor(Math.random() * 60) - 30;
+    const clickY = 280 + Math.floor(Math.random() * 60) - 30;
+    log(`🖱️  Simulating human: clicking at (${clickX}, ${clickY})...`);
+    await page.mouse.click(clickX, clickY);
+    await page.waitForTimeout(500);
+
     await captureStep("landing", { url: page.url() });
 
     // Step 2: Wait for username input field on landing and enter username
@@ -128,9 +136,17 @@ export async function scrape(username, onStep = null) {
       }
     }
     
-    // Fill username immediately
-    await input.fill(username);
-    log(`✅ Username "${username}" entered`);
+    // Type username character-by-character (simulates human typing, avoids paste detection)
+    const cleanUsername = username.replace(/^@/, '');
+    await input.click();
+    await input.evaluate((el) => {
+      if ('value' in el) el.value = '';
+      else el.textContent = '';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.waitForTimeout(300);
+    await input.pressSequentially(cleanUsername, { delay: 80 });
+    log(`✅ Username "${username}" typed (char-by-char)`);
     await captureStep("username-entry", { username });
     
     // Wait 3 seconds for button to become enabled
