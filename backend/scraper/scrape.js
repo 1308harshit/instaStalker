@@ -73,120 +73,71 @@ export async function scrape(username, onStep = null) {
 
     await captureStep("landing", { url: page.url() });
 
-    // Step 2: Wait for input in DOM (attached, not visible - bypasses CSS tricks)
-    log('⌨️  Waiting for username input...');
-    try {
-      await page.waitForFunction(() => {
-        const i = document.querySelector('input[placeholder="username"]');
-        return i && !i.disabled;
-      }, { timeout: 15000 });
-    } catch (e) {
-      const inputs = await page.$$eval('input, textarea', inputs =>
-        inputs.map(inp => ({ type: inp.type, placeholder: inp.placeholder, name: inp.name, id: inp.id }))
-      );
-      log('❌ Input not found. Available inputs:', inputs);
-      try {
-        await writeFile(`landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`, await page.content(), 'utf8');
-      } catch (_) {}
-      throw new Error(`Could not find username input (inputs: ${JSON.stringify(inputs)})`);
-    }
-    log('✅ Username input found');
-
-    // Step 3: Fill input - JS set value + ONE trusted keystroke (React needs trusted event)
+    // Step 2: Multi-state detection – wait for ANY valid state (never assume one element)
     const cleanUsername = username.replace(/^@/, '');
-    await page.focus('input[placeholder="username"]');
-    await page.evaluate((username) => {
-      const input = document.querySelector('input[placeholder="username"]');
-      input.value = username;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }, cleanUsername);
-    await page.keyboard.press('Space');
-    await page.keyboard.press('Backspace');
-    log(`✅ Username "${cleanUsername}" filled`);
-    await captureStep("username-filled-dom-stable", { username: cleanUsername });
+    log('⌨️  Waiting for initial interactive state...');
+    const state = await Promise.race([
+      page.waitForSelector('input[placeholder="username"]', { timeout: 15000, state: 'attached' }).then(() => 'USERNAME'),
+      page.waitForSelector('button:has-text("Start My Analysis")', { timeout: 15000, state: 'attached' }).then(() => 'START'),
+      page.waitForSelector('button:has-text("Got It")', { timeout: 15000, state: 'attached' }).then(() => 'GOT_IT'),
+    ]).catch(() => 'UNKNOWN');
 
-    // Step 4: Wait for button to become enabled (React state: input.value.length > 0)
-    await page.waitForTimeout(300); // React may debounce validation
-    log('⏳ Waiting for "Get Your Free Report" button to become enabled...');
-    try {
+    log(`🧭 Detected initial state: ${state}`);
+
+    if (state === 'USERNAME') {
+      log('📝 Filling username...');
+      await page.focus('input[placeholder="username"]');
+      await page.fill('input[placeholder="username"]', cleanUsername);
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Backspace');
+      await captureStep("username-filled-dom-stable", { username: cleanUsername });
+      await page.waitForTimeout(300);
+      log('⏳ Waiting for "Get Your Free Report" button...');
       await page.waitForFunction(() => {
         const btn = [...document.querySelectorAll('button')].find(b => b.textContent.includes('Get Your Free Report'));
         return btn && !btn.disabled;
       }, { timeout: 8000 });
-    } catch (e) {
-      throw new Error('Get Your Free Report button did not become enabled');
-    }
-    await page.click('button:has-text("Get Your Free Report")');
-    log('✅ Clicked "Get Your Free Report"');
-    await page.waitForTimeout(1500);
-
-    // Optional: "Got It, Continue" security modal (appears sometimes)
-    try {
-      const gotItBtn = await page.waitForSelector('button:has-text("Got It, Continue")', {
-        timeout: 3000,
-        state: 'attached'
-      });
-      if (gotItBtn) {
-        await gotItBtn.click();
-        log('✅ Clicked "Got It, Continue" (security modal)');
-        await page.waitForTimeout(500);
-      }
-    } catch (_) {
-      log('ℹ️ No "Got It, Continue" modal – proceeding directly');
-    }
-
-    // Step 4.5: Click "Start My Analysis" button
-    log('🔍 Looking for "Start My Analysis" button...');
-    try {
-      // Wait for the new page to load and button to appear
-      const startAnalysisBtn = await page.waitForSelector(elements.startAnalysisBtn, {
-        timeout: 10000,
-        state: 'attached'
-      });
-      log('✅ "Start My Analysis" button found');
-      
-      // Click the button
-      await startAnalysisBtn.click();
-      log('✅ Clicked "Start My Analysis" button');
-      
-      // Wait for page to update
-      await page.waitForTimeout(500);
-    } catch (err) {
-      log('❌ Error finding "Start My Analysis" button:', err.message);
-      // Try alternative selectors
+      await page.click('button:has-text("Get Your Free Report")');
+      log('✅ Clicked "Get Your Free Report"');
+      await page.waitForTimeout(1500);
+      // Got It modal may appear after Get Your Free Report
       try {
-        log('🔍 Trying alternative selectors for "Start My Analysis"...');
-        const altSelectors = [
-          'button:has-text("Start")',
-          'button[class*="start"]',
-          'button[class*="analysis"]',
-        ];
-
-        let found = false;
-        for (const selector of altSelectors) {
-          try {
-            const btn = await page.waitForSelector(selector, { timeout: 3000, state: 'attached' });
-            const text = await btn.textContent();
-            if (text && /start.*analysis/i.test(text)) {
-              await btn.click();
-              log(`✅ Clicked "Start My Analysis" button using alternative selector: ${selector}`);
-              found = true;
-              await page.waitForTimeout(500);
-              break;
-            }
-          } catch (e) {
-            continue;
-          }
+        const gotIt = await page.waitForSelector('button:has-text("Got It")', { timeout: 2000, state: 'attached' });
+        if (gotIt) {
+          await gotIt.click();
+          log('✅ Clicked "Got It" (security modal)');
+          await page.waitForTimeout(500);
         }
-
-        if (!found) {
-          throw new Error(`Could not find "Start My Analysis" button with any selector`);
-        }
-      } catch (altErr) {
-        log('❌ Could not find "Start My Analysis" button with alternative selectors:', altErr.message);
-        throw new Error(`Could not find "Start My Analysis" button: ${err.message}`);
-      }
+      } catch (_) {}
     }
+
+    if (state === 'GOT_IT') {
+      log('🛡️  Handling security modal...');
+      await page.click('button:has-text("Got It")');
+      await page.waitForTimeout(500);
+    }
+
+    if (state === 'UNKNOWN') {
+      const inputs = await page.$$eval('input, textarea', inputs =>
+        inputs.map(inp => ({ type: inp.type, placeholder: inp.placeholder }))
+      );
+      log('❌ Unknown UI state. Inputs:', inputs);
+      try {
+        await writeFile(`landing-debug-${username.replace(/[^a-zA-Z0-9]/g, '_')}-${Date.now()}.html`, await page.content(), 'utf8');
+      } catch (_) {}
+      throw new Error('Unknown UI state — possible soft block');
+    }
+
+    // Step 3: Wait for "Start My Analysis" (single convergence point)
+    log('⏳ Waiting for "Start My Analysis"...');
+    const startAnalysisBtn = await page.waitForSelector('button:has-text("Start My Analysis")', {
+      timeout: 15000,
+      state: 'attached'
+    });
+    log('✅ "Start My Analysis" button found');
+    await startAnalysisBtn.click();
+    log('✅ Clicked "Start My Analysis"');
+    await page.waitForTimeout(500);
 
     // Step 5: Wait for analyzing view (after clicking Start My Analysis)
     log("⏳ Waiting for analyzing view...");
