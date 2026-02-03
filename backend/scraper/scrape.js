@@ -118,9 +118,24 @@ export async function scrape(username, onStep = null) {
     }
     await page.click('button:has-text("Get Your Free Report")');
     log('✅ Clicked "Get Your Free Report"');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
-    // Step 4.5: Click "Start My Analysis" button (NEW STEP)
+    // Optional: "Got It, Continue" security modal (appears sometimes)
+    try {
+      const gotItBtn = await page.waitForSelector('button:has-text("Got It, Continue")', {
+        timeout: 3000,
+        state: 'attached'
+      });
+      if (gotItBtn) {
+        await gotItBtn.click();
+        log('✅ Clicked "Got It, Continue" (security modal)');
+        await page.waitForTimeout(500);
+      }
+    } catch (_) {
+      log('ℹ️ No "Got It, Continue" modal – proceeding directly');
+    }
+
+    // Step 4.5: Click "Start My Analysis" button
     log('🔍 Looking for "Start My Analysis" button...');
     try {
       // Wait for the new page to load and button to appear
