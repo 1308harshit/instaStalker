@@ -1773,7 +1773,7 @@ body {
   height: 100%;
   background: #f43f3f;
   border-radius: inherit;
-  transition: width 0.6s ease;
+  transition: width 0.8s ease;  /* slightly slower fill animation (was 0.6s) */
 }
 
 .stage-spinner {

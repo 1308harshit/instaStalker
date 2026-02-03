@@ -868,11 +868,9 @@ function App() {
             return 98;
           }
           return Math.min(98, prev + 1);
-          // randBetween(2, 5));
         });
       },
-      // 800
-      120
+      200  // 200ms per 1% (was 120) – slightly slower animation
     );
     return () => clearInterval(analyzingTimerRef.current);
   }, [screen]);
