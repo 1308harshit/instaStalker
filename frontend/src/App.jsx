@@ -1400,12 +1400,13 @@ function App() {
     processingStage.bullets.length,
   ]);
 
+  // Reset carousel indices when entering PREVIEW or PAYMENT_SUCCESS
   useEffect(() => {
-    // Reset carousel when cards or analysis changes
-    // Both carousels start at offset 3 (after duplicated items at start)
-    setCarouselIndex(3);
-    setStoriesCarouselIndex(3);
-  }, [cards, analysis]);
+    if (screen === SCREEN.PREVIEW || screen === SCREEN.PAYMENT_SUCCESS) {
+      setCarouselIndex(3);
+      setStoriesCarouselIndex(3);
+    }
+  }, [screen]);
 
   // Auto-scroll carousel - Infinite loop with duplicates
   useEffect(() => {
@@ -1572,169 +1573,7 @@ function App() {
     }, 5000);
   };
 
-  const checkSnapshotExists = async (username, timestamp, fileName) => {
-    const snapshotPath = `/snapshots/${encodeURIComponent(
-      username
-    )}/${timestamp}/${fileName}`;
-    const url = buildSnapshotUrl(snapshotPath);
-    try {
-      // Try HEAD first (lighter), fallback to GET if HEAD fails
-      let res = await fetch(url, {
-        method: "HEAD",
-        cache: "no-cache",
-      });
-      if (!res.ok && res.status === 405) {
-        // If HEAD not supported, try GET
-        res = await fetch(url, {
-          method: "GET",
-          cache: "no-cache",
-        });
-      }
-      return res.ok;
-    } catch {
-      return false;
-    }
-  };
 
-  const findSnapshotDirectory = async (username, requestId) => {
-    // Try to find the snapshot directory by checking recent timestamps
-    // Check timestamps from now going back 1 minute (in case scraping started slightly before)
-    const now = Date.now();
-    const checkRange = 60 * 1000; // 1 minute in milliseconds
-    const step = 1000; // Check every 1 second
-
-    // Check for any snapshot file (03, 04, 05, or 06) to find the directory
-    const snapshotFiles = [
-      "03-analyzing.html",
-      "04-profile-confirm.html",
-      "05-processing.html",
-      "06-results.html",
-    ];
-
-    // Check files in parallel for each timestamp to speed up discovery
-    for (
-      let timestamp = now;
-      timestamp >= now - checkRange;
-      timestamp -= step
-    ) {
-      if (activeRequestRef.current !== requestId) {
-        return null;
-      }
-      // Check all files in parallel for this timestamp
-      const checks = await Promise.all(
-        snapshotFiles.map((fileName) =>
-          checkSnapshotExists(username, timestamp, fileName)
-        )
-      );
-
-      // If any file exists, we found the directory
-      if (checks.some((exists) => exists)) {
-        return timestamp;
-      }
-
-      // Small delay to avoid hammering the server
-      await delay(100);
-    }
-    return null;
-  };
-
-  const registerSnapshot = (
-    username,
-    timestamp,
-    fileName,
-    stepName,
-    requestId
-  ) => {
-    if (activeRequestRef.current !== requestId) return;
-    const snapshotPath = `/snapshots/${encodeURIComponent(
-      username
-    )}/${timestamp}/${fileName}`;
-    setSnapshots((prev) => {
-      const filtered = prev.filter((s) => s.name !== stepName);
-      return [...filtered, { name: stepName, htmlPath: snapshotPath }];
-    });
-  };
-
-  const waitForSnapshotFile = async (
-    username,
-    timestamp,
-    fileName,
-    requestId,
-    maxAttempts = 600,
-    interval = 500
-  ) => {
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (activeRequestRef.current !== requestId) {
-        return false;
-      }
-      const exists = await checkSnapshotExists(username, timestamp, fileName);
-      if (exists) {
-        return true;
-      }
-      await delay(interval);
-    }
-    return false;
-  };
-
-  const monitorSnapshots = async (username, requestId) => {
-    try {
-      let timestamp = await findSnapshotDirectory(username, requestId);
-      if (!timestamp) {
-        const maxWait = 60000;
-        const start = Date.now();
-        while (!timestamp && Date.now() - start < maxWait) {
-          if (activeRequestRef.current !== requestId) {
-            return;
-          }
-          await delay(2000);
-          timestamp = await findSnapshotDirectory(username, requestId);
-        }
-      }
-      if (!timestamp || activeRequestRef.current !== requestId) {
-        return;
-      }
-
-      const steps = [
-        { file: "03-analyzing.html", name: "analyzing" },
-        { file: "04-profile-confirm.html", name: "profile-confirm" },
-        { file: "05-processing.html", name: "processing" },
-        { file: "06-results.html", name: "results" },
-      ];
-
-      // Check all files in parallel - register each as soon as it's detected
-      const stepPromises = steps.map(async (step) => {
-        if (activeRequestRef.current !== requestId) {
-          return;
-        }
-        const exists = await waitForSnapshotFile(
-          username,
-          timestamp,
-          step.file,
-          requestId,
-          step.name === "results" ? 1200 : 600,
-          step.name === "results" ? 700 : 500
-        );
-        if (exists && activeRequestRef.current === requestId) {
-          registerSnapshot(
-            username,
-            timestamp,
-            step.file,
-            step.name,
-            requestId
-          );
-        }
-      });
-
-      // Don't wait for all - let them run independently and register as they're found
-      Promise.all(stepPromises).catch((err) => {
-        if (activeRequestRef.current === requestId) {
-          console.error("Error monitoring snapshots:", err);
-        }
-      });
-    } catch (err) {
-      console.error("Snapshot monitor error:", err);
-    }
-  };
 
   const handleStart = async (value) => {
     const formatted = value.startsWith("@") ? value : `@${value}`;
@@ -1777,9 +1616,7 @@ function App() {
 
     activeRequestRef.current += 1;
     const requestId = activeRequestRef.current;
-    monitorSnapshots(formatted, requestId).catch((err) =>
-      console.error("Snapshot monitor failed", err)
-    );
+
 
     // Set analyzing screen immediately - don't wait for fetchCards
     setScreen(SCREEN.ANALYZING);
