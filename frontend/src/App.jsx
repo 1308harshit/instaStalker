@@ -2275,7 +2275,11 @@ function App() {
             />
           </div>
           <div className="profile-avatar-ring">
-            <img src={profileStage.avatar} alt={profileStage.username} />
+            <img
+              src={profileStage.avatar}
+              alt={profileStage.username}
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="profile-username-badge">{profileStage.username}</div>
           <h1 className="profile-greeting">Hello, {displayName}</h1>
@@ -2308,6 +2312,7 @@ function App() {
             <img
               src={processingStage.avatar || profile.avatar}
               alt={profile.name}
+              referrerPolicy="no-referrer"
             />
             <div className="grid-background"></div>
             <div className="scan-grid-line"></div>
@@ -2431,6 +2436,7 @@ function App() {
                 <img
                   src={hero.profileImage || profile.avatar}
                   alt={hero.name || profile.name}
+                  referrerPolicy="no-referrer"
                 />
               </div>
               <div className="hero-meta">
@@ -2682,10 +2688,22 @@ function App() {
                               >
                                 <div
                                   className="slider-image blurred-image"
-                                  style={{
-                                    backgroundImage: `url(${imageUrl})`,
-                                  }}
-                                />
+                                  style={{ position: "relative", overflow: "hidden" }}
+                                >
+                                  <img
+                                    src={imageUrl}
+                                    alt="Blurred user"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      filter: "blur(5px)", // Re-apply blur since class might relay on bg
+                                      transform: "scale(1.1)" // Prevent blur edges
+                                    }}
+                                  />
+                                </div>
                                 <div className="blurred-lock">
                                   <span role="img" aria-label="locked">
                                     🔒
@@ -2743,10 +2761,22 @@ function App() {
                               >
                                 <div
                                   className="slider-image blurred-image"
-                                  style={{
-                                    backgroundImage: `url(${imageUrl})`,
-                                  }}
-                                />
+                                  style={{ position: "relative", overflow: "hidden" }}
+                                >
+                                  <img
+                                    src={imageUrl}
+                                    alt="Blurred user"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      filter: "blur(5px)",
+                                      transform: "scale(1.1)"
+                                    }}
+                                  />
+                                </div>
                                 <div className="blurred-lock">
                                   <span role="img" aria-label="locked">
                                     🔒
@@ -2766,14 +2796,28 @@ function App() {
                               <div
                                 className="slider-image"
                                 style={{
-                                  backgroundImage: imageUrl
-                                    ? `url(${imageUrl})`
-                                    : "none",
-                                  backgroundColor: imageUrl
-                                    ? "transparent"
-                                    : "#f5f5f5",
+                                  width: "100%",
+                                  height: "250px",
+                                  position: "relative",
+                                  overflow: "hidden",
+                                  backgroundColor: imageUrl ? "transparent" : "#f5f5f5",
                                 }}
-                              />
+                              >
+                                {imageUrl && (
+                                  <img
+                                    src={imageUrl}
+                                    alt={card.username || "Card image"}
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      display: "block"
+                                    }}
+                                  />
+                                )}
+                              </div>
                               <div className="slider-card-content">
                                 {card?.username && (
                                   <h4 className="username">{card.username}</h4>
@@ -2872,14 +2916,29 @@ function App() {
                               <div
                                 className="story-cover"
                                 style={{
-                                  backgroundImage: story.image
-                                    ? `url(${story.image})`
-                                    : "none",
-                                  backgroundColor: story.image
-                                    ? "transparent"
-                                    : "#000",
+                                  position: "relative",
+                                  overflow: "hidden",
+                                  backgroundColor: story.image ? "transparent" : "#000"
                                 }}
                               >
+                                {story.image && (
+                                  <img
+                                    src={story.image.replace(/&amp;/g, "&")}
+                                    alt="Story"
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      display: "block",
+                                      position: "absolute",
+                                      top: 0,
+                                      left: 0,
+                                      zIndex: 0
+                                    }}
+                                  />
+                                )}
                                 <div className="story-hero-info">
                                   <img
                                     src={hero.profileImage || profile.avatar}
@@ -5529,21 +5588,31 @@ function App() {
                                   style={{
                                     width: "100%",
                                     height: "250px",
-                                    backgroundImage: imageUrl
-                                      ? `url(${imageUrl})`
-                                      : "none",
                                     backgroundColor: imageUrl
                                       ? "transparent"
                                       : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                                    backgroundSize: "cover",
-                                    backgroundPosition: "center",
-                                    backgroundRepeat: "no-repeat",
+                                    position: "relative",
+                                    overflow: "hidden",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    position: "relative",
                                   }}
                                 >
+                                  {imageUrl && (
+                                    <img
+                                      src={imageUrl}
+                                      alt={card.username || "Instagram user"}
+                                      referrerPolicy="no-referrer"
+                                      loading="lazy"
+                                      style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                        display: "block"
+                                      }}
+                                    />
+                                  )}
+
                                   {!imageUrl && (
                                     <div
                                       style={{
@@ -5757,6 +5826,8 @@ function App() {
                                 <img
                                   src={row.image}
                                   alt={row.name}
+                                  referrerPolicy="no-referrer"
+                                  loading="lazy"
                                   style={{
                                     width: "100%",
                                     height: "100%",
