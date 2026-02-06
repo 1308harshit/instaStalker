@@ -434,6 +434,7 @@ function App() {
   const profileRef = useRef(INITIAL_PROFILE);
   const [hasStoredReport, setHasStoredReport] = useState(false);
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
+  const attemptedFreshAvatars = useRef(new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [snapshotHtml, setSnapshotHtml] = useState({
     analyzing: null,
@@ -1610,6 +1611,7 @@ function App() {
     analyzingStartRef.current = Date.now();
     stepHtmlFetchRef.current = {};
     setProfileConfirmParsed(false); // Reset flag for new request
+    attemptedFreshAvatars.current.clear(); // Clear image recovery record
     setAnalyzingProgress(0);
     setProcessingMessageIndex(0);
     setIsInQueue(true); // User is now in queue
@@ -2616,7 +2618,8 @@ function App() {
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
                                     onError={(e) => {
-                                      if (usernameForFresh && !freshAvatars[usernameForFresh]) {
+                                      if (usernameForFresh && !attemptedFreshAvatars.current.has(usernameForFresh)) {
+                                        attemptedFreshAvatars.current.add(usernameForFresh);
                                         fetchProfileDataDirectly(usernameForFresh, true).then(url => {
                                           if (url) {
                                             setFreshAvatars(prev => ({ ...prev, [usernameForFresh]: url }));
@@ -2666,8 +2669,9 @@ function App() {
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
                                     onError={(e) => {
-                                      if (usernameForFresh && !freshAvatars[usernameForFresh]) {
-                                        console.log(`📸 Preview image failed for: ${usernameForFresh}`);
+                                      if (usernameForFresh && !attemptedFreshAvatars.current.has(usernameForFresh)) {
+                                        attemptedFreshAvatars.current.add(usernameForFresh);
+                                        console.log(`📸 Recovery attempt for: ${usernameForFresh}`);
                                         fetchProfileDataDirectly(usernameForFresh, true).then(url => {
                                           if (url) {
                                             setFreshAvatars(prev => ({ ...prev, [usernameForFresh]: url }));
@@ -5710,8 +5714,9 @@ function App() {
                                   referrerPolicy="no-referrer"
                                   loading="lazy"
                                   onError={() => {
-                                    if (rowUsername && !freshAvatars[rowUsername]) {
-                                      console.log(`📸 Table image failed for: ${rowUsername}`);
+                                    if (rowUsername && !attemptedFreshAvatars.current.has(rowUsername)) {
+                                      attemptedFreshAvatars.current.add(rowUsername);
+                                      console.log(`📸 Recovery attempt (table): ${rowUsername}`);
                                       fetchProfileDataDirectly(rowUsername, true).then(url => {
                                         if (url) {
                                           setFreshAvatars(prev => ({ ...prev, [rowUsername]: url }));
