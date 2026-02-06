@@ -20,12 +20,16 @@ function buildProfileConfirmHtml(profile) {
   const username = profile.username?.startsWith("@")
     ? profile.username
     : `@${profile.username || ""}`;
-  const rawAvatar =
+  let rawAvatar =
     (profile.hd_profile_pic_url_info &&
       profile.hd_profile_pic_url_info.url) ||
     profile.profile_pic_url ||
     profile.base64_profile_pic ||
     "";
+  // If we only have base64, convert to data URL so <img src="..."> works
+  if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
+    rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
+  }
   const avatar = escapeHtml(rawAvatar);
   const name = escapeHtml(profile.full_name || username.replace("@", ""));
 
@@ -47,12 +51,15 @@ function buildProcessingHtml(profile) {
   const username = profile.username?.startsWith("@")
     ? profile.username
     : `@${profile.username || ""}`;
-  const rawAvatar =
+  let rawAvatar =
     (profile.hd_profile_pic_url_info &&
       profile.hd_profile_pic_url_info.url) ||
     profile.profile_pic_url ||
     profile.base64_profile_pic ||
     "";
+  if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
+    rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
+  }
   const avatar = escapeHtml(rawAvatar);
 
   return `<!DOCTYPE html><html><body>
@@ -218,12 +225,23 @@ export async function scrape(username, onStep = null) {
 
     log(`✅ Fetched ${followersList.length} followers`);
 
+    // Helper to build a safe image src (URL or data URL)
+    const toImageSrc = (item) => {
+      if (item.profile_pic_url) return item.profile_pic_url;
+      if (item.base64_profile_pic) {
+        const raw = String(item.base64_profile_pic || "").trim();
+        if (!raw) return null;
+        return raw.startsWith("data:") ? raw : `data:image/jpeg;base64,${raw}`;
+      }
+      return null;
+    };
+
     // Map to frontend card format: { username, image }
     const cards = followersList.map((item) => ({
       username: (item.username || "").startsWith("@")
         ? item.username
         : `@${item.username || ""}`,
-      image: item.profile_pic_url || item.base64_profile_pic || null,
+      image: toImageSrc(item),
     }));
 
     await captureStep(
