@@ -36,7 +36,7 @@ function buildProfileConfirmHtml(profile) {
 
   return `<!DOCTYPE html><html><body>
     <div style="background-image: url('${avatar}')">
-      <img src="${avatar}" alt="${escapeHtml(username)}" />
+      <img src="${avatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
     </div>
     <span>${escapeHtml(username)}</span>
     <h1>Hello, ${name}</h1>
@@ -66,7 +66,7 @@ function buildProcessingHtml(profile) {
 
   return `<!DOCTYPE html><html><body>
     <div style="background-image: url('${avatar}')">
-      <img src="${avatar}" alt="${escapeHtml(username)}" />
+      <img src="${avatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
     </div>
     <h1>Processing data</h1>
     <p>Our robots are analyzing the behavior of your followers</p>
@@ -92,7 +92,9 @@ function buildResultsHtml(cards) {
       return `
     <div role="group" aria-roledescription="slide">
       <h4>${escapeHtml(u)}</h4>
-      <div style="background-image: url('${img}')"></div>
+      <div class="result-image">
+        <img src="${img}" alt="${escapeHtml(u)}" referrerpolicy="no-referrer" style="width:100%; height:auto;" />
+      </div>
       <p>visited your profile this week</p>
     </div>`;
     })
