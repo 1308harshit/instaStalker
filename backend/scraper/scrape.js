@@ -78,10 +78,10 @@ function buildProcessingHtml(profile) {
     <h1>Processing data</h1>
     <p>Our robots are analyzing the behavior of your followers</p>
     <ul>
-      <li>Found 10 mentions of ${escapeHtml(username)} in messages from your followers</li>
-      <li>Our AI detected a possible screenshot of someone talking about you</li>
-      <li>It was detected that someone you know visited your profile 9 times yesterday</li>
-      <li>2 people from your region shared one of your stories</li>
+      <li>Found ${Math.floor(Math.random() * 15) + 5} mentions of ${escapeHtml(username)} in private messages</li>
+      <li>Our AI detected a high-probability screenshot from a hidden follower</li>
+      <li>Geo-analysis: 2 people from your region shared your recent stories</li>
+      <li>Tracker: Someone near your location visited your profile ${Math.floor(Math.random() * 8) + 4} times this week</li>
     </ul>
   </body></html>`;
 }

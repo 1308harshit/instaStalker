@@ -1385,13 +1385,13 @@ function App() {
       canAdvanceFromProcessing &&
       allBulletsShown
     ) {
-      setIsInQueue(false); // No longer in queue, results are ready
-      setScreen(SCREEN.PREVIEW);
-      // Track ViewContent when preview is shown - DISABLED
-      // trackMetaPixel("ViewContent", {
-      //   content_name: "Stalker Preview",
-      //   content_category: "Preview",
-      // });
+      // ✅ USER REQUEST: Added 5s delay to ensure all images are pre-loaded/proxied
+      const timer = setTimeout(() => {
+        setIsInQueue(false); // No longer in queue, results are ready
+        setScreen(SCREEN.PREVIEW);
+      }, 5000);
+
+      return () => clearTimeout(timer);
     }
   }, [
     analysis,
