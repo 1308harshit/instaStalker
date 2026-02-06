@@ -5,7 +5,8 @@ const extractBackgroundImage = (element) => {
   // Handle IMG tags directly
   if (element.tagName === "IMG" || element.hasAttribute("src")) {
     const src = element.getAttribute("src") || "";
-    return src.replace(/&amp;/g, "&");
+    // Only replace &amp; if we're sure it's an HTML snapshot, but be careful not to double-decode
+    return src.includes("&amp;") ? src.replace(/&amp;/g, "&") : src;
   }
 
   const style = element.getAttribute("style") || "";

@@ -379,6 +379,7 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [freshAvatars, setFreshAvatars] = useState({}); // Cache for fresh avatars fetched on failure
   const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] = useState({
     profileVisits: null,
     screenshots: null,
@@ -1806,7 +1807,8 @@ function App() {
   };
 
   // ✅ NEW: Fetch profile data directly from API (bypasses snapshots)
-  const fetchProfileDataDirectly = async (username) => {
+  // If silent = true, it just returns the avatar URL without updating the main profile state
+  const fetchProfileDataDirectly = async (username, silent = false) => {
     try {
       console.log(`🔥 Fetching profile data directly from API for: ${username}`);
       const rawUsername = username.replace(/^@/, "").trim();
@@ -1840,6 +1842,8 @@ function App() {
       }
 
       console.log("✅ Extracted avatar URL:", avatar);
+      
+      if (silent) return avatar;
 
       // Update profile state immediately
       setProfile((prev) => ({
@@ -5562,8 +5566,9 @@ function App() {
                         {duplicatedCards.map(
                           ({ card, originalIndex, duplicateKey }, index) => {
                             const isActive = index === displayIndex;
+                            const usernameForFresh = (card.username || "").replace('@', '').trim();
                             // ✅ Decode HTML entities in case old snapshots have &amp;
-                            const imageUrl = card.image ? card.image.replace(/&amp;/g, "&") : null;
+                            let imageUrl = freshAvatars[usernameForFresh] || (card.image ? card.image.replace(/&amp;/g, "&") : null);
 
                             return (
                               <article
@@ -5604,6 +5609,16 @@ function App() {
                                       alt={card.username || "Instagram user"}
                                       referrerPolicy="no-referrer"
                                       loading="lazy"
+                                      onError={(e) => {
+                                        if (usernameForFresh && !freshAvatars[usernameForFresh]) {
+                                          console.log(`📸 Image failed, fetching fresh avatar for: ${usernameForFresh}`);
+                                          fetchProfileDataDirectly(usernameForFresh, true).then(url => {
+                                            if (url) {
+                                              setFreshAvatars(prev => ({ ...prev, [usernameForFresh]: url }));
+                                            }
+                                          });
+                                        }
+                                      }}
                                       style={{
                                         width: "100%",
                                         height: "100%",
@@ -5791,7 +5806,11 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentSuccessLast7Rows.map((row, index) => (
+                    {paymentSuccessLast7Rows.map((row, index) => {
+                      const rowUsername = (row.username || "").replace('@', '').trim();
+                      const rowImage = freshAvatars[rowUsername] || (row.image ? row.image.replace(/&amp;/g, "&") : null);
+                      
+                      return (
                       <tr
                         key={row.id}
                         style={{
@@ -5822,12 +5841,22 @@ function App() {
                                 flexShrink: 0,
                               }}
                             >
-                              {row.image ? (
+                              {rowImage ? (
                                 <img
-                                  src={row.image}
+                                  src={rowImage}
                                   alt={row.name}
                                   referrerPolicy="no-referrer"
                                   loading="lazy"
+                                  onError={() => {
+                                    if (rowUsername && !freshAvatars[rowUsername]) {
+                                      console.log(`📸 Table image failed for: ${rowUsername}`);
+                                      fetchProfileDataDirectly(rowUsername, true).then(url => {
+                                        if (url) {
+                                          setFreshAvatars(prev => ({ ...prev, [rowUsername]: url }));
+                                        }
+                                      });
+                                    }
+                                  }}
                                   style={{
                                     width: "100%",
                                     height: "100%",
@@ -5952,7 +5981,7 @@ function App() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>

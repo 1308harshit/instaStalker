@@ -92,8 +92,8 @@ function buildResultsHtml(cards) {
       return `
     <div role="group" aria-roledescription="slide">
       <h4>${escapeHtml(u)}</h4>
-      <div class="result-image">
-        <img src="${img}" alt="${escapeHtml(u)}" referrerpolicy="no-referrer" style="width:100%; height:auto;" />
+      <div class="result-image" style="width:100%; height:250px; background:#f0f0f0; overflow:hidden;">
+        <img src="${img}" alt="${escapeHtml(u)}" referrerpolicy="no-referrer" style="width:100%; height:100%; object-fit:cover;" onerror="this.setAttribute('data-error', '1')" />
       </div>
       <p>visited your profile this week</p>
     </div>`;
