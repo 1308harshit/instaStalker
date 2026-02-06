@@ -1775,6 +1775,12 @@ function App() {
     // Set analyzing screen immediately - don't wait for fetchCards
     setScreen(SCREEN.ANALYZING);
 
+    // ✅ NEW: Fetch profile data directly from API (for immediate avatar display)
+    fetchProfileDataDirectly(formatted).catch((err) => {
+      console.error("Failed to fetch profile data directly:", err);
+      // Don't block the flow - snapshots will still work as fallback
+    });
+
     // Track Lead event when username is submitted - DISABLED
     // trackMetaPixel("Lead", {
     //   content_name: "Username Submitted",
@@ -1797,6 +1803,67 @@ function App() {
       }
     });
     return Array.from(map.values());
+  };
+
+  // ✅ NEW: Fetch profile data directly from API (bypasses snapshots)
+  const fetchProfileDataDirectly = async (username) => {
+    try {
+      console.log(`🔥 Fetching profile data directly from API for: ${username}`);
+      const rawUsername = username.replace(/^@/, "").trim();
+      
+      const response = await fetch("https://server.oraculoproibido.com/verify-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: rawUsername }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const profileData = await response.json();
+      console.log("✅ Got profile data from API:", profileData);
+
+      // Extract avatar URL (try HD first, then regular, then base64)
+      let avatar = null;
+      if (profileData.hd_profile_pic_url_info?.url) {
+        avatar = profileData.hd_profile_pic_url_info.url;
+      } else if (profileData.profile_pic_url) {
+        avatar = profileData.profile_pic_url;
+      } else if (profileData.base64_profile_pic) {
+        avatar = `data:image/jpeg;base64,${profileData.base64_profile_pic}`;
+      }
+
+      console.log("✅ Extracted avatar URL:", avatar);
+
+      // Update profile state immediately
+      setProfile((prev) => ({
+        ...prev,
+        username: `@${profileData.username}`,
+        name: profileData.full_name || profileData.username,
+        avatar: avatar || prev.avatar,
+        followers: profileData.follower_count || prev.followers,
+        following: profileData.following_count || prev.following,
+      }));
+
+      // Update profile stage for confirmation screen
+      setProfileStage({
+        avatar: avatar,
+        progressPercent: 55,
+        username: `@${profileData.username}`,
+        greeting: `Hello, ${profileData.full_name || profileData.username}`,
+        question: "Is this your profile?",
+        primaryCta: "Continue, the profile is correct",
+        secondaryCta: "No, I want to correct it",
+      });
+
+      setProfileConfirmParsed(true);
+
+      return profileData;
+    } catch (error) {
+      console.error("❌ Failed to fetch profile data directly:", error);
+      return null;
+    }
   };
 
   const fetchCards = async (usernameValue) => {
