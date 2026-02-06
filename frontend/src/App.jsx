@@ -380,6 +380,14 @@ function App() {
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [freshAvatars, setFreshAvatars] = useState({}); // Cache for fresh avatars fetched on failure
+
+  // ✅ Proxy Instagram images to bypass Referer/Session blocks
+  const proxyImage = (url) => {
+    if (!url || !url.includes("fbcdn.net")) return url;
+    // Decode &amp; if present, then encode for proxy
+    const cleanUrl = url.replace(/&amp;/g, "&");
+    return `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}`;
+  };
   const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] = useState({
     profileVisits: null,
     screenshots: null,
@@ -1838,7 +1846,7 @@ function App() {
 
       // ✅ Safety: Decode HTML entities in case API returns escaped URLs
       if (avatar) {
-        avatar = avatar.replace(/&amp;/g, "&");
+        avatar = proxyImage(avatar);
       }
 
       console.log("✅ Extracted avatar URL:", avatar);
@@ -2674,7 +2682,7 @@ function App() {
                           // ✅ Decode HTML entities in case old snapshots have &amp;
                           let imageUrl = card.image || hero.profileImage || profile.avatar;
                           if (imageUrl) {
-                            imageUrl = imageUrl.replace(/&amp;/g, "&");
+                            imageUrl = proxyImage(imageUrl);
                           }
 
                           // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
@@ -5568,7 +5576,7 @@ function App() {
                             const isActive = index === displayIndex;
                             const usernameForFresh = (card.username || "").replace('@', '').trim();
                             // ✅ Decode HTML entities in case old snapshots have &amp;
-                            let imageUrl = freshAvatars[usernameForFresh] || (card.image ? card.image.replace(/&amp;/g, "&") : null);
+                            let imageUrl = freshAvatars[usernameForFresh] || (card.image ? proxyImage(card.image) : null);
 
                             return (
                               <article
@@ -5808,7 +5816,7 @@ function App() {
                   <tbody>
                     {paymentSuccessLast7Rows.map((row, index) => {
                       const rowUsername = (row.username || "").replace('@', '').trim();
-                      const rowImage = freshAvatars[rowUsername] || (row.image ? row.image.replace(/&amp;/g, "&") : null);
+                      const rowImage = freshAvatars[rowUsername] || (row.image ? proxyImage(row.image) : null);
                       
                       return (
                       <tr

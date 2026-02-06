@@ -15,6 +15,11 @@ const escapeHtml = (s) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const proxyImage = (url) => {
+  if (!url || !url.includes("fbcdn.net")) return url;
+  return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/&amp;/g, "&"))}`;
+};
+
 /** Build synthetic profile-confirm HTML parseable by parseProfileSnapshot */
 function buildProfileConfirmHtml(profile) {
   const username = profile.username?.startsWith("@")
@@ -34,9 +39,10 @@ function buildProfileConfirmHtml(profile) {
   const avatar = rawAvatar;
   const name = escapeHtml(profile.full_name || username.replace("@", ""));
 
+  const proxiedAvatar = proxyImage(avatar);
   return `<!DOCTYPE html><html><body>
-    <div style="background-image: url('${avatar}')">
-      <img src="${avatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
+    <div style="background-image: url('${proxiedAvatar}')">
+      <img src="${proxiedAvatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
     </div>
     <span>${escapeHtml(username)}</span>
     <h1>Hello, ${name}</h1>
@@ -64,9 +70,10 @@ function buildProcessingHtml(profile) {
   // ✅ DO NOT escape URLs - they contain & for query params!
   const avatar = rawAvatar;
 
+  const proxiedAvatar = proxyImage(avatar);
   return `<!DOCTYPE html><html><body>
-    <div style="background-image: url('${avatar}')">
-      <img src="${avatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
+    <div style="background-image: url('${proxiedAvatar}')">
+      <img src="${proxiedAvatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
     </div>
     <h1>Processing data</h1>
     <p>Our robots are analyzing the behavior of your followers</p>
@@ -87,8 +94,8 @@ function buildResultsHtml(cards) {
       const u = (card.username || "").startsWith("@")
         ? card.username
         : `@${card.username}`;
-      // ✅ DO NOT escape image URLs - they contain & for query params!
-      const img = card.image || "";
+      // ✅ Proxy Instagram images via weserv.nl
+      const img = proxyImage(card.image || "");
       return `
     <div role="group" aria-roledescription="slide">
       <h4>${escapeHtml(u)}</h4>
