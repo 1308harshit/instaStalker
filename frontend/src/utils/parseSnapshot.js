@@ -5,7 +5,8 @@ const extractBackgroundImage = (element) => {
   const style = element.getAttribute("style") || "";
   const match = style.match(/url\((.*?)\)/i);
   if (!match) return null;
-  return match[1].replace(/['"&]/g, "");
+  let url = match[1].replace(/['"]/g, "");
+  return url.replace(/&amp;/g, "&");
 };
 
 const hasBlurClass = (node) => {

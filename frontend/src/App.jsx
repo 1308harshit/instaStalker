@@ -1066,6 +1066,13 @@ function App() {
               });
               
               setProfileConfirmParsed(true);
+              
+              // ✅ CRITICAL: Mark HTML as loaded so screen transitions work
+              setSnapshotHtml((prev) => ({
+                ...prev,
+                [stepName]: "<!-- Loaded from metadata -->",
+              }));
+              
               stepHtmlFetchRef.current[stepName] = false;
               return; // Skip HTML loading since we have the data
             }
