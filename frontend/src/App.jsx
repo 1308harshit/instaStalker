@@ -1401,6 +1401,38 @@ function App() {
     processingStage.bullets.length,
   ]);
 
+  // ✅ SAFE BACKGROUND PRE-LOADER: Pre-fetches images and triggers recovery silently
+  useEffect(() => {
+    const allCards = analysis?.slider?.cards || cards || [];
+    const allStories = analysis?.stories?.slides || [];
+    const allAddicts = analysis?.addicted?.tiles || [];
+    
+    const allPotentialUsernames = [
+      ...allCards.map(c => c.username),
+      ...allStories.map(s => s.username),
+      ...allAddicts.map(a => a.title)
+    ].map(u => (u || "").replace('@', '').trim()).filter(Boolean);
+
+    const unique = [...new Set(allPotentialUsernames)];
+
+    unique.forEach(u => {
+      if (!attemptedFreshAvatars.current.has(u)) {
+        // Just pre-fetch. If it fails, recovery will trigger on render or here.
+        const img = new Image();
+        img.src = freshAvatars[u] || proxyImage(`https://www.instagram.com/${u}/`); // dummy trigger
+        img.onerror = () => {
+          if (!attemptedFreshAvatars.current.has(u)) {
+             attemptedFreshAvatars.current.add(u);
+             console.log(`🚀 BG Recovery: ${u}`);
+             fetchProfileDataDirectly(u, true).then(url => {
+               if (url) setFreshAvatars(p => ({ ...p, [u]: url }));
+             }); 
+          }
+        };
+      }
+    });
+  }, [analysis, cards]);
+
   // Reset carousel indices when entering PREVIEW or PAYMENT_SUCCESS
   useEffect(() => {
     if (screen === SCREEN.PREVIEW || screen === SCREEN.PAYMENT_SUCCESS) {
@@ -2285,7 +2317,16 @@ function App() {
             <div className="hero-top">
               <div className="hero-avatar">
                 <img
-                  src={hero.profileImage || profile.avatar}
+                  src={freshAvatars[profile.username?.replace('@', '').trim()] || hero.profileImage || profile.avatar}
+                  onError={() => {
+                    const u = profile.username?.replace('@', '').trim();
+                    if (u && !attemptedFreshAvatars.current.has(u)) {
+                      attemptedFreshAvatars.current.add(u);
+                      fetchProfileDataDirectly(u, true).then(url => {
+                        if (url) setFreshAvatars(p => ({ ...p, [u]: url }));
+                      });
+                    }
+                  }}
                   alt={hero.name || profile.name}
                   referrerPolicy="no-referrer"
                 />
@@ -3174,7 +3215,15 @@ function App() {
                   return null;
                 })()}
               </div>
-            ) : null}
+            ) : (
+                <div className="screenshots-placeholder">
+                  <img src={printMessageBg} alt="Bg" style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '1rem', opacity: 0.5 }} />
+                  <div className="placeholder-overlay">
+                    <div className="spinner-mini" />
+                    <p>Generating screenshot analysis...</p>
+                  </div>
+                </div>
+            )}
             <p className="screenshots-uncensored">
               SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE
               REPORT
@@ -3208,23 +3257,41 @@ function App() {
             <section className="addicted-panel">
               <h3>{formatAddictedTitle(addicted.title)}</h3>
               <div className="addicted-grid">
-                {addicted.tiles.map((tile, index) => (
-                  <article key={`${tile.body}-${index}`}>
-                    {tile.blurred && <div className="addicted-lock">🔒</div>}
-                    <div className="addicted-blur-name">
-                      <strong>@</strong>
-                      <h4 className={tile.blurred ? "blurred-text" : ""}>
-                        {renderSensitiveText(tile.title, tile.blurred)}
-                      </h4>
-                    </div>
+                {addicted.tiles.map((tile, index) => {
+                  const u = (tile.title || "").replace('@', '').trim();
+                  const av = freshAvatars[u] || (tile.image ? proxyImage(tile.image) : (hero.profileImage || profile.avatar));
+                  return (
+                    <article key={`${tile.body || index}-${index}`}>
+                      <div className="addicted-avatar-wrap">
+                        <img 
+                          src={av} 
+                          onError={() => {
+                            if (u && !attemptedFreshAvatars.current.has(u)) {
+                              attemptedFreshAvatars.current.add(u);
+                              fetchProfileDataDirectly(u, true).then(url => {
+                                if (url) setFreshAvatars(p => ({ ...p, [u]: url }));
+                              });
+                            }
+                          }}
+                          alt="A"
+                        />
+                        {tile.blurred && <div className="addicted-lock-mini">🔒</div>}
+                      </div>
+                      <div className="addicted-blur-name">
+                        <strong>@</strong>
+                        <h4 className={tile.blurred ? "blurred-text" : ""}>
+                          {renderSensitiveText(tile.title, tile.blurred)}
+                        </h4>
+                      </div>
                     <p
                       dangerouslySetInnerHTML={{
                         __html: hardcodedBodies[index],
                       }}
                     />
                     {/* <p>{tile.body}</p> */}
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           )}
