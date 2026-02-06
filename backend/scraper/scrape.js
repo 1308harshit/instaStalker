@@ -20,13 +20,19 @@ function buildProfileConfirmHtml(profile) {
   const username = profile.username?.startsWith("@")
     ? profile.username
     : `@${profile.username || ""}`;
-  const avatar = escapeHtml(
-    profile.profile_pic_url || profile.base64_profile_pic || ""
-  );
+  const rawAvatar =
+    (profile.hd_profile_pic_url_info &&
+      profile.hd_profile_pic_url_info.url) ||
+    profile.profile_pic_url ||
+    profile.base64_profile_pic ||
+    "";
+  const avatar = escapeHtml(rawAvatar);
   const name = escapeHtml(profile.full_name || username.replace("@", ""));
 
   return `<!DOCTYPE html><html><body>
-    <div style="background-image: url('${avatar}')"></div>
+    <div style="background-image: url('${avatar}')">
+      <img src="${avatar}" alt="${escapeHtml(username)}" />
+    </div>
     <span>${escapeHtml(username)}</span>
     <h1>Hello, ${name}</h1>
     <p>Is this your profile?</p>
@@ -41,12 +47,18 @@ function buildProcessingHtml(profile) {
   const username = profile.username?.startsWith("@")
     ? profile.username
     : `@${profile.username || ""}`;
-  const avatar = escapeHtml(
-    profile.profile_pic_url || profile.base64_profile_pic || ""
-  );
+  const rawAvatar =
+    (profile.hd_profile_pic_url_info &&
+      profile.hd_profile_pic_url_info.url) ||
+    profile.profile_pic_url ||
+    profile.base64_profile_pic ||
+    "";
+  const avatar = escapeHtml(rawAvatar);
 
   return `<!DOCTYPE html><html><body>
-    <div style="background-image: url('${avatar}')"></div>
+    <div style="background-image: url('${avatar}')">
+      <img src="${avatar}" alt="${escapeHtml(username)}" />
+    </div>
     <h1>Processing data</h1>
     <p>Our robots are analyzing the behavior of your followers</p>
     <ul>

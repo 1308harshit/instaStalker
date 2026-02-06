@@ -1,0 +1,73 @@
+# GitHub Actions CI/CD - Deploy to DigitalOcean Droplet
+# Trigger: push to vegaah-to-instamojo and india-2-manage-gmail
+# Deploys backend (PM2) + frontend (npm build)
+
+name: Deploy to Production Samjhona Website
+
+on:
+  push:
+    branches:
+      - india-2-manage-gmail
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    env:
+      SERVER_IP: ${{ secrets.SERVER_IP }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔐 Setup SSH
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+          echo "✅ SSH key and known_hosts configured"
+
+      - name: 🚀 Deploy via SSH
+        env:
+          GITHUB_USER: ${{ secrets.USERNAME }}
+          GITHUB_PAT: ${{ secrets.PAT_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          echo "📡 Connecting to ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "set -e
+            echo '📂 cd /root/instaStalk'
+            cd /root/instaStalk || { echo '❌ /root/instaStalk not found'; exit 1; }
+            echo '🔄 Configuring git remote for private repo...'
+            git remote set-url origin https://${GITHUB_USER}:${GITHUB_PAT}@github.com/${GITHUB_REPO}.git 2>/dev/null || true
+            echo '⬇️  git fetch and reset to vegaah-to-instamojo'
+            git fetch origin vegaah-to-instamojo
+            git reset --hard origin/vegaah-to-instamojo
+            git clean -fd
+            echo '✅ Git pull complete'
+            echo '🔄 pm2 restart all (backend)'
+            pm2 restart all || { echo '⚠️ pm2 restart failed (continuing)'; }
+            echo '✅ PM2 restarted'
+            echo '📂 cd frontend'
+            cd /root/instaStalk/frontend || { echo '❌ frontend dir not found'; exit 1; }
+            echo '📦 npm ci || npm install'
+            npm ci 2>/dev/null || npm install
+            echo '✅ Dependencies installed'
+            echo '🏗️  npm run build'
+            npm run build
+            echo '✅ Frontend build complete'
+            echo '🎉 Deployment finished successfully'"
+
+      - name: 🧹 Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+          echo "✅ Deploy key removed"
