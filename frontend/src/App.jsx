@@ -1046,6 +1046,13 @@ function App() {
           if (parsed) {
             setProfileStage(parsed);
             setProfileConfirmParsed(true); // Mark as parsed
+            // ✅ CRITICAL: Update profile avatar so it persists throughout the flow
+            if (parsed.avatar) {
+              setProfile((prev) => ({
+                ...prev,
+                avatar: parsed.avatar,
+              }));
+            }
           }
         }
         if (stepName === "processing") {
