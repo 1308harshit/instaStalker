@@ -30,7 +30,8 @@ function buildProfileConfirmHtml(profile) {
   if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
     rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
   }
-  const avatar = escapeHtml(rawAvatar);
+  // ✅ DO NOT escape URLs - they contain & for query params!
+  const avatar = rawAvatar;
   const name = escapeHtml(profile.full_name || username.replace("@", ""));
 
   return `<!DOCTYPE html><html><body>
@@ -60,7 +61,8 @@ function buildProcessingHtml(profile) {
   if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
     rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
   }
-  const avatar = escapeHtml(rawAvatar);
+  // ✅ DO NOT escape URLs - they contain & for query params!
+  const avatar = rawAvatar;
 
   return `<!DOCTYPE html><html><body>
     <div style="background-image: url('${avatar}')">
@@ -85,7 +87,8 @@ function buildResultsHtml(cards) {
       const u = (card.username || "").startsWith("@")
         ? card.username
         : `@${card.username}`;
-      const img = escapeHtml(card.image || "");
+      // ✅ DO NOT escape image URLs - they contain & for query params!
+      const img = card.image || "";
       return `
     <div role="group" aria-roledescription="slide">
       <h4>${escapeHtml(u)}</h4>
