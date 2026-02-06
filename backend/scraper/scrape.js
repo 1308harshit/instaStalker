@@ -192,6 +192,18 @@ export async function scrape(username, onStep = null) {
     await captureStep("analyzing", MINIMAL_HTML);
     await captureStep("profile-confirm", buildProfileConfirmHtml(profile), {
       displayedHandle: `@${profile.username}`,
+      // ✅ Store raw profile data so frontend can access it directly
+      profileData: {
+        username: profile.username,
+        full_name: profile.full_name,
+        avatar: (profile.hd_profile_pic_url_info && profile.hd_profile_pic_url_info.url) || 
+                profile.profile_pic_url || 
+                (profile.base64_profile_pic ? `data:image/jpeg;base64,${profile.base64_profile_pic}` : null),
+        follower_count: profile.follower_count,
+        following_count: profile.following_count,
+        is_private: profile.is_private,
+        is_verified: profile.is_verified,
+      }
     });
     await captureStep(
       "processing",

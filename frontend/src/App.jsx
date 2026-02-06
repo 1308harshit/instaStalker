@@ -1032,6 +1032,50 @@ function App() {
       if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName])
         return;
       stepHtmlFetchRef.current[stepName] = true;
+      
+      // ✅ PRIORITY 1: Try to fetch metadata first (includes profileData)
+      if (stepName === "profile-confirm") {
+        try {
+          const metaUrl = `${step.htmlPath}/meta`;
+          const metaRes = await fetch(buildSnapshotUrl(metaUrl));
+          if (metaRes.ok) {
+            const metaData = await metaRes.json();
+            if (metaData?.meta?.profileData) {
+              const profileData = metaData.meta.profileData;
+              console.log("✅ Using raw profileData from metadata API:", profileData);
+              
+              // Update profile with raw data from API
+              setProfile((prev) => ({
+                ...prev,
+                username: profileData.username ? `@${profileData.username}` : prev.username,
+                name: profileData.full_name || prev.name,
+                avatar: profileData.avatar || prev.avatar,
+                followers: profileData.follower_count || prev.followers,
+                following: profileData.following_count || prev.following,
+              }));
+
+              // Update profile stage
+              setProfileStage({
+                avatar: profileData.avatar,
+                progressPercent: 55,
+                username: profileData.username ? `@${profileData.username}` : profile.username,
+                greeting: `Hello, ${profileData.full_name || profileData.username}`,
+                question: "Is this your profile?",
+                primaryCta: "Continue, the profile is correct",
+                secondaryCta: "No, I want to correct it",
+              });
+              
+              setProfileConfirmParsed(true);
+              stepHtmlFetchRef.current[stepName] = false;
+              return; // Skip HTML loading since we have the data
+            }
+          }
+        } catch (metaErr) {
+          console.log("⚠️ Failed to fetch metadata, falling back to HTML parsing:", metaErr);
+        }
+      }
+      
+      // ✅ FALLBACK: Load HTML and parse it
       const html = await fetchSnapshotHtml(stepName, step.htmlPath);
       if (html) {
         setSnapshotHtml((prev) => {
@@ -1042,16 +1086,48 @@ function App() {
           };
         });
         if (stepName === "profile-confirm") {
-          const parsed = parseProfileSnapshot(html, profile.username);
-          if (parsed) {
-            setProfileStage(parsed);
-            setProfileConfirmParsed(true); // Mark as parsed
-            // ✅ CRITICAL: Update profile avatar so it persists throughout the flow
-            if (parsed.avatar) {
-              setProfile((prev) => ({
-                ...prev,
-                avatar: parsed.avatar,
-              }));
+          // ✅ PRIORITY 1: Check if we have raw profileData in snapshot metadata
+          const step = snapshotLookup["profile-confirm"];
+          if (step?.meta?.profileData) {
+            const profileData = step.meta.profileData;
+            console.log("✅ Using raw profileData from snapshot metadata:", profileData);
+            
+            // Update profile with raw data from API
+            setProfile((prev) => ({
+              ...prev,
+              username: profileData.username ? `@${profileData.username}` : prev.username,
+              name: profileData.full_name || prev.name,
+              avatar: profileData.avatar || prev.avatar,
+              followers: profileData.follower_count || prev.followers,
+              following: profileData.following_count || prev.following,
+            }));
+
+            // Update profile stage
+            setProfileStage({
+              avatar: profileData.avatar,
+              progressPercent: 55,
+              username: profileData.username ? `@${profileData.username}` : profile.username,
+              greeting: `Hello, ${profileData.full_name || profileData.username}`,
+              question: "Is this your profile?",
+              primaryCta: "Continue, the profile is correct",
+              secondaryCta: "No, I want to correct it",
+            });
+            
+            setProfileConfirmParsed(true);
+          } else {
+            // ✅ FALLBACK: Parse HTML if no raw data available
+            console.log("⚠️ No raw profileData, falling back to HTML parsing");
+            const parsed = parseProfileSnapshot(html, profile.username);
+            if (parsed) {
+              setProfileStage(parsed);
+              setProfileConfirmParsed(true);
+              // Update profile avatar from parsed HTML
+              if (parsed.avatar) {
+                setProfile((prev) => ({
+                  ...prev,
+                  avatar: parsed.avatar,
+                }));
+              }
             }
           }
         }

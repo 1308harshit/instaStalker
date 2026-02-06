@@ -38,6 +38,7 @@ import {
   getRecentSnapshot,
   closeDB,
 } from "./utils/mongodb.js";
+import { ObjectId } from "mongodb";
 import { Resend } from "resend";
 import crypto from "crypto";
 
@@ -1051,6 +1052,42 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
   } catch (err) {
     log(`❌ Error serving snapshot: ${err.message}`);
     res.status(500).json({ error: "Failed to retrieve snapshot" });
+  }
+});
+
+// New endpoint: Get snapshot metadata (including profileData)
+app.get("/api/snapshots/:snapshotId/:stepName/meta", async (req, res) => {
+  const { snapshotId, stepName } = req.params;
+
+  try {
+    const database = await connectDB();
+    if (!database) {
+      return res.status(500).json({ error: "Database not available" });
+    }
+
+    const collection = database.collection("snapshots");
+    const snapshot = await collection.findOne({
+      _id: new ObjectId(snapshotId)
+    });
+
+    if (!snapshot) {
+      return res.status(404).json({ error: "Snapshot not found" });
+    }
+
+    const step = snapshot.steps?.find(s => s.name === stepName);
+    if (!step) {
+      return res.status(404).json({ error: "Step not found" });
+    }
+
+    // Return metadata including profileData
+    res.json({
+      name: step.name,
+      meta: step.meta || {},
+      capturedAt: step.capturedAt || snapshot.createdAt
+    });
+  } catch (err) {
+    log(`❌ Error serving snapshot metadata: ${err.message}`);
+    res.status(500).json({ error: "Failed to retrieve snapshot metadata" });
   }
 });
 
