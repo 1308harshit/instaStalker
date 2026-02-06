@@ -2,8 +2,10 @@ const clean = (value = "") => value.replace(/\s+/g, " ").trim();
 
 const extractBackgroundImage = (element) => {
   if (!element) return null;
-  // Handle IMG tags directly
-  if (element.tagName === "IMG" || element.hasAttribute("src")) {
+  
+  // Handle IMG tags directly (case-insensitive for tagName)
+  const tagName = (element.tagName || "").toUpperCase();
+  if (tagName === "IMG" || element.hasAttribute("src")) {
     const src = element.getAttribute("src") || "";
     // Only replace &amp; if we're sure it's an HTML snapshot, but be careful not to double-decode
     return src.includes("&amp;") ? src.replace(/&amp;/g, "&") : src;

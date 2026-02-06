@@ -2679,11 +2679,9 @@ function App() {
                       {duplicatedCards.map(
                         ({ card, originalIndex, duplicateKey }, index) => {
                           const isActive = index === displayIndex;
-                          // ✅ Decode HTML entities in case old snapshots have &amp;
-                          let imageUrl = card.image || hero.profileImage || profile.avatar;
-                          if (imageUrl) {
-                            imageUrl = proxyImage(imageUrl);
-                          }
+                          const usernameForFresh = (card.username || "").replace('@', '').trim();
+                          // ✅ Proxy Instagram images via weserv.nl
+                          let imageUrl = freshAvatars[usernameForFresh] || (card.image ? proxyImage(card.image) : (hero.profileImage || profile.avatar));
 
                           // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
                           // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
@@ -2780,6 +2778,15 @@ function App() {
                                     alt="Blurred user"
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
+                                    onError={(e) => {
+                                      if (usernameForFresh && !freshAvatars[usernameForFresh]) {
+                                        fetchProfileDataDirectly(usernameForFresh, true).then(url => {
+                                          if (url) {
+                                            setFreshAvatars(prev => ({ ...prev, [usernameForFresh]: url }));
+                                          }
+                                        });
+                                      }
+                                    }}
                                     style={{
                                       width: "100%",
                                       height: "100%",
@@ -2821,6 +2828,16 @@ function App() {
                                     alt={card.username || "Card image"}
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
+                                    onError={(e) => {
+                                      if (usernameForFresh && !freshAvatars[usernameForFresh]) {
+                                        console.log(`📸 Preview image failed for: ${usernameForFresh}`);
+                                        fetchProfileDataDirectly(usernameForFresh, true).then(url => {
+                                          if (url) {
+                                            setFreshAvatars(prev => ({ ...prev, [usernameForFresh]: url }));
+                                          }
+                                        });
+                                      }
+                                    }}
                                     style={{
                                       width: "100%",
                                       height: "100%",
@@ -2935,7 +2952,7 @@ function App() {
                               >
                                 {story.image && (
                                   <img
-                                    src={story.image.replace(/&amp;/g, "&")}
+                                    src={proxyImage(story.image)}
                                     alt="Story"
                                     referrerPolicy="no-referrer"
                                     loading="lazy"
@@ -2953,7 +2970,7 @@ function App() {
                                 )}
                                 <div className="story-hero-info">
                                   <img
-                                    src={hero.profileImage || profile.avatar}
+                                    src={proxyImage(hero.profileImage || profile.avatar)}
                                     alt={hero.name || profile.name}
                                     className="story-hero-avatar"
                                   />
