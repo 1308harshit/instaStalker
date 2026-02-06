@@ -1834,6 +1834,11 @@ function App() {
         avatar = `data:image/jpeg;base64,${profileData.base64_profile_pic}`;
       }
 
+      // ✅ Safety: Decode HTML entities in case API returns escaped URLs
+      if (avatar) {
+        avatar = avatar.replace(/&amp;/g, "&");
+      }
+
       console.log("✅ Extracted avatar URL:", avatar);
 
       // Update profile state immediately
@@ -2656,8 +2661,11 @@ function App() {
                       {duplicatedCards.map(
                         ({ card, originalIndex, duplicateKey }, index) => {
                           const isActive = index === displayIndex;
-                          const imageUrl =
-                            card.image || hero.profileImage || profile.avatar;
+                          // ✅ Decode HTML entities in case old snapshots have &amp;
+                          let imageUrl = card.image || hero.profileImage || profile.avatar;
+                          if (imageUrl) {
+                            imageUrl = imageUrl.replace(/&amp;/g, "&");
+                          }
 
                           // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
                           // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
@@ -5074,7 +5082,11 @@ function App() {
         (card.title || card.name || "").trim() ||
         username.replace(/^@/, "") ||
         "Instagram user";
-      const image = card.image || card.avatar || null;
+      // ✅ Decode HTML entities in case old snapshots have &amp;
+      let image = card.image || card.avatar || null;
+      if (image) {
+        image = image.replace(/&amp;/g, "&");
+      }
 
       let visits = 0;
       let screenshots = 0;
@@ -5491,7 +5503,8 @@ function App() {
                         {duplicatedCards.map(
                           ({ card, originalIndex, duplicateKey }, index) => {
                             const isActive = index === displayIndex;
-                            const imageUrl = card.image;
+                            // ✅ Decode HTML entities in case old snapshots have &amp;
+                            const imageUrl = card.image ? card.image.replace(/&amp;/g, "&") : null;
 
                             return (
                               <article
