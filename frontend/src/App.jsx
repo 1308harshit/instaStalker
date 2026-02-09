@@ -1,8 +1,15 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import SuccessfullyPaid from "./SuccessfullyPaid";
-import { parseResultsSnapshot } from "./utils/parseSnapshot";
-import { parseFullReport } from "./utils/parseFullReport";
+
+// ============================================================================
+// API-FIRST ARCHITECTURE REFACTOR
+// Snapshot parsing is commented out. Frontend now uses direct API JSON data.
+// ============================================================================
+
+// COMMENTED OUT: Snapshot parsing imports (no longer parsing HTML)
+// import { parseResultsSnapshot } from "./utils/parseSnapshot";
+// import { parseFullReport } from "./utils/parseFullReport";
 import b1Image from "./assets/b1.jpg";
 import g1Image from "./assets/g1.jpg";
 import g2Image from "./assets/g2.jpg";
@@ -16,11 +23,16 @@ const API_URL = import.meta.env.VITE_API_URL?.trim() || "https://samjhona.com/ap
 
 const API_BASE = (() => {
   try {
+    // Handle relative URLs (like /api/stalkers) - use current origin
+    if (API_URL.startsWith("/")) {
+      return typeof window !== "undefined" ? window.location.origin : "";
+    }
     const url = new URL(API_URL);
     return `${url.protocol}//${url.host}`;
   } catch (err) {
     // Fallback to production domain
     return "https://samjhona.com";
+
   }
 })();
 
@@ -196,178 +208,209 @@ const createProcessingStageData = (
   ],
 });
 
-const extractInlineAvatar = (doc) => {
-  const candidate = Array.from(doc.querySelectorAll("[style]")).find((node) =>
-    /background-image/i.test(node.getAttribute("style") || "")
-  );
-  if (candidate) {
-    const match = candidate
-      .getAttribute("style")
-      .match(/url\((['"]?)(.+?)\1\)/i);
-    if (match?.[2]) {
-      return match[2];
+// ============================================================================
+// COMMENTED OUT: HTML PARSING FUNCTIONS
+// These functions extracted data from HTML snapshots. No longer needed with API-first approach.
+// ============================================================================
+
+// const extractInlineAvatar = (doc) => {
+//   const candidate = Array.from(doc.querySelectorAll("[style]")).find((node) =>
+//     /background-image/i.test(node.getAttribute("style") || "")
+//   );
+//   if (candidate) {
+//     const match = candidate
+//       .getAttribute("style")
+//       .match(/url\((['"]?)(.+?)\1\)/i);
+//     if (match?.[2]) {
+//       return match[2];
+//     }
+//   }
+//   const imgNode = doc.querySelector("img[src]");
+//   return imgNode?.getAttribute("src") || INITIAL_PROFILE.avatar;
+// };
+
+// const parseProfileSnapshot = (
+//   html,
+//   fallbackUsername = INITIAL_PROFILE.username
+// ) => {
+//   try {
+//     const parser = new DOMParser();
+//     const doc = parser.parseFromString(html, "text/html");
+//     const avatar = extractInlineAvatar(doc);
+//     const usernameNode = Array.from(doc.querySelectorAll("span, div, p")).find(
+//       (node) => /^@/.test((node.textContent || "").trim())
+//     );
+//     const greetingNode = doc.querySelector("h1, h2");
+//     const questionNode = Array.from(doc.querySelectorAll("p, span")).find(
+//       (node) => /profile/i.test((node.textContent || "").trim())
+//     );
+//     const buttons = Array.from(doc.querySelectorAll("button"));
+//     const progressNode = Array.from(doc.querySelectorAll("[style]")).find(
+//       (node) => /width:\s*\d+%/i.test(node.getAttribute("style") || "")
+//     );
+//
+//     let progressPercent = 55;
+//     if (progressNode) {
+//       const match = progressNode
+//         .getAttribute("style")
+//         .match(/width:\s*([\d.]+)%/i);
+//       if (match?.[1]) {
+//         progressPercent = Number(match[1]);
+//       }
+//     }
+//
+//     let cleanUsername = fallbackUsername;
+//     if (usernameNode) {
+//       const rawText = usernameNode.textContent?.trim() || "";
+//       const usernameMatch = rawText.match(/^(@[\w_]+)/i);
+//       if (usernameMatch) {
+//         cleanUsername = usernameMatch[1];
+//         const cleaned = cleanUsername.replace(
+//           /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i,
+//           ""
+//         );
+//         if (cleaned.startsWith("@")) {
+//           cleanUsername = cleaned;
+//         }
+//       } else if (rawText.startsWith("@")) {
+//         const parts = rawText.split(
+//           /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i
+//         );
+//         cleanUsername = parts[0] || fallbackUsername;
+//       }
+//     }
+//
+//     return {
+//       avatar,
+//       progressPercent,
+//       username: cleanUsername,
+//       greeting: (greetingNode?.textContent || "Hello").trim(),
+//       question: (questionNode?.textContent || "Is this your profile?").trim(),
+//       primaryCta: (
+//         buttons[0]?.textContent || "Continue, the profile is correct"
+//       ).trim(),
+//       secondaryCta: (
+//         buttons[1]?.textContent || "No, I want to correct it"
+//       ).trim(),
+//     };
+//   } catch (err) {
+//     console.error("Failed to parse profile snapshot", err);
+//     return null;
+//   }
+// };
+
+// ============================================================================
+// NEW: API-FIRST HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Extract best avatar from API response data
+ * Priority: base64_profile_pic → profile_pic_url → hd_profile_pic_url_info
+ * @param {Object} data - API response data containing profile info
+ * @returns {string|null} - Avatar URL or data URI
+ */
+const getAvatarFromApiData = (data) => {
+  if (!data) return null;
+  // Priority 1: base64 (preferred - no CORS/expiry issues)
+  if (data.base64_profile_pic) {
+    const raw = String(data.base64_profile_pic).trim();
+    if (raw) {
+      return raw.startsWith("data:") ? raw : `data:image/jpeg;base64,${raw}`;
     }
   }
-  const imgNode = doc.querySelector("img[src]");
-  return imgNode?.getAttribute("src") || INITIAL_PROFILE.avatar;
-};
-
-const parseProfileSnapshot = (
-  html,
-  fallbackUsername = INITIAL_PROFILE.username
-) => {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const avatar = extractInlineAvatar(doc);
-    const usernameNode = Array.from(doc.querySelectorAll("span, div, p")).find(
-      (node) => /^@/.test((node.textContent || "").trim())
-    );
-    const greetingNode = doc.querySelector("h1, h2");
-    const questionNode = Array.from(doc.querySelectorAll("p, span")).find(
-      (node) => /profile/i.test((node.textContent || "").trim())
-    );
-    const buttons = Array.from(doc.querySelectorAll("button"));
-    const progressNode = Array.from(doc.querySelectorAll("[style]")).find(
-      (node) => /width:\s*\d+%/i.test(node.getAttribute("style") || "")
-    );
-
-    let progressPercent = 55;
-    if (progressNode) {
-      const match = progressNode
-        .getAttribute("style")
-        .match(/width:\s*([\d.]+)%/i);
-      if (match?.[1]) {
-        progressPercent = Number(match[1]);
-      }
-    }
-
-    // Extract clean username - only get the @username part, not any concatenated text
-    let cleanUsername = fallbackUsername;
-    if (usernameNode) {
-      const rawText = usernameNode.textContent?.trim() || "";
-      // Try to extract just the @username part
-      // Match @username pattern and stop before "Hello", "Is", or any capital letter that starts a new word
-      const usernameMatch = rawText.match(/^(@[\w_]+)/i);
-      if (usernameMatch) {
-        cleanUsername = usernameMatch[1];
-        // Additional cleanup: remove common concatenated words
-        // If username ends with common words like "Hello", "Is", etc., remove them
-        const cleaned = cleanUsername.replace(
-          /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)$/i,
-          ""
-        );
-        if (cleaned.startsWith("@")) {
-          cleanUsername = cleaned;
-        }
-      } else if (rawText.startsWith("@")) {
-        // If it starts with @, extract up to first non-username character or common words
-        const parts = rawText.split(
-          /(Hello|Is|Continue|the|profile|correct|No|want|correct|it)/i
-        );
-        cleanUsername = parts[0] || fallbackUsername;
-      }
-    }
-
-    return {
-      avatar,
-      progressPercent,
-      username: cleanUsername,
-      greeting: (greetingNode?.textContent || "Hello").trim(),
-      question: (questionNode?.textContent || "Is this your profile?").trim(),
-      primaryCta: (
-        buttons[0]?.textContent || "Continue, the profile is correct"
-      ).trim(),
-      secondaryCta: (
-        buttons[1]?.textContent || "No, I want to correct it"
-      ).trim(),
-    };
-  } catch (err) {
-    console.error("Failed to parse profile snapshot", err);
-    return null;
+  // Priority 2: Regular profile pic URL
+  if (data.profile_pic_url) {
+    return data.profile_pic_url;
   }
-};
-
-const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const avatar = extractInlineAvatar(doc) || fallbackAvatar;
-    const titleNode = doc.querySelector("h1, h2");
-    const subtitleNode = doc.querySelector("p");
-    // Extract bullet points - focus on list items first, then individual paragraphs
-    const bullets = [];
-
-    // First, try to get list items (most reliable for bullet points)
-    const listItems = Array.from(doc.querySelectorAll("li"));
-    listItems.forEach((li) => {
-      // Get direct text content, excluding nested list items
-      const directText = Array.from(li.childNodes)
-        .filter((node) => node.nodeType === 3) // Text nodes only
-        .map((node) => node.textContent.trim())
-        .join(" ")
-        .trim();
-
-      if (directText && directText.length > 20) {
-        // Also check if it has nested elements with text
-        const nestedText = li.textContent.trim();
-        // Use nested text if it's reasonable length (not concatenated)
-        const text = nestedText.length < 200 ? nestedText : directText;
-        if (
-          text &&
-          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
-            text
-          )
-        ) {
-          bullets.push(text);
-        }
-      }
-    });
-
-    // If no list items found, look for individual paragraphs
-    if (bullets.length === 0) {
-      const paragraphs = Array.from(doc.querySelectorAll("p"));
-      paragraphs.forEach((p) => {
-        const text = p.textContent.trim();
-        // Only include if it looks like a bullet point (not too long, contains keywords)
-        if (
-          text.length > 20 &&
-          text.length < 200 &&
-          /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
-            text
-          )
-        ) {
-          bullets.push(text);
-        }
-      });
-    }
-
-    // Remove duplicates and filter out very long concatenated text
-    const uniqueBullets = bullets
-      .filter((text, index, arr) => arr.indexOf(text) === index)
-      .filter((text) => text.length < 200); // Filter out concatenated long text
-
-    return {
-      avatar,
-      title: titleNode?.textContent?.trim() || "Processing data",
-      subtitle:
-        subtitleNode?.textContent?.trim() ||
-        "Our robots are analyzing the behavior of your followers",
-      bullets:
-        uniqueBullets.length > 0
-          ? uniqueBullets
-          : [
-              `Found 10 mentions of ${fallbackUsername} in messages from your followers`,
-              "Our AI detected a possible screenshot of someone talking about you",
-              "It was detected that someone you know visited your profile 9 times yesterday",
-              "2 people from your region shared one of your stories",
-            ],
-    };
-  } catch (err) {
-    console.error("Failed to parse processing snapshot", err);
-    return null;
+  // Priority 3: HD profile pic URL
+  if (data.hd_profile_pic_url_info?.url) {
+    return data.hd_profile_pic_url_info.url;
   }
+  // Priority 4: Check for 'image' field (cards format)
+  if (data.image) {
+    return data.image;
+  }
+  // Priority 5: Check for 'avatar' field (pre-computed)
+  if (data.avatar) {
+    return data.avatar;
+  }
+  return null;
 };
+
+// COMMENTED OUT: parseProcessingSnapshot - HTML parsing no longer needed
+// const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
+//   try {
+//     const parser = new DOMParser();
+//     const doc = parser.parseFromString(html, "text/html");
+//     const avatar = extractInlineAvatar(doc) || fallbackAvatar;
+//     const titleNode = doc.querySelector("h1, h2");
+//     const subtitleNode = doc.querySelector("p");
+//     const bullets = [];
+//
+//     const listItems = Array.from(doc.querySelectorAll("li"));
+//     listItems.forEach((li) => {
+//       const directText = Array.from(li.childNodes)
+//         .filter((node) => node.nodeType === 3)
+//         .map((node) => node.textContent.trim())
+//         .join(" ")
+//         .trim();
+//
+//       if (directText && directText.length > 20) {
+//         const nestedText = li.textContent.trim();
+//         const text = nestedText.length < 200 ? nestedText : directText;
+//         if (
+//           text &&
+//           /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
+//             text
+//           )
+//         ) {
+//           bullets.push(text);
+//         }
+//       }
+//     });
+//
+//     if (bullets.length === 0) {
+//       const paragraphs = Array.from(doc.querySelectorAll("p"));
+//       paragraphs.forEach((p) => {
+//         const text = p.textContent.trim();
+//         if (
+//           text.length > 20 &&
+//           text.length < 200 &&
+//           /mentions|detected|visited|people|screenshot|region|profile|times|yesterday|shared|stories|messages|followers|found.*\d+/i.test(
+//             text
+//           )
+//         ) {
+//           bullets.push(text);
+//         }
+//       });
+//     }
+//
+//     const uniqueBullets = bullets
+//       .filter((text, index, arr) => arr.indexOf(text) === index)
+//       .filter((text) => text.length < 200);
+//
+//     return {
+//       avatar,
+//       title: titleNode?.textContent?.trim() || "Processing data",
+//       subtitle:
+//         subtitleNode?.textContent?.trim() ||
+//         "Our robots are analyzing the behavior of your followers",
+//       bullets:
+//         uniqueBullets.length > 0
+//           ? uniqueBullets
+//           : [
+//               `Found 10 mentions of ${fallbackUsername} in messages from your followers`,
+//               "Our AI detected a possible screenshot of someone talking about you",
+//               "It was detected that someone you know visited your profile 9 times yesterday",
+//               "2 people from your region shared one of your stories",
+//             ],
+//     };
+//   } catch (err) {
+//     console.error("Failed to parse processing snapshot", err);
+//     return null;
+//   }
+// };
+
 
 function App() {
   const postPurchaseLockRef = useRef(false);
@@ -375,7 +418,21 @@ function App() {
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [usernameInput, setUsernameInput] = useState("");
   const [cards, setCards] = useState([]);
-  const [snapshots, setSnapshots] = useState([]);
+  
+  // ============================================================================
+  // API-FIRST STATE: Raw API data storage (replaces snapshot-based approach)
+  // ============================================================================
+  const [apiProfileData, setApiProfileData] = useState(null);
+  // Shape: { username, full_name, profile_pic_url, base64_profile_pic, 
+  //          hd_profile_pic_url_info, follower_count, following_count, 
+  //          is_private, is_verified, id, avatar }
+  
+  const [apiFollowersData, setApiFollowersData] = useState([]);
+  // Shape: [{ username, profile_pic_url, base64_profile_pic, full_name, image }, ...]
+  
+  // COMMENTED OUT: Snapshot-based state (replaced by API-first approach)
+  // const [snapshots, setSnapshots] = useState([]);
+  
   const [analysis, setAnalysis] = useState(null);
   const [paymentSuccessCards, setPaymentSuccessCards] = useState([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -436,11 +493,13 @@ function App() {
   const [profileConfirmParsed, setProfileConfirmParsed] = useState(false);
   const attemptedFreshAvatars = useRef(new Set());
   const [errorMessage, setErrorMessage] = useState("");
-  const [snapshotHtml, setSnapshotHtml] = useState({
-    analyzing: null,
-    "profile-confirm": null,
-    processing: null,
-  });
+  
+  // COMMENTED OUT: Snapshot HTML storage (replaced by API-first approach)
+  // const [snapshotHtml, setSnapshotHtml] = useState({
+  //   analyzing: null,
+  //   "profile-confirm": null,
+  //   processing: null,
+  // });
   const [fullReportHtml, setFullReportHtml] = useState(null);
   const [fullReportData, setFullReportData] = useState(null);
   const [fullReportLoading, setFullReportLoading] = useState(false);
@@ -731,12 +790,14 @@ function App() {
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const paymentSessionRef = useRef(null);
-  const snapshotLookup = useMemo(() => {
-    return snapshots.reduce((acc, step) => {
-      acc[step.name] = step;
-      return acc;
-    }, {});
-  }, [snapshots]);
+  // COMMENTED OUT: snapshotLookup - no longer using snapshots with API-first approach
+  // const snapshotLookup = useMemo(() => {
+  //   return snapshots.reduce((acc, step) => {
+  //     acc[step.name] = step;
+  //     return acc;
+  //   }, {});
+  // }, [snapshots]);
+  const snapshotLookup = {};  // Empty object for backward compatibility
 
   const saveLastRun = (data) => {
     try {
@@ -808,9 +869,10 @@ function App() {
       setCards(restored.cards);
     }
 
-    if (Array.isArray(restored.steps) && restored.steps.length > 0) {
-      setSnapshots(restored.steps);
-    }
+    // COMMENTED OUT: snapshot state restoration
+    // if (Array.isArray(restored.steps) && restored.steps.length > 0) {
+    //   setSnapshots(restored.steps);
+    // }
 
     if (restored.profile) {
       setProfile((prev) => ({ ...prev, ...restored.profile }));
@@ -1007,172 +1069,172 @@ function App() {
     };
   }, []);
 
-  // Fetch HTML content for a snapshot
-  const fetchSnapshotHtml = async (stepName, htmlPath) => {
-    const url = buildSnapshotUrl(htmlPath);
-    if (!url) return null;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const html = await res.text();
-      if (typeof DOMParser !== "undefined") {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        doc.querySelectorAll("script").forEach((node) => node.remove());
-        const body = doc.querySelector("body");
-        const styles = doc.querySelectorAll("style, link[rel='stylesheet']");
-        const headMarkup = Array.from(styles)
-          .map((node) => node.outerHTML)
-          .join("");
-        if (body) {
-          return `${headMarkup}${body.innerHTML}`;
-        }
-      }
-      return html;
-    } catch (err) {
-      console.error(`Failed to fetch snapshot HTML for ${stepName}:`, err);
-      return null;
-    }
-  };
+  // COMMENTED OUT: fetchSnapshotHtml - legacy function no longer needed
+  // const fetchSnapshotHtml = async (stepName, htmlPath) => {
+  //   const url = buildSnapshotUrl(htmlPath);
+  //   if (!url) return null;
+  //   try {
+  //     const res = await fetch(url);
+  //     if (!res.ok) return null;
+  //     const html = await res.text();
+  //     if (typeof DOMParser !== "undefined") {
+  //       const parser = new DOMParser();
+  //       const doc = parser.parseFromString(html, "text/html");
+  //       doc.querySelectorAll("script").forEach((node) => node.remove());
+  //       const body = doc.querySelector("body");
+  //       const styles = doc.querySelectorAll("style, link[rel='stylesheet']");
+  //       const headMarkup = Array.from(styles)
+  //         .map((node) => node.outerHTML)
+  //         .join("");
+  //       if (body) {
+  //         return `${headMarkup}${body.innerHTML}`;
+  //       }
+  //     }
+  //     return html;
+  //   } catch (err) {
+  //     console.error(`Failed to fetch snapshot HTML for ${stepName}:`, err);
+  //     return null;
+  //   }
+  // };
 
-  // Effect to fetch HTML when snapshots become available
-  useEffect(() => {
-    const loadSnapshotHtml = async (stepName) => {
-      const step = snapshotLookup[stepName];
-      if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName])
-        return;
-      stepHtmlFetchRef.current[stepName] = true;
-      
-      // ✅ PRIORITY 1: Try to fetch metadata first (includes profileData)
-      if (stepName === "profile-confirm") {
-        try {
-          const metaUrl = `${step.htmlPath}/meta`;
-          const metaRes = await fetch(buildSnapshotUrl(metaUrl));
-          if (metaRes.ok) {
-            const metaData = await metaRes.json();
-            if (metaData?.meta?.profileData) {
-              const profileData = metaData.meta.profileData;
-              console.log("✅ Using raw profileData from metadata API:", profileData);
-              
-              // Update profile with raw data from API
-              setProfile((prev) => ({
-                ...prev,
-                username: profileData.username ? `@${profileData.username}` : prev.username,
-                name: profileData.full_name || prev.name,
-                avatar: profileData.avatar || prev.avatar,
-                followers: profileData.follower_count || prev.followers,
-                following: profileData.following_count || prev.following,
-              }));
-
-              // Update profile stage
-              setProfileStage({
-                avatar: profileData.avatar,
-                progressPercent: 55,
-                username: profileData.username ? `@${profileData.username}` : profile.username,
-                greeting: `Hello, ${profileData.full_name || profileData.username}`,
-                question: "Is this your profile?",
-                primaryCta: "Continue, the profile is correct",
-                secondaryCta: "No, I want to correct it",
-              });
-              
-              setProfileConfirmParsed(true);
-              
-              // ✅ CRITICAL: Mark HTML as loaded so screen transitions work
-              setSnapshotHtml((prev) => ({
-                ...prev,
-                [stepName]: "<!-- Loaded from metadata -->",
-              }));
-              
-              stepHtmlFetchRef.current[stepName] = false;
-              return; // Skip HTML loading since we have the data
-            }
-          }
-        } catch (metaErr) {
-          console.log("⚠️ Failed to fetch metadata, falling back to HTML parsing:", metaErr);
-        }
-      }
-      
-      // ✅ FALLBACK: Load HTML and parse it
-      const html = await fetchSnapshotHtml(stepName, step.htmlPath);
-      if (html) {
-        setSnapshotHtml((prev) => {
-          if (prev[stepName]) return prev;
-          return {
-            ...prev,
-            [stepName]: html,
-          };
-        });
-        if (stepName === "profile-confirm") {
-          // ✅ PRIORITY 1: Check if we have raw profileData in snapshot metadata
-          const step = snapshotLookup["profile-confirm"];
-          if (step?.meta?.profileData) {
-            const profileData = step.meta.profileData;
-            console.log("✅ Using raw profileData from snapshot metadata:", profileData);
-            
-            // Update profile with raw data from API
-            setProfile((prev) => ({
-              ...prev,
-              username: profileData.username ? `@${profileData.username}` : prev.username,
-              name: profileData.full_name || prev.name,
-              avatar: profileData.avatar || prev.avatar,
-              followers: profileData.follower_count || prev.followers,
-              following: profileData.following_count || prev.following,
-            }));
-
-            // Update profile stage
-            setProfileStage({
-              avatar: profileData.avatar,
-              progressPercent: 55,
-              username: profileData.username ? `@${profileData.username}` : profile.username,
-              greeting: `Hello, ${profileData.full_name || profileData.username}`,
-              question: "Is this your profile?",
-              primaryCta: "Continue, the profile is correct",
-              secondaryCta: "No, I want to correct it",
-            });
-            
-            setProfileConfirmParsed(true);
-          } else {
-            // ✅ FALLBACK: Parse HTML if no raw data available
-            console.log("⚠️ No raw profileData, falling back to HTML parsing");
-            const parsed = parseProfileSnapshot(html, profile.username);
-            if (parsed) {
-              setProfileStage(parsed);
-              setProfileConfirmParsed(true);
-              // Update profile avatar from parsed HTML
-              if (parsed.avatar) {
-                setProfile((prev) => ({
-                  ...prev,
-                  avatar: parsed.avatar,
-                }));
-              }
-            }
-          }
-        }
-        if (stepName === "processing") {
-          const parsed = parseProcessingSnapshot(
-            html,
-            profile.avatar,
-            profile.username
-          );
-          if (parsed) {
-            setProcessingStage(parsed);
-          }
-        }
-      }
-      stepHtmlFetchRef.current[stepName] = false;
-    };
-
-    // Load HTML for each available snapshot (only if not already loaded)
-    if (snapshotLookup["analyzing"]) {
-      loadSnapshotHtml("analyzing");
-    }
-    if (snapshotLookup["profile-confirm"]) {
-      loadSnapshotHtml("profile-confirm");
-    }
-    if (snapshotLookup["processing"]) {
-      loadSnapshotHtml("processing");
-    }
-  }, [snapshotLookup, snapshotHtml, profile.avatar, profile.username]);
+  // COMMENTED OUT: loadSnapshotHtml useEffect - no longer fetching snapshot HTML
+  // useEffect(() => {
+  //   const loadSnapshotHtml = async (stepName) => {
+  //     const step = snapshotLookup[stepName];
+  //     if (!step || snapshotHtml[stepName] || stepHtmlFetchRef.current[stepName])
+  //       return;
+  //     stepHtmlFetchRef.current[stepName] = true;
+  //     
+  //     // ✅ PRIORITY 1: Try to fetch metadata first (includes profileData)
+  //     if (stepName === "profile-confirm") {
+  //       try {
+  //         const metaUrl = `${step.htmlPath}/meta`;
+  //         const metaRes = await fetch(buildSnapshotUrl(metaUrl));
+  //         if (metaRes.ok) {
+  //           const metaData = await metaRes.json();
+  //           if (metaData?.meta?.profileData) {
+  //             const profileData = metaData.meta.profileData;
+  //             console.log("✅ Using raw profileData from metadata API:", profileData);
+  //             
+  //             // Update profile with raw data from API
+  //             setProfile((prev) => ({
+  //               ...prev,
+  //               username: profileData.username ? `@${profileData.username}` : prev.username,
+  //               name: profileData.full_name || prev.name,
+  //               avatar: profileData.avatar || prev.avatar,
+  //               followers: profileData.follower_count || prev.followers,
+  //               following: profileData.following_count || prev.following,
+  //             }));
+  //
+  //             // Update profile stage
+  //             setProfileStage({
+  //               avatar: profileData.avatar,
+  //               progressPercent: 55,
+  //               username: profileData.username ? `@${profileData.username}` : profile.username,
+  //               greeting: `Hello, ${profileData.full_name || profileData.username}`,
+  //               question: "Is this your profile?",
+  //               primaryCta: "Continue, the profile is correct",
+  //               secondaryCta: "No, I want to correct it",
+  //             });
+  //             
+  //             setProfileConfirmParsed(true);
+  //             
+  //             // ✅ CRITICAL: Mark HTML as loaded so screen transitions work
+  //             setSnapshotHtml((prev) => ({
+  //               ...prev,
+  //               [stepName]: "<!-- Loaded from metadata -->",
+  //             }));
+  //             
+  //             stepHtmlFetchRef.current[stepName] = false;
+  //             return; // Skip HTML loading since we have the data
+  //           }
+  //         }
+  //       } catch (metaErr) {
+  //         console.log("⚠️ Failed to fetch metadata, falling back to HTML parsing:", metaErr);
+  //       }
+  //     }
+  //     
+  //     // ✅ FALLBACK: Load HTML and parse it
+  //     const html = await fetchSnapshotHtml(stepName, step.htmlPath);
+  //     if (html) {
+  //       setSnapshotHtml((prev) => {
+  //         if (prev[stepName]) return prev;
+  //         return {
+  //           ...prev,
+  //           [stepName]: html,
+  //         };
+  //       });
+  //       if (stepName === "profile-confirm") {
+  //         // ✅ PRIORITY 1: Check if we have raw profileData in snapshot metadata
+  //         const step = snapshotLookup["profile-confirm"];
+  //         if (step?.meta?.profileData) {
+  //           const profileData = step.meta.profileData;
+  //           console.log("✅ Using raw profileData from snapshot metadata:", profileData);
+  //           
+  //           // Update profile with raw data from API
+  //           setProfile((prev) => ({
+  //             ...prev,
+  //             username: profileData.username ? `@${profileData.username}` : prev.username,
+  //             name: profileData.full_name || prev.name,
+  //             avatar: profileData.avatar || prev.avatar,
+  //             followers: profileData.follower_count || prev.followers,
+  //             following: profileData.following_count || prev.following,
+  //           }));
+  //
+  //           // Update profile stage
+  //           setProfileStage({
+  //             avatar: profileData.avatar,
+  //             progressPercent: 55,
+  //             username: profileData.username ? `@${profileData.username}` : profile.username,
+  //             greeting: `Hello, ${profileData.full_name || profileData.username}`,
+  //             question: "Is this your profile?",
+  //             primaryCta: "Continue, the profile is correct",
+  //             secondaryCta: "No, I want to correct it",
+  //           });
+  //           
+  //           setProfileConfirmParsed(true);
+  //         } else {
+  //           // ✅ FALLBACK: Parse HTML if no raw data available
+  //           console.log("⚠️ No raw profileData, falling back to HTML parsing");
+  //           const parsed = parseProfileSnapshot(html, profile.username);
+  //           if (parsed) {
+  //             setProfileStage(parsed);
+  //             setProfileConfirmParsed(true);
+  //             // Update profile avatar from parsed HTML
+  //             if (parsed.avatar) {
+  //               setProfile((prev) => ({
+  //                 ...prev,
+  //                 avatar: parsed.avatar,
+  //               }));
+  //             }
+  //           }
+  //         }
+  //       }
+  //       if (stepName === "processing") {
+  //         const parsed = parseProcessingSnapshot(
+  //           html,
+  //           profile.avatar,
+  //           profile.username
+  //         );
+  //         if (parsed) {
+  //           setProcessingStage(parsed);
+  //         }
+  //       }
+  //     }
+  //     stepHtmlFetchRef.current[stepName] = false;
+  //   };
+  //
+  //   // Load HTML for each available snapshot (only if not already loaded)
+  //   if (snapshotLookup["analyzing"]) {
+  //     loadSnapshotHtml("analyzing");
+  //   }
+  //   if (snapshotLookup["profile-confirm"]) {
+  //     loadSnapshotHtml("profile-confirm");
+  //   }
+  //   if (snapshotLookup["processing"]) {
+  //     loadSnapshotHtml("processing");
+  //   }
+  // }, [snapshotLookup, profile.avatar, profile.username]);
 
   useEffect(
     () => () => {
@@ -1207,21 +1269,16 @@ function App() {
       return;
     }
 
-    // Transition to profile-confirm when: HTML fetched + parsed + analyzing complete
+    // Transition to profile-confirm when: API data received + parsing complete + analyzing complete
     if (
       screen === SCREEN.ANALYZING &&
-      snapshotHtml["profile-confirm"] &&
+      apiProfileData && // Changed from snapshotHtml["profile-confirm"]
       profileConfirmParsed &&
       analyzingProgress >= 100 &&
       (!analyzingStartRef.current ||
         Date.now() - analyzingStartRef.current >= ANALYZING_STAGE_HOLD_MS)
     ) {
       setScreen(SCREEN.PROFILE);
-      // Track ViewContent when profile is shown - DISABLED
-      // trackMetaPixel("ViewContent", {
-      //   content_name: "Profile Confirmation",
-      //   content_category: "Profile",
-      // });
       setCanAdvanceFromProfile(false);
       clearTimeout(profileHoldTimerRef.current);
       profileHoldTimerRef.current = setTimeout(() => {
@@ -1232,7 +1289,7 @@ function App() {
 
     if (
       screen === SCREEN.PROFILE &&
-      snapshotHtml.processing &&
+      apiFollowersData.length > 0 && // Changed from snapshotHtml.processing
       canAdvanceFromProfile
     ) {
       setScreen(SCREEN.PROCESSING);
@@ -1245,8 +1302,8 @@ function App() {
     }
   }, [
     screen,
-    snapshotHtml["profile-confirm"],
-    snapshotHtml.processing,
+    apiProfileData,
+    apiFollowersData,
     canAdvanceFromProfile,
     analyzingProgress,
     profileConfirmParsed,
@@ -1288,13 +1345,13 @@ function App() {
     // Immediately set analyzing to 100% when profile-confirm is parsed
     // DO NOT animate - set it instantly
     if (screen !== SCREEN.ANALYZING) return;
-    if (!snapshotHtml["profile-confirm"]) return;
+    if (!apiProfileData) return; // Wait for API data instead of snapshotHtml
     if (!profileConfirmParsed) return; // Wait until parsing is complete
 
     // Force analyzing to 100% immediately
     clearInterval(analyzingTimerRef.current);
     setAnalyzingProgress(100);
-  }, [screen, snapshotHtml["profile-confirm"], profileConfirmParsed]);
+  }, [screen, apiProfileData, profileConfirmParsed]);
 
   useEffect(() => {
     if (screen !== SCREEN.PROCESSING) {
@@ -1342,36 +1399,37 @@ function App() {
     };
   }, [screen, processingStage.bullets.length]);
 
-  useEffect(() => {
-    const resultsStep = snapshots.find((step) => step.name === "results");
-    if (!resultsStep) return;
-    const url = buildSnapshotUrl(resultsStep.htmlPath);
-    if (!url) return;
-    let cancelled = false;
-
-    const loadAnalysis = async () => {
-      try {
-        setAnalysisLoading(true);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Unable to download analyzer snapshot");
-        const html = await res.text();
-        if (cancelled) return;
-        const parsed = parseResultsSnapshot(html);
-        setAnalysis(parsed);
-      } catch (err) {
-        console.error("Failed to parse analyzer snapshot", err);
-      } finally {
-        if (!cancelled) {
-          setAnalysisLoading(false);
-        }
-      }
-    };
-
-    loadAnalysis();
-    return () => {
-      cancelled = true;
-    };
-  }, [snapshots]);
+  // COMMENTED OUT: Analysis loader from snapshots - API-first approach uses direct data
+  // useEffect(() => {
+  //   const resultsStep = snapshots.find((step) => step.name === "results");
+  //   if (!resultsStep) return;
+  //   const url = buildSnapshotUrl(resultsStep.htmlPath);
+  //   if (!url) return;
+  //   let cancelled = false;
+  //
+  //   const loadAnalysis = async () => {
+  //     try {
+  //       setAnalysisLoading(true);
+  //       const res = await fetch(url);
+  //       if (!res.ok) throw new Error("Unable to download analyzer snapshot");
+  //       const html = await res.text();
+  //       if (cancelled) return;
+  //       const parsed = parseResultsSnapshot(html);
+  //       setAnalysis(parsed);
+  //     } catch (err) {
+  //       console.error("Failed to parse analyzer snapshot", err);
+  //     } finally {
+  //       if (!cancelled) {
+  //         setAnalysisLoading(false);
+  //       }
+  //     }
+  //   };
+  //
+  //   loadAnalysis();
+  //   return () => {
+  //     cancelled = true;
+  //   };
+  // }, [snapshots]);
 
   useEffect(() => {
     // Wait until all processing bullets are shown before transitioning to preview
@@ -1617,7 +1675,8 @@ function App() {
     }));
     setUsernameInput("");
     setErrorMessage("");
-    setSnapshots([]);
+    // COMMENTED OUT: snapshot-related state resets
+    // setSnapshots([]);
     setCards([]);
     setNotifications([]);
     setToasts([]);
@@ -1625,11 +1684,11 @@ function App() {
     toastTimers.current = {};
     setAnalysis(null);
     setAnalysisLoading(false);
-    setSnapshotHtml({
-      analyzing: null,
-      "profile-confirm": null,
-      processing: null,
-    });
+    // setSnapshotHtml({
+    //   analyzing: null,
+    //   "profile-confirm": null,
+    //   processing: null,
+    // });
     const friendlyName = formatted.replace("@", "") || profile.name || "friend";
     setProfileStage(
       createProfileStageData(formatted, profile.avatar, friendlyName)
@@ -1755,7 +1814,9 @@ function App() {
   };
 
   const fetchCards = async (usernameValue) => {
-    // Use Server-Sent Events for real-time snapshot streaming
+    // ============================================================================
+    // API-FIRST: SSE now streams raw JSON data instead of snapshot paths
+    // ============================================================================
     return new Promise((resolve, reject) => {
       const eventSourceUrl = `${API_URL}?username=${encodeURIComponent(
         usernameValue
@@ -1772,28 +1833,79 @@ function App() {
       eventSource.addEventListener("snapshot", (e) => {
         try {
           const step = JSON.parse(e.data);
-          console.log(`📥 Received snapshot via SSE: ${step.name}`, step);
+          console.log(`📥 Received step via SSE: ${step.name}`, step);
 
-          // Register snapshot immediately as it arrives
-          setSnapshots((prev) => {
-            const filtered = prev.filter((s) => s.name !== step.name);
-            const updated = [...filtered, step];
-            console.log(
-              `📝 Updated snapshots list:`,
-              updated.map((s) => s.name)
-            );
-            return updated;
-          });
-
-          // If this is profile-confirm, trigger immediate UI update
-          if (step.name === "profile-confirm") {
-            console.log(
-              `✅ Profile-confirm snapshot received - UI will update immediately`
-            );
-            console.log(`   htmlPath: ${step.htmlPath}`);
+          // ============================================================================
+          // API-FIRST: Process raw JSON data from each step
+          // ============================================================================
+          
+          // Handle profile-confirm step - update profile state from API data
+          if (step.name === "profile-confirm" && step.data?.profileData) {
+            const profileData = step.data.profileData;
+            console.log(`✅ Profile data received:`, profileData);
+            
+            // Store raw API data
+            setApiProfileData(profileData);
+            
+            // Update profile state with API data
+            const avatar = getAvatarFromApiData(profileData);
+            setProfile((prev) => ({
+              ...prev,
+              username: profileData.username ? `@${profileData.username}` : prev.username,
+              name: profileData.full_name || prev.name,
+              avatar: avatar || prev.avatar,
+              followers: profileData.follower_count || prev.followers,
+              following: profileData.following_count || prev.following,
+            }));
+            
+            // Update profile stage for confirmation screen
+            setProfileStage({
+              avatar: avatar,
+              progressPercent: 55,
+              username: profileData.username ? `@${profileData.username}` : profile.username,
+              greeting: `Hello, ${profileData.full_name || profileData.username}`,
+              question: "Is this your profile?",
+              primaryCta: "Continue, the profile is correct",
+              secondaryCta: "No, I want to correct it",
+            });
+            
+            setProfileConfirmParsed(true);
           }
+          
+          // Handle processing step - update processing stage from API data
+          if (step.name === "processing" && step.data?.profileData) {
+            const profileData = step.data.profileData;
+            const avatar = getAvatarFromApiData(profileData);
+            
+            setProcessingStage({
+              avatar: avatar,
+              title: "Processing data",
+              subtitle: "Our robots are analyzing the behavior of your followers",
+              bullets: [
+                `Found ${Math.floor(Math.random() * 15) + 5} mentions of @${profileData.username} in messages from your followers`,
+                "Our AI detected a possible screenshot of someone talking about you",
+                "It was detected that someone you know visited your profile 9 times yesterday",
+                "2 people from your region shared one of your stories",
+              ],
+            });
+          }
+          
+          // Handle results step - store followers data
+          if (step.name === "results" && step.data?.cards) {
+            console.log(`✅ Followers/cards data received: ${step.data.cards.length} cards`);
+            setApiFollowersData(step.data.followersList || []);
+            setCards(step.data.cards);
+          }
+
+          // COMMENTED OUT: Old snapshot-based approach
+          // setSnapshots((prev) => {
+          //   const filtered = prev.filter((s) => s.name !== step.name);
+          //   const updated = [...filtered, step];
+          //   return updated;
+          // });
+          
         } catch (err) {
-          console.error("❌ Error parsing snapshot data:", err);
+          console.error("❌ Error parsing step data:", err);
           console.error("   Raw data:", e.data);
         }
       });
@@ -1807,18 +1919,25 @@ function App() {
             } cards`
           );
 
-          // Set cards and final snapshots
+          // Set cards from final result
           if (finalResult.cards && Array.isArray(finalResult.cards)) {
             setCards(finalResult.cards);
           }
-          if (finalResult.steps && Array.isArray(finalResult.steps)) {
-            setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
+          
+          // Store profile data if available
+          if (finalResult.profileData) {
+            setApiProfileData(finalResult.profileData);
           }
+          
+          // COMMENTED OUT: Snapshot-based state update
+          // if (finalResult.steps && Array.isArray(finalResult.steps)) {
+          //   setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
+          // }
 
           // Persist last successful scrape so payment-return pages can restore data
           saveLastRun({
             cards: finalResult.cards || [],
-            steps: finalResult.steps || [],
+            profileData: finalResult.profileData || null,
             profile,
             savedAt: Date.now(),
           });
@@ -1871,51 +1990,19 @@ function App() {
   };
 
   const handleViewFullReport = async () => {
-    // Find the full-report snapshot
-    const fullReportStep = snapshots.find(
-      (step) => step.name === "full-report"
-    );
-    if (!fullReportStep) {
-      console.error("Full report snapshot not found");
-      return;
-    }
-
     setFullReportLoading(true);
     setScreen(SCREEN.FULL_REPORT);
     setPaymentCountdown(900); // Reset to 15 minutes when entering full report
 
-    // Track ViewContent when full report is viewed - DISABLED
-    // trackMetaPixel("ViewContent", {
-    //   content_name: "Full Report",
-    //   content_category: "Report",
-    // });
-
     try {
-      const url = buildSnapshotUrl(fullReportStep.htmlPath);
-      if (!url) {
-        throw new Error("Could not build snapshot URL");
-      }
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error("Failed to fetch full report");
-      }
-
-      const html = await res.text();
-
-      // Parse the HTML to extract structured data
-      const parsedData = parseFullReport(html);
-      if (parsedData) {
-        setFullReportData(parsedData);
-        setFullReportHtml(html); // Keep raw HTML for reference
-      } else {
-        // Fallback: use raw HTML if parsing fails
-        setFullReportHtml(html);
+      // API-FIRST: If we have apiProfileData, we might use that instead of HTML
+      if (apiProfileData) {
+        console.log("✅ Using apiProfileData for full report");
+        // For now, if we don't have the full report parsing logic ported to JSON,
+        // we just show the state we have.
       }
     } catch (err) {
-      console.error("Failed to load full report:", err);
-      setErrorMessage("Failed to load full report. Please try again.");
-      setScreen(SCREEN.ERROR);
+      console.error("Failed to transition to full report:", err);
     } finally {
       setFullReportLoading(false);
     }
@@ -4761,140 +4848,15 @@ function App() {
 
     const fetchResultsCards = async () => {
       try {
-        const resultsStep = snapshots.find((step) => step.name === "results");
-        if (!resultsStep || !resultsStep.htmlPath) {
-          console.log("No results snapshot found, using cards from state");
-          // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (
-            cardList,
-            requireImage = true,
-            requireNotBlurred = true
-          ) => {
-            return cardList.filter((card) => {
-              if (card?.isLocked || !card?.username) return false;
-              if (requireImage && !card?.image) return false;
-              if (requireNotBlurred && card?.blurImage) return false;
-              return true;
-            });
-          };
-
-          // Carousel: strict criteria (clean profiles only)
-          const carouselCards = getCardsWithCriteria(cards, true, true);
-          setPaymentSuccessCards(carouselCards.slice(0, 6));
-
-          // No results snapshot; to avoid duplicates, do not populate additional usernames
-          setPaymentSuccessAdditionalUsernames([]);
-          return;
-        }
-
-        const url = buildSnapshotUrl(resultsStep.htmlPath);
-        if (!url) {
-          console.log("Could not build results URL, using cards from state");
-          // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (
-            cardList,
-            requireImage = true,
-            requireNotBlurred = true
-          ) => {
-            return cardList.filter((card) => {
-              if (card?.isLocked || !card?.username) return false;
-              if (requireImage && !card?.image) return false;
-              if (requireNotBlurred && card?.blurImage) return false;
-              return true;
-            });
-          };
-
-          // Carousel: strict criteria (clean profiles only)
-          const carouselCards = getCardsWithCriteria(cards, true, true);
-          setPaymentSuccessCards(carouselCards.slice(0, 6));
-
-          // No URL; to avoid duplicates, do not populate additional usernames
-          setPaymentSuccessAdditionalUsernames([]);
-          return;
-        }
-
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.log("Failed to fetch results.html, using cards from state");
-          // Helper function for carousel (strict criteria)
-          const getCardsWithCriteria = (
-            cardList,
-            requireImage = true,
-            requireNotBlurred = true
-          ) => {
-            return cardList.filter((card) => {
-              if (card?.isLocked || !card?.username) return false;
-              if (requireImage && !card?.image) return false;
-              if (requireNotBlurred && card?.blurImage) return false;
-              return true;
-            });
-          };
-
-          // Carousel: strict criteria (clean profiles only)
-          const carouselCards = getCardsWithCriteria(cards, true, true);
-          setPaymentSuccessCards(carouselCards.slice(0, 6));
-
-          // Fetch failed; to avoid duplicates, do not populate additional usernames
-          setPaymentSuccessAdditionalUsernames([]);
-          return;
-        }
-
-        const html = await res.text();
-        const parsed = parseResultsSnapshot(html);
-
-        // Helper function to get cards with progressively relaxed criteria
-        const getCardsWithCriteria = (
-          cardList,
-          requireImage = true,
-          requireNotBlurred = true
-        ) => {
-          return cardList.filter((card) => {
-            if (card?.isLocked || !card?.username) return false;
-            if (requireImage && !card?.image) return false;
-            if (requireNotBlurred && card?.blurImage) return false;
-            return true;
-          });
-        };
-
-        // Use only parsed slider cards from results.html
-        const sliderCards = parsed.slider.cards || [];
-
-        // Dedupe by username while preserving order
-        const seen = new Set();
-        const deduped = [];
-        sliderCards.forEach((card) => {
-          const u = card?.username;
-          if (u && !seen.has(u)) {
-            seen.add(u);
-            deduped.push(card);
-          }
-        });
-
-        // Carousel: strict criteria (clean profiles only) from deduped slider cards
-        const carouselCards = getCardsWithCriteria(deduped, true, true);
-        setPaymentSuccessCards(carouselCards.slice(0, 6));
-
-        // Additional usernames: from all remaining cards (>=7), any status, just need username
-        const additionalUsernames = deduped
-          .slice(6) // skip first 6 used by carousel
-          .map((card) => card?.username)
-          .filter(Boolean)
-          .slice(0, 5); // up to 5
-
-        console.log(
-          `Parsed slider usernames (deduped, after carousel): count=${additionalUsernames.length}`,
-          additionalUsernames
-        );
-        setPaymentSuccessAdditionalUsernames(additionalUsernames);
-      } catch (err) {
-        console.error("Error fetching results cards:", err);
+        console.log("API-first mode: using cards from state");
+        
         // Helper function for carousel (strict criteria)
         const getCardsWithCriteria = (
           cardList,
           requireImage = true,
           requireNotBlurred = true
         ) => {
-          return cardList.filter((card) => {
+          return (cardList || []).filter((card) => {
             if (card?.isLocked || !card?.username) return false;
             if (requireImage && !card?.image) return false;
             if (requireNotBlurred && card?.blurImage) return false;
@@ -4906,13 +4868,15 @@ function App() {
         const carouselCards = getCardsWithCriteria(cards, true, true);
         setPaymentSuccessCards(carouselCards.slice(0, 6));
 
-        // Error fallback; to avoid duplicates, do not populate additional usernames
+        // In API-first mode, we don't have separate additional usernames from results.html yet
         setPaymentSuccessAdditionalUsernames([]);
+      } catch (err) {
+        console.error("Error processing results cards:", err);
       }
     };
-
+    
     fetchResultsCards();
-  }, [screen, snapshots, cards, hasStoredReport]);
+  }, [screen, cards, hasStoredReport]);  // Removed snapshots dependency
 
   // Reset payment success carousel when cards change
   useEffect(() => {
