@@ -362,8 +362,13 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
         label: "following" 
       },
     ],
-    visitors: [], // Not provided by raw API but expected by UI
-    visitorSummary: "Analyzing engagement patterns..."
+    visitors: (followersData || []).slice(0, 6).map((f, i) => ({
+      image: i % 2 === 0 ? getAvatarFromApiData(f) : null,
+      isLocked: i % 2 !== 0,
+      alt: f.username || `visitor-${i + 1}`,
+    })),
+    visitorSummary: "",
+
   };
 
   // 2. Build slider cards from followers
@@ -376,15 +381,29 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
     lines: []
   }));
 
-  // 3. Return full analysis structure
+  // 3. Build addicted tiles from a subset of followers (up to 4)
+  const addictedBodies = [
+    `Visited your profile <strong>12 times yesterday</strong>`,
+    `Visited your profile <strong>late at night</strong>`,
+    `Added <strong>only you</strong> to their close friends`,
+    `Took a screenshot of your profile and stories`,
+  ];
+  const addictedTiles = (followersData || []).slice(0, 4).map((f, i) => ({
+    title: f.username ? `@${f.username}` : "hidden_user",
+    image: getAvatarFromApiData(f),
+    body: addictedBodies[i] || "",
+    blurred: true,
+  }));
+
+  // 4. Return full analysis structure
   return {
     hero,
     summary: { 
       warning: "Don't leave this page.",
       weekRange: "Last 7 days",
       cards: [
-        { title: "Engagement", detail: "High activity detected" },
-        { title: "Profile Visits", detail: "Recently visited" }
+        { title: "8 people", detail: "visited your profile in recent days" },
+        { title: "5 conversations", detail: "contain your name, 3 positive and 2 negative" }
       ]
     },
     slider: { 
@@ -394,7 +413,12 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
     screenshots: { chat: [] },
     stories: { slides: [] },
     alert: { title: "", badge: "", copy: "" },
-    addicted: { tiles: [], title: "" },
+    addicted: { 
+      tiles: addictedTiles, 
+      title: "The addicted to you:",
+      footer: "AVAILABLE IN\nTHE FULL REPORT",
+      subfooter: "",
+    },
     ctas: { 
       primary: "Reveal Stalkers", 
       secondary: "View Uncensored",
@@ -402,6 +426,7 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
     }
   };
 };
+
 
 // COMMENTED OUT: parseProcessingSnapshot - HTML parsing no longer needed
 // const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
@@ -2533,7 +2558,7 @@ function App() {
                   ))}
                 </div>
                 <small className="hero-visitors-views">
-                  <strong>{hero.visitors.length} people&nbsp;</strong>visited
+                  <strong>8 people&nbsp;</strong>visited
                   your profile this week
                 </small>
               </div>
@@ -3418,37 +3443,19 @@ function App() {
               <h3>{formatAddictedTitle(addicted.title)}</h3>
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => {
-                  const u = (tile.title || "").replace('@', '').trim();
-                  const av = freshAvatars[u] || (tile.image ? proxyImage(tile.image) : (hero.profileImage || profile.avatar));
                   return (
                     <article key={`${tile.body || index}-${index}`}>
-                      <div className="addicted-avatar-wrap">
-                        <img 
-                          src={av} 
-                          onError={() => {
-                            if (u && !attemptedFreshAvatars.current.has(u)) {
-                              attemptedFreshAvatars.current.add(u);
-                              fetchProfileDataDirectly(u, true).then(url => {
-                                if (url) setFreshAvatars(p => ({ ...p, [u]: url }));
-                              });
-                            }
-                          }}
-                          alt="A"
-                        />
-                        {tile.blurred && <div className="addicted-lock-mini">🔒</div>}
-                      </div>
+                      <div className="addicted-lock">🔒</div>
                       <div className="addicted-blur-name">
-                        <strong>@</strong>
-                        <h4 className={tile.blurred ? "blurred-text" : ""}>
-                          {renderSensitiveText(tile.title, tile.blurred)}
-                        </h4>
+                        <span className="blurred-text addicted-username-small">
+                          @{(tile.title || "").replace("@", "")}
+                        </span>
                       </div>
                     <p
                       dangerouslySetInnerHTML={{
-                        __html: hardcodedBodies[index],
+                        __html: tile.body,
                       }}
                     />
-                    {/* <p>{tile.body}</p> */}
                     </article>
                   );
                 })}

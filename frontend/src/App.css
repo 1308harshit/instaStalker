@@ -1680,6 +1680,13 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.addicted-username-small {
+  font-size: 0.8rem;
+  color: #555;
+  font-weight: 500;
+}
+
+
 /* Mobile responsive styles for addicted title */
 @media (max-width: 640px) {
   .addicted-panel h3 {
