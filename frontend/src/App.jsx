@@ -224,16 +224,19 @@ const createProfileStageData = (
 
 const createProcessingStageData = (
   username = INITIAL_PROFILE.username,
-  avatar = INITIAL_PROFILE.avatar
+  avatar = INITIAL_PROFILE.avatar,
+  city = null
 ) => ({
+  username,
   avatar,
   title: "Processing data",
   subtitle: "Our robots are analyzing the behavior of your followers",
   bullets: [
-    `Found 10 mentions of ${username} in messages from your followers`,
-    "Our AI detected a possible screenshot of someone talking about you",
-    "It was detected that someone you know visited your profile 9 times yesterday",
-    "2 people from your region shared one of your stories",
+    `Found **${randBetween(8, 15)} mentions** of ${username} in messages from your followers`,
+    "Our AI detected a possible **screenshot of someone talking about you**",
+    `It was detected that someone you know **visited your profile ${randBetween(7, 14)} times yesterday**`,
+    `**${randBetween(2, 5)} people from ${city || "your region"} and nearby regions** shared one of your stories`,
+    `Your name was mentioned **${randBetween(3, 8)} times in a secret Instagram group**`,
   ],
 });
 
@@ -594,6 +597,31 @@ function App() {
   const [viewportWidth, setViewportWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
+  
+  const [geoData, setGeoData] = useState(null);
+
+  // Fetch GEO Data
+  useEffect(() => {
+    fetch("https://get.geojs.io/v1/ip/geo.json")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.city) {
+          setGeoData(data);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch geo data:", err));
+  }, []);
+
+  // Update Processing Stage Bullets when Geo Data arrives
+  useEffect(() => {
+    if (processingStage.username && geoData && geoData.city) {
+      setProcessingStage((prev) => ({
+        ...prev,
+        ...createProcessingStageData(prev.username, prev.avatar, geoData.city),
+      }));
+    }
+  }, [geoData]);
+  
   const toastTimers = useRef({});
   const tickerRef = useRef(null);
   const profileHoldTimerRef = useRef(null);
@@ -1510,7 +1538,7 @@ function App() {
         }
         return nextIndex;
       });
-    }, 1500); // 1.5 second delay between each bullet
+    }, 2500); // 2.5 second delay between each bullet
 
     return () => {
       if (bulletTimer) {
@@ -1816,7 +1844,7 @@ function App() {
     setProfileStage(
       createProfileStageData(formatted, profile.avatar, friendlyName)
     );
-    setProcessingStage(createProcessingStageData(formatted, profile.avatar));
+    setProcessingStage(createProcessingStageData(formatted, profile.avatar, geoData?.city));
     setCanAdvanceFromProfile(false);
     setCanAdvanceFromProcessing(false);
     clearTimeout(profileHoldTimerRef.current);
@@ -1997,17 +2025,15 @@ function App() {
           if (step.name === "processing" && step.data?.profileData) {
             const profileData = step.data.profileData;
             const avatar = getAvatarFromApiData(profileData);
-            setProcessingStage({
-              avatar: avatar,
-              title: "Processing data",
-              subtitle: "Our robots are analyzing the behavior of your followers",
-              bullets: [
-                `Found ${Math.floor(Math.random() * 15) + 5} mentions of @${profileData.username} in messages from your followers`,
-                "Our AI detected a possible screenshot of someone talking about you",
-                "It was detected that someone you know visited your profile 9 times yesterday",
-                "2 people from your region shared one of your stories",
-              ],
-            });
+            setProcessingStage(
+              createProcessingStageData(
+                profileData.username
+                  ? `@${profileData.username}`
+                  : profile.username,
+                avatar,
+                geoData?.city
+              )
+            );
           }
 
           // Results — step.data contains {cards, followersList}
@@ -2398,63 +2424,81 @@ function App() {
     );
   };
 
-  const renderProcessing = () => (
-    <section className="screen snapshot-stage">
-      {shouldShowQueueMessage() && (
-        <div className="queue-message">{QUEUE_MESSAGE}</div>
-      )}
-      <div className="stage-card processing-card">
-        <div className="stage-progress-track subtle">
-          <div className="stage-progress-fill" style={{ width: "82%" }} />
-        </div>
-        <div className="processing-avatar-ring">
-          <div className="scanner-overlay">
-            <img
-              src={processingStage.avatar || profile.avatar}
-              alt={profile.name}
-              referrerPolicy="no-referrer"
-            />
-            <div className="grid-background"></div>
-            <div className="scan-grid-line"></div>
+  const renderProcessing = () => {
+    // Helper to bold text wrapped in **
+    const parseBold = (text) => {
+      if (!text) return text;
+      const parts = text.split(/(\*\*.*?\*\*)/g);
+      return parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={i} className="font-bold text-gray-900">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          part
+        )
+      );
+    };
+
+    return (
+      <section className="screen snapshot-stage">
+        {shouldShowQueueMessage() && (
+          <div className="queue-message">{QUEUE_MESSAGE}</div>
+        )}
+        <div className="stage-card processing-card">
+          <div className="stage-progress-track subtle">
+            <div className="stage-progress-fill" style={{ width: "82%" }} />
           </div>
+          <div className="processing-avatar-ring">
+            <div className="scanner-overlay">
+              <img
+                src={processingStage.avatar || profile.avatar}
+                alt={profile.name}
+                referrerPolicy="no-referrer"
+              />
+              <div className="grid-background"></div>
+              <div className="scan-grid-line"></div>
+            </div>
+          </div>
+          <h1>{processingStage.title}</h1>
+          <p className="stage-subtitle-analysis">
+            Our robots are analyzing{" "}
+            <strong className="strong-red">the behavior of your followers</strong>
+            {/* {processingStage.subtitle} */}
+          </p>
+          <ul className="processing-list">
+            {processingStage.bullets.map((message, index) => (
+              <li
+                key={`${index}`}
+                className={index <= processingMessageIndex ? "visible" : ""}
+              >
+                <div className="processing-list-item-content">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="processing-check-icon"
+                    aria-hidden="true"
+                    style={{ minWidth: "15px", marginTop: "4px" }}
+                  >
+                    <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
+                    <path d="m9 11 3 3L22 4"></path>
+                  </svg>
+                  <p>{parseBold(message)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
-        <h1>{processingStage.title}</h1>
-        <p className="stage-subtitle-analysis">
-          Our robots are analyzing{" "}
-          <strong className="strong-red">the behavior of your followers</strong>
-          {/* {processingStage.subtitle} */}
-        </p>
-        <ul className="processing-list">
-          {processingStage.bullets.map((message, index) => (
-            <li
-              key={`${message}-${index}`}
-              className={index <= processingMessageIndex ? "visible" : ""}
-            >
-              <p>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="processing-check-icon"
-                  aria-hidden="true"
-                >
-                  <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
-                  <path d="m9 11 3 3L22 4"></path>
-                </svg>
-                {message}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   // Helper function to format addicted title with red "addicted" word
   const formatAddictedTitle = (title) => {
