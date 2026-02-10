@@ -337,6 +337,72 @@ const getAvatarFromApiData = (data) => {
   return null;
 };
 
+/**
+ * Reconstruct analysis object from API data to unblock UI transitions
+ */
+const createAnalysisFromApiData = (profileData, followersData, profileState) => {
+  if (!profileData) return null;
+
+  // 1. Build Hero section
+  const hero = {
+    name: profileData.full_name || profileData.username || profileState.name,
+    username: profileData.username ? `@${profileData.username}` : profileState.username,
+    profileImage: getAvatarFromApiData(profileData) || profileState.avatar,
+    stats: [
+      { 
+        value: profileData.media_count ?? profileState.posts ?? 0, 
+        label: "posts" 
+      },
+      { 
+        value: profileData.follower_count ?? profileState.followers ?? 0, 
+        label: "followers" 
+      },
+      { 
+        value: profileData.following_count ?? profileState.following ?? 0, 
+        label: "following" 
+      },
+    ],
+    visitors: [], // Not provided by raw API but expected by UI
+    visitorSummary: "Analyzing engagement patterns..."
+  };
+
+  // 2. Build slider cards from followers
+  const sliderCards = (followersData || []).map(f => ({
+    username: f.username ? `@${f.username}` : null,
+    title: f.full_name || f.username || "Instagram User",
+    image: getAvatarFromApiData(f),
+    isLocked: false,
+    blurImage: !f.username,
+    lines: []
+  }));
+
+  // 3. Return full analysis structure
+  return {
+    hero,
+    summary: { 
+      warning: "Don't leave this page.",
+      weekRange: "Last 7 days",
+      cards: [
+        { title: "Engagement", detail: "High activity detected" },
+        { title: "Profile Visits", detail: "Recently visited" }
+      ]
+    },
+    slider: { 
+      heading: "Visited your profile this week between 2 to 7 times:",
+      cards: sliderCards 
+    },
+    screenshots: { chat: [] },
+    stories: { slides: [] },
+    alert: { title: "", badge: "", copy: "" },
+    addicted: { tiles: [], title: "" },
+    ctas: { 
+      primary: "Reveal Stalkers", 
+      secondary: "View Uncensored",
+      tertiary: "View Full Report"
+    }
+  };
+};
+
 // COMMENTED OUT: parseProcessingSnapshot - HTML parsing no longer needed
 // const parseProcessingSnapshot = (html, fallbackAvatar, fallbackUsername) => {
 //   try {
@@ -423,6 +489,7 @@ function App() {
   // API-FIRST STATE: Raw API data storage (replaces snapshot-based approach)
   // ============================================================================
   const [apiProfileData, setApiProfileData] = useState(null);
+  const apiProfileDataRef = useRef(null); // Ref for immediate access in SSE handlers
   // Shape: { username, full_name, profile_pic_url, base64_profile_pic, 
   //          hd_profile_pic_url_info, follower_count, following_count, 
   //          is_private, is_verified, id, avatar }
@@ -1189,7 +1256,6 @@ function App() {
   //             greeting: `Hello, ${profileData.full_name || profileData.username}`,
   //             question: "Is this your profile?",
   //             primaryCta: "Continue, the profile is correct",
-  //             secondaryCta: "No, I want to correct it",
   //           });
   //           
   //           setProfileConfirmParsed(true);
@@ -1815,7 +1881,11 @@ function App() {
 
   const fetchCards = async (usernameValue) => {
     // ============================================================================
-    // API-FIRST: SSE now streams raw JSON data instead of snapshot paths
+    // API-FIRST: SSE uses NAMED events from backend:
+    //   event: snapshot  → {name, data: {profileData/cards/...}, capturedAt}
+    //   event: done      → {cards, steps, profileData, ...}
+    //   event: error     → {error: "message"}
+    // IMPORTANT: Must use addEventListener (not onmessage) for named events!
     // ============================================================================
     return new Promise((resolve, reject) => {
       const eventSourceUrl = `${API_URL}?username=${encodeURIComponent(
@@ -1825,29 +1895,24 @@ function App() {
 
       const eventSource = new EventSource(eventSourceUrl);
 
-      // Log connection state changes
       eventSource.onopen = () => {
         console.log(`✅ SSE connection opened`);
       };
 
+      // ✅ Handle named "snapshot" events from backend
       eventSource.addEventListener("snapshot", (e) => {
         try {
           const step = JSON.parse(e.data);
-          console.log(`📥 Received step via SSE: ${step.name}`, step);
+          console.log(`📡 SSE snapshot: ${step.name}`, step);
 
-          // ============================================================================
-          // API-FIRST: Process raw JSON data from each step
-          // ============================================================================
-          
-          // Handle profile-confirm step - update profile state from API data
+          // Profile confirmation — step.data.profileData contains the profile info
           if (step.name === "profile-confirm" && step.data?.profileData) {
             const profileData = step.data.profileData;
-            console.log(`✅ Profile data received:`, profileData);
-            
-            // Store raw API data
+            console.log("👤 Profile data received:", profileData);
+
             setApiProfileData(profileData);
-            
-            // Update profile state with API data
+            apiProfileDataRef.current = profileData;
+
             const avatar = getAvatarFromApiData(profileData);
             setProfile((prev) => ({
               ...prev,
@@ -1857,8 +1922,7 @@ function App() {
               followers: profileData.follower_count || prev.followers,
               following: profileData.following_count || prev.following,
             }));
-            
-            // Update profile stage for confirmation screen
+
             setProfileStage({
               avatar: avatar,
               progressPercent: 55,
@@ -1868,15 +1932,14 @@ function App() {
               primaryCta: "Continue, the profile is correct",
               secondaryCta: "No, I want to correct it",
             });
-            
+
             setProfileConfirmParsed(true);
           }
-          
-          // Handle processing step - update processing stage from API data
+
+          // Processing — step.data.profileData contains profile info for bullets
           if (step.name === "processing" && step.data?.profileData) {
             const profileData = step.data.profileData;
             const avatar = getAvatarFromApiData(profileData);
-            
             setProcessingStage({
               avatar: avatar,
               title: "Processing data",
@@ -1889,58 +1952,69 @@ function App() {
               ],
             });
           }
-          
-          // Handle results step - store followers data
-          if (step.name === "results" && step.data?.cards) {
-            console.log(`✅ Followers/cards data received: ${step.data.cards.length} cards`);
-            setApiFollowersData(step.data.followersList || []);
-            setCards(step.data.cards);
-          }
 
-          // COMMENTED OUT: Old snapshot-based approach
-          // setSnapshots((prev) => {
-          //   const filtered = prev.filter((s) => s.name !== step.name);
-          //   const updated = [...filtered, step];
-          //   return updated;
-          // });
-          
+          // Results — step.data contains {cards, followersList}
+          if (step.name === "results" && step.data?.cards) {
+            console.log(`✅ Results received: ${step.data.cards.length} cards`);
+            const cardsData = step.data.cards;
+            const followersList = step.data.followersList || [];
+
+            setApiFollowersData(followersList);
+            setCards(cardsData);
+
+            // ✅ CRITICAL: Populate analysis to unblock transition to PREVIEW
+            setAnalysis(createAnalysisFromApiData(
+              apiProfileDataRef.current,
+              followersList,
+              profileRef.current
+            ));
+            setAnalysisLoading(false);
+          }
         } catch (err) {
-          console.error("❌ Error parsing step data:", err);
+          console.error("❌ Error processing snapshot event:", err);
           console.error("   Raw data:", e.data);
         }
       });
 
+      // ✅ Handle named "done" event from backend
       eventSource.addEventListener("done", (e) => {
         try {
           const finalResult = JSON.parse(e.data);
           console.log(
-            `✅ Scrape completed - received ${
-              finalResult.cards?.length || 0
-            } cards`
+            `✅ Scrape completed - received ${finalResult.cards?.length || 0} cards`
           );
 
           // Set cards from final result
           if (finalResult.cards && Array.isArray(finalResult.cards)) {
             setCards(finalResult.cards);
           }
-          
+
           // Store profile data if available
           if (finalResult.profileData) {
             setApiProfileData(finalResult.profileData);
+            apiProfileDataRef.current = finalResult.profileData;
           }
-          
-          // COMMENTED OUT: Snapshot-based state update
-          // if (finalResult.steps && Array.isArray(finalResult.steps)) {
-          //   setSnapshots((prev) => mergeSnapshotSteps(prev, finalResult.steps));
-          // }
 
-          // Persist last successful scrape so payment-return pages can restore data
-          saveLastRun({
-            cards: finalResult.cards || [],
-            profileData: finalResult.profileData || null,
-            profile,
-            savedAt: Date.now(),
-          });
+          // Ensure analysis is populated (may already be set from "results" event)
+          if (!analysis) {
+            setAnalysis(createAnalysisFromApiData(
+              apiProfileDataRef.current,
+              finalResult.cards || [],
+              profileRef.current
+            ));
+          }
+          setAnalysisLoading(false);
+
+          // Persist last successful scrape for payment-return flow
+          try {
+            localStorage.setItem("lastScrapeRun", JSON.stringify({
+              cards: finalResult.cards || [],
+              profileData: finalResult.profileData || apiProfileDataRef.current,
+              profile: profileRef.current,
+              savedAt: Date.now(),
+            }));
+          } catch (e) { /* localStorage quota exceeded or unavailable */ }
+
 
           eventSource.close();
           resolve(finalResult);
@@ -1951,6 +2025,7 @@ function App() {
         }
       });
 
+      // ✅ Handle named "error" event from backend
       eventSource.addEventListener("error", (e) => {
         try {
           const errorData = JSON.parse(e.data);
@@ -1964,16 +2039,12 @@ function App() {
         }
       });
 
-      // Handle connection errors
+      // Handle connection-level errors
       eventSource.onerror = (err) => {
-        console.error("❌ EventSource error:", err);
+        console.error("❌ EventSource connection error:", err);
         console.error(
           `   ReadyState: ${eventSource.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSED)`
         );
-        console.error(`   URL: ${eventSourceUrl}`);
-
-        // Only reject if connection is closed (readyState === 2)
-        // If it's still connecting (0) or open (1), it might recover
         if (eventSource.readyState === EventSource.CLOSED) {
           eventSource.close();
           reject(new Error("SSE connection closed"));
@@ -1981,6 +2052,8 @@ function App() {
       };
     });
   };
+
+
 
   const scrollToFullReport = () => {
     const fullReportSection = document.getElementById("full-report-section");
