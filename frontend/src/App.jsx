@@ -3954,7 +3954,7 @@ function App() {
           contact: paymentForm.phoneNumber || "",
         },
         theme: {
-          color: "#e23744",
+          color: "#3399cc",
         },
         modal: {
           ondismiss: function () {
@@ -4065,7 +4065,6 @@ function App() {
                     />
                   </div>
 
-                  {/*
                   <div className="payment-form-group">
                     <label htmlFor="fullName">Full name*</label>
                     <input
@@ -4103,7 +4102,6 @@ function App() {
                       />
                     </div>
                   </div>
-                  */}
                 </form>
               </div>
 
