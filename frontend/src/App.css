@@ -3361,3 +3361,114 @@ body {
 .strong-red {
   color: #ef4444;
 }
+
+/* Chat Interface Card Styles */
+.chat-interface-card {
+  background: #000;
+  border-radius: 24px;
+  padding: 12px;
+  max-width: 380px;
+  margin: 24px auto;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-header-img-container {
+  width: calc(100% + 24px);
+  margin: -12px -12px 12px -12px;
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+}
+
+.chat-header-img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.chat-body-content {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: -90px;
+  margin-bottom: 0px;
+  min-height: 110px;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px;
+  padding-bottom: 30px;
+  gap: 2px;
+}
+
+.chat-blurred-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px);
+  transform: scale(1.1);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.chat-bubble {
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 6px 14px;
+  border-radius: 18px;
+  font-size: 13.5px;
+  width: fit-content;
+  max-width: 85%;
+  color: #fff;
+  line-height: 1.4;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-bubble.left {
+  border-bottom-left-radius: 4px;
+  margin-left: 32px; /* Consistent alignment for all bubbles */
+}
+
+.chat-bubble.right {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.chat-bubble.with-avatar {
+  position: relative;
+}
+
+.bubble-avatar {
+  position: absolute;
+  left: -32px;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.bubble-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.blur-text-sm {
+  filter: blur(4px);
+  opacity: 0.7;
+  display: inline-block;
+}
+

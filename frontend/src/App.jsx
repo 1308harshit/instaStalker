@@ -43,6 +43,7 @@ import b1Image from "./assets/b1.jpg";
 import g1Image from "./assets/g1.jpg";
 import g2Image from "./assets/g2.jpg";
 import printMessageBg from "./assets/print-message-new.png";
+import printMessage3 from "./assets/print-message-3.png";
 import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
@@ -3229,262 +3230,34 @@ function App() {
               <li>From those who pretend to be your friend</li>
               <li>People interested in you</li>
             </ul>
-            {/* Message bubbles from screenshots.chat data */}
-            {screenshots.chat && screenshots.chat.length > 0 ? (
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  display: "block",
-                  borderRadius: "1rem",
-                  overflow: "hidden",
-                }}
-              >
-                <img
-                  src={printMessageBg}
-                  alt="Chat background"
-                  style={{
-                    width: "100%",
-                    height: "230px",
-                    display: "block",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    left: "4%",
-                    top: "45%",
-                    zIndex: 4,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "3px",
-                  }}
-                >
-                  {screenshots.chat.map((bubble, index) => {
-                    if (!bubble || !bubble.text) return null;
-                    return (
-                      <div
-                        key={`chat-bubble-${index}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-end",
-                          gap: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "25px",
-                            height: "25px",
-                            minWidth: "25px",
-                            minHeight: "25px",
-                            borderRadius: "50%",
-                            backgroundSize: "cover",
-                            backgroundRepeat: "no-repeat",
-                            backgroundImage: `url(${profileNewPng})`,
-                            filter: "blur(4px)",
-                            flexShrink: 0,
-                            marginBottom: "8px",
-                          }}
-                        />
-                        <div
-                          style={{
-                            backgroundColor: "#262626",
-                            color: "#eee",
-                            padding: "8px 14px",
-                            borderRadius:
-                              index === 0
-                                ? "18px 18px 18px 4px"
-                                : index === screenshots.chat.length - 1
-                                ? "18px 18px 4px 18px"
-                                : "18px 18px 18px 4px",
-                            fontSize: "14px",
-                            whiteSpace: "nowrap",
-                            lineHeight: "1.4",
-                            width: "fit-content",
-                          }}
-                        >
-                          {bubble.segments ? (
-                            // Render segments with individual blur status
-                            bubble.segments.map((segment, segIndex) => (
-                              <span
-                                key={`segment-${segIndex}`}
-                                style={
-                                  segment.blurred ? { filter: "blur(4px)" } : {}
-                                }
-                              >
-                                {segment.text}
-                                {segIndex < bubble.segments.length - 1
-                                  ? " "
-                                  : ""}
-                              </span>
-                            ))
-                          ) : bubble.blurred ? (
-                            // Fallback for old format
-                            <span style={{ filter: "blur(4px)" }}>
-                              {bubble.text}
-                            </span>
-                          ) : (
-                            <span>{bubble.text}</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+            <article className="chat-interface-card">
+                <div className="chat-header-img-container">
+                  <img src={printMessageBg} alt="Chat Header" className="chat-header-img" />
                 </div>
-              </div>
-            ) : screenshots.chatHtml ? (
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  display: "block",
-                  borderRadius: "1rem",
-                  overflow: "hidden",
-                }}
-              >
-                <img
-                  src={printMessageBg}
-                  alt="Chat background"
-                  style={{
-                    width: "100%",
-                    height: "250px",
-                    display: "block",
-                  }}
-                />
-                {/* Fallback: Try to extract messages from chatHtml if chat array is empty */}
-                {(() => {
-                  try {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(
-                      screenshots.chatHtml,
-                      "text/html"
-                    );
-                    const messagesWrapper = doc.querySelector(
-                      "div.space-y-\\[3px\\], div[class*='space-y']"
-                    );
-                    const messages = [];
 
-                    if (messagesWrapper) {
-                      const spans = messagesWrapper.querySelectorAll("span");
-                      spans.forEach((span) => {
-                        const text = span.textContent?.trim();
-                        if (text) {
-                          const isBlurred =
-                            span.className?.includes("blur") || false;
-                          messages.push({
-                            segments: [
-                              {
-                                text: text,
-                                blurred: isBlurred,
-                              },
-                            ],
-                            text: text,
-                            blurred: isBlurred,
-                          });
-                        }
-                      });
-                    }
-
-                    if (messages.length > 0) {
-                      return (
-                        <div
-                          style={{
-                            position: "absolute",
-                            left: "4%",
-                            top: "45%",
-                            zIndex: 4,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "3px",
-                          }}
-                        >
-                          {messages.map((bubble, index) => (
-                            <div
-                              key={`chat-bubble-fallback-${index}`}
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-end",
-                                gap: "12px",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: "25px",
-                                  height: "25px",
-                                  minWidth: "25px",
-                                  minHeight: "25px",
-                                  borderRadius: "50%",
-                                  backgroundSize: "cover",
-                                  backgroundRepeat: "no-repeat",
-                                  backgroundImage: `url(${profileNewPng})`,
-                                  filter: "blur(4px)",
-                                  flexShrink: 0,
-                                  marginBottom: "8px",
-                                }}
-                              />
-                              <div
-                                style={{
-                                  backgroundColor: "#262626",
-                                  color: "#eee",
-                                  padding: "8px 14px",
-                                  borderRadius:
-                                    index === 0
-                                      ? "18px 18px 18px 4px"
-                                      : index === messages.length - 1
-                                      ? "18px 18px 4px 18px"
-                                      : "18px 18px 18px 4px",
-                                  fontSize: "14px",
-                                  whiteSpace: "nowrap",
-                                  lineHeight: "1.4",
-                                  width: "fit-content",
-                                }}
-                              >
-                                {bubble.segments ? (
-                                  // Render segments with individual blur status
-                                  bubble.segments.map((segment, segIndex) => (
-                                    <span
-                                      key={`segment-fallback-${segIndex}`}
-                                      style={
-                                        segment.blurred
-                                          ? { filter: "blur(4px)" }
-                                          : {}
-                                      }
-                                    >
-                                      {segment.text}
-                                      {segIndex < bubble.segments.length - 1
-                                        ? " "
-                                        : ""}
-                                    </span>
-                                  ))
-                                ) : bubble.blurred ? (
-                                  // Fallback for old format
-                                  <span style={{ filter: "blur(4px)" }}>
-                                    {bubble.text}
-                                  </span>
-                                ) : (
-                                  <span>{bubble.text}</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-                  } catch (e) {
-                    console.error("Error parsing chatHtml fallback:", e);
-                  }
-                  return null;
-                })()}
-              </div>
-            ) : (
-                <div className="screenshots-placeholder">
-                  <img src={printMessageBg} alt="Bg" style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '1rem', opacity: 0.5 }} />
-                  <div className="placeholder-overlay">
-                    <div className="spinner-mini" />
-                    <p>Generating screenshot analysis...</p>
+                <div className="chat-body-content">
+                  <img
+                    src={printMessageBg}
+                    alt="Blurred Content"
+                    className="chat-blurred-bg"
+                  />
+                  <div className="chat-bubble left">
+                      <span className="blur-text-sm">██████████████████</span>
+                  </div>
+                  <div className="chat-bubble left">
+                      {profile.username || "pratik"} is
+                      <span className="blur-text-sm" style={{ marginLeft: "4px" }}>████</span>
+                  </div>
+                  <div className="chat-bubble left with-avatar">
+                      <div className="bubble-avatar">
+                        <img src={profileNewPng} alt="Bubble Avatar" />
+                      </div>
+                      you know who it is
                   </div>
                 </div>
-            )}
+
+
+              </article>
             <p className="screenshots-uncensored">
               SEE THE SCREENSHOTS <strong>UNCENSORED</strong> IN THE COMPLETE
               REPORT
