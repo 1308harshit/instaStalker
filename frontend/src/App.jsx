@@ -3850,24 +3850,7 @@ function App() {
         );
       }
 
-      // Save user data to MongoDB
-      const saveResponse = await fetch(`/api/payment/save-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentForm),
-      }).catch((fetchErr) => {
-        console.error("Network error saving user:", fetchErr);
-        throw new Error(
-          `Cannot connect to server. Please check if backend is running.`
-        );
-      });
 
-      if (!saveResponse.ok) {
-        const errorData = await saveResponse
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
-        throw new Error(errorData.error || "Failed to save user data");
-      }
 
       // Create Razorpay order
       const amount = 99 * quantity; // 99₹ per item
