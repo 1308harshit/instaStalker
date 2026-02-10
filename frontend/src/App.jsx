@@ -3516,31 +3516,16 @@ function App() {
     }
 
     if (!fullReportData && !fullReportHtml) {
-      return (
-        <section className="screen hero">
-          <h1>Full Report Not Available</h1>
-          <p>The full report could not be loaded.</p>
-          <button
-            className="primary-btn"
-            onClick={() => setScreen(SCREEN.PREVIEW)}
-          >
-            Back to Preview
-          </button>
-        </section>
-      );
+      // In API-first flow, fullReportData/fullReportHtml are not populated,
+      // but we still show the hardcoded "Unlock Complete Report" screen below.
+      // Only bail out if there's genuinely no profile info at all.
     }
 
     // Extract avatar from parsed data or use profile avatar
-    const profileAvatar = fullReportData?.avatar || profile.avatar;
+    const profileAvatar = fullReportData?.avatar 
+      || analysis?.hero?.profileImage 
+      || profile.avatar;
 
-    // Debug: Log avatar source
-    if (fullReportData?.avatar) {
-      console.log("✅ Using avatar from fullReportData");
-    } else if (profile.avatar) {
-      console.log("⚠️ Using fallback avatar from profile");
-    } else {
-      console.warn("⚠️ No avatar available");
-    }
 
     return (
       <section className="screen full-report-screen">
