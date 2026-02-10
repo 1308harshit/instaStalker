@@ -2091,42 +2091,9 @@ body {
   color: #1f1f1f;
 }
 
-.processing-card ul.processing-list {
-  list-style: none;
-  padding: 0 10px;
-  margin: 32px 0 0;
-  text-align: center;
-}
 
-.processing-card ul.processing-list li {
-  display: block;
-  margin-bottom: 22px;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  color: #1a1a1b;
-  font-weight: 600;
-  font-size: 1.05rem;
-  line-height: 1.4;
-}
 
-.processing-card ul.processing-list li.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
 
-.processing-card ul.processing-list li p {
-  display: inline;
-  margin: 0;
-}
-
-.processing-card ul.processing-list li .processing-check-icon {
-  display: inline-block;
-  vertical-align: middle;
-  color: #F4364C;
-  margin-right: 8px;
-  margin-bottom: 2px;
-}
 
 .snapshot-content {
   width: 100%;
@@ -3304,4 +3271,174 @@ body {
   50% {
     opacity: 0.3;
   }
+}
+
+/* Processing Screen Styles */
+.processing-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center; /* Centers each list item content block */
+}
+
+.processing-list li {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.5s ease;
+}
+
+.processing-list li.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.processing-list-item-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center; /* Centers the icon and text together */
+  gap: 8px;
+  text-align: center;
+}
+
+.processing-check-icon {
+  color: #ef4444; /* red-500 */
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.processing-list p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #4b5563; /* gray-600 */
+  text-align: center;
+}
+
+.font-bold {
+  font-weight: 700;
+  color: #111827; /* gray-900 */
+}
+
+.stage-subtitle-analysis {
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+  color: #374151;
+}
+
+.strong-red {
+  color: #ef4444;
+}
+
+/* Chat Interface Card Styles */
+.chat-interface-card {
+  background: #000;
+  border-radius: 24px;
+  padding: 12px;
+  max-width: 380px;
+  margin: 24px auto;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-header-img-container {
+  width: calc(100% + 24px);
+  margin: -12px -12px 12px -12px;
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+}
+
+.chat-header-img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.chat-body-content {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: -90px;
+  margin-bottom: 0px;
+  min-height: 110px;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px;
+  padding-bottom: 30px;
+  gap: 2px;
+}
+
+.chat-blurred-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(14px);
+  transform: scale(1.1);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.chat-bubble {
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 6px 14px;
+  border-radius: 18px;
+  font-size: 13.5px;
+  width: fit-content;
+  max-width: 85%;
+  color: #fff;
+  line-height: 1.4;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-bubble.left {
+  border-bottom-left-radius: 4px;
+  margin-left: 32px; /* Consistent alignment for all bubbles */
+}
+
+.chat-bubble.right {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.chat-bubble.with-avatar {
+  position: relative;
+}
+
+.bubble-avatar {
+  position: absolute;
+  left: -32px;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.bubble-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.blur-text-sm {
+  filter: blur(4px);
+  opacity: 0.7;
+  display: inline-block;
 }
