@@ -1,6 +1,35 @@
 import "./App.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import SuccessfullyPaid from "./SuccessfullyPaid";
+
+// Simple Error Boundary for debugging
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "20px", color: "red", backgroundColor: "#ffebee", height: "100vh", overflow: "auto" }}>
+          <h2>Application Error</h2>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.error && this.state.error.toString()}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: "10px", padding: "8px 16px" }}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ============================================================================
 // API-FIRST ARCHITECTURE REFACTOR
@@ -598,9 +627,12 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
-  const [cashfreeEnv, setCashfreeEnv] = useState(null); // null = loading, "TEST" or "PRODUCTION"
-  const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
-  const cashfreeEnvRef = useRef(null); // Ref to track environment for synchronous access
+  // COMMENTED OUT: Cashfree state (replaced by Razorpay)
+  // const [cashfreeEnv, setCashfreeEnv] = useState(null);
+  // const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
+  // const cashfreeEnvRef = useRef(null);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
 
   // ✅ PayU success: fire Purchase pixel ONLY on /successfully-paid path with valid pending purchase
   // STRICT VALIDATION: Only fires if all conditions are met
@@ -3765,198 +3797,30 @@ function App() {
   //   }
   // }, [screen]);
 
-  // Fetch Cashfree environment and load appropriate SDK
+  // Load Razorpay checkout script
   useEffect(() => {
-    const fetchCashfreeEnv = async () => {
-      try {
-        const response = await fetch("/api/payment/environment");
-        if (response.ok) {
-          const data = await response.json();
-          const isTest = data.isTest;
-          const env = isTest ? "TEST" : "PRODUCTION";
-          setCashfreeEnv(env);
-          cashfreeEnvRef.current = env;
-
-          // Remove any existing Cashfree SDK scripts (fallback or previous)
-          const existingScripts = document.querySelectorAll(
-            'script[src*="cashfree"], script[id*="cashfree"]'
-          );
-          existingScripts.forEach((script) => script.remove());
-
-          // Clear window.Cashfree if it exists (from previous script)
-          if (window.Cashfree) {
-            delete window.Cashfree;
-          }
-
-          // Dynamically load the correct SDK script
-          const script = document.createElement("script");
-          script.id = "cashfree-sdk";
-          script.src = isTest
-            ? "https://sdk.cashfree.com/js/ui/2.0.0/cashfree.sandbox.js"
-            : "https://sdk.cashfree.com/js/v3/cashfree.js";
-          script.onload = () => {
-            console.log(
-              `✅ Cashfree SDK loaded (${isTest ? "TEST" : "PRODUCTION"})`
-            );
-            setCashfreeSdkLoaded(true);
-          };
-          script.onerror = () => {
-            console.error("❌ Failed to load Cashfree SDK");
-            setCashfreeSdkLoaded(false);
-          };
-          document.head.appendChild(script);
-        } else {
-          console.warn(
-            "⚠️ Failed to fetch Cashfree environment, defaulting to PRODUCTION"
-          );
-          const env = "PRODUCTION";
-          setCashfreeEnv(env);
-          cashfreeEnvRef.current = env;
-          // Keep the fallback script from index.html
-          setCashfreeSdkLoaded(true);
-        }
-      } catch (err) {
-        console.error("❌ Error fetching Cashfree environment:", err);
-        const env = "PRODUCTION";
-        setCashfreeEnv(env);
-        cashfreeEnvRef.current = env;
-        // Keep the fallback script from index.html
-        setCashfreeSdkLoaded(true);
-      }
-    };
-
-    fetchCashfreeEnv();
-  }, []);
-
-  // Handle payment return URL - verify payment before showing success
-  useEffect(() => {
-    // 🚫 DO NOT run payment return logic on post-purchase links
-    if (window.location.pathname.startsWith("/post-purchase")) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const orderId = urlParams.get("order_id");
-
-    // Only process if we're on the return URL (Cashfree redirects here)
-    if (orderId && window.location.pathname === "/payment/return") {
-      // Prevent duplicate processing
-      if (purchaseEventFiredRef.current.has(orderId)) {
-        console.log("⚠️ Order already processed:", orderId);
-        setScreen(SCREEN.PAYMENT_SUCCESS);
-        window.history.replaceState({}, "", window.location.pathname);
-        return;
-      }
-
-      // Verify payment status (Cashfree redirects even on cancellation, so we must verify)
-      const verifyPayment = async () => {
-        try {
-          console.log("🔍 Verifying payment for order:", orderId);
-
-          // IMPORTANT: this effect has [] deps, so `cards/profile` here can be stale.
-          // Use refs and/or localStorage fallback so we always save real data before emailing.
-          const restored = (() => {
-            try {
-              return loadLastRun();
-            } catch {
-              return null;
-            }
-          })();
-          const cardsToSend =
-            (Array.isArray(cardsRef.current) && cardsRef.current.length > 0
-              ? cardsRef.current
-              : null) ||
-            (Array.isArray(restored?.cards) && restored.cards.length > 0
-              ? restored.cards
-              : cardsRef.current || []);
-          const profileToSend = restored?.profile || profileRef.current || profile;
-          const usernameToSend =
-            profileToSend?.username || profileRef.current?.username || profile?.username;
-
-          // Send profile data with verification (POST request)
-          const verifyResponse = await fetch(`/api/payment/verify`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              order_id: orderId,
-              username: usernameToSend,
-              cards: cardsToSend,
-              profile: profileToSend,
-            }),
-          });
-
-          if (!verifyResponse.ok) {
-            // Any backend verification failure → treat as success fallback
-            const status = verifyResponse.status;
-            const text = await verifyResponse.text().catch(() => "");
-            console.warn(
-              "⚠️ /api/payment/verify failed, falling back to PAYMENT_SUCCESS:",
-              { status, text }
-            );
-
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            purchaseEventFiredRef.current.add(orderId);
-            window.history.replaceState({}, "", window.location.pathname);
-            return;
-          }
-
-          const paymentData = await verifyResponse.json();
-          console.log("📋 Payment verification response:", paymentData);
-          console.log("📋 Order status:", paymentData.order_status);
-          console.log("📋 Payment status:", paymentData.payment_status);
-          console.log("📋 Is successful:", paymentData.is_successful);
-
-          // Only show success if payment is actually successful
-          if (paymentData.is_successful) {
-            console.log("✅ Payment verified successfully");
-            alert(
-              "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
-            );
-
-            // ❌ COMMENTED OUT: Cashfree Purchase pixel fire (not using Cashfree right now)
-            // Fire Purchase BEFORE screen change
-            // if (!purchaseEventFiredRef.current.has(orderId)) {
-            //   const paidAmount = 99 * quantity;
-            //   purchaseEventFiredRef.current.add(orderId);
-            //
-            //   trackMetaPixel("Purchase", {
-            //     value: paidAmount,
-            //     currency: "INR",
-            //     content_name: "Instagram Stalker Report",
-            //     content_category: "Digital Product",
-            //     event_id: orderId, // Required for deduplication
-            //     order_id: orderId, // Helps with conversion matching
-            //     content_ids: [orderId], // Product identifier
-            //   });
-            // }
-
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-            window.history.replaceState({}, "", window.location.pathname);
-          } else {
-            // Payment not successful - stay on payment page (silent fail)
-            console.log(
-              "⚠️ Payment not successful - order_status:",
-              paymentData.order_status,
-              "payment_status:",
-              paymentData.payment_status
-            );
-            setScreen(SCREEN.PAYMENT);
-          }
-        } catch (err) {
-          // Network / unexpected error → treat as success fallback
-          console.error(
-            "❌ Error verifying payment (fallback to success):",
-            err
-          );
-          setScreen(SCREEN.PAYMENT_SUCCESS);
-          purchaseEventFiredRef.current.add(orderId);
-          window.history.replaceState({}, "", window.location.pathname);
-        }
-      };
-
-      verifyPayment();
+    if (document.querySelector('script[src*="razorpay"]')) {
+      setRazorpayLoaded(true);
+      return;
     }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => {
+      console.log("✅ Razorpay SDK loaded");
+      setRazorpayLoaded(true);
+    };
+    script.onerror = () => {
+      console.error("❌ Failed to load Razorpay SDK");
+      setRazorpayLoaded(false);
+    };
+    document.head.appendChild(script);
   }, []);
+
+  // COMMENTED OUT: Cashfree SDK loading
+  // useEffect(() => { fetchCashfreeEnv(); }, []);
+
+  // COMMENTED OUT: Cashfree payment return URL handler (Razorpay uses modal, no redirect)
+  // useEffect(() => { /* Cashfree return URL verification */ }, []);
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -3964,39 +3828,28 @@ function App() {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // Wait for Cashfree SDK to load (eliminates timing issues)
-  const waitForCashfree = () =>
-    new Promise((resolve, reject) => {
-      if (window.Cashfree) return resolve(window.Cashfree);
-
-      let attempts = 0;
-      const timer = setInterval(() => {
-        attempts++;
-        if (window.Cashfree) {
-          clearInterval(timer);
-          resolve(window.Cashfree);
-        }
-        if (attempts > 20) {
-          clearInterval(timer);
-          reject(new Error("Cashfree SDK not loaded"));
-        }
-      }, 200);
-    });
+  // COMMENTED OUT: Cashfree waitForCashfree helper
+  // const waitForCashfree = () => new Promise(...);
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setPaymentLoading(true);
 
-    // Track AddPaymentInfo when payment form is submitted - DISABLED
-    // const amount = 99 * quantity;
-    // trackMetaPixel("AddPaymentInfo", {
-    //   content_name: "Payment Form Submitted",
-    //   content_category: "Payment",
-    //   value: amount,
-    //   currency: "INR",
-    // });
-
     try {
+      // Validate report data exists before payment
+      const restored = loadLastRun();
+      const cardsToCheck =
+        (Array.isArray(cards) && cards.length > 0 ? cards : null) ||
+        (Array.isArray(restored?.cards) && restored.cards.length > 0
+          ? restored.cards
+          : []);
+      
+      if (!Array.isArray(cardsToCheck) || cardsToCheck.length === 0) {
+        throw new Error(
+          "Report data is not ready yet. Please wait for the report to finish loading, then try again."
+        );
+      }
+
       // Save user data to MongoDB
       const saveResponse = await fetch(`/api/payment/save-user`, {
         method: "POST",
@@ -4016,19 +3869,19 @@ function App() {
         throw new Error(errorData.error || "Failed to save user data");
       }
 
-      // Create Cashfree payment session
+      // Create Razorpay order
       const amount = 99 * quantity; // 99₹ per item
-      const orderResponse = await fetch(`/api/payment/create-session`, {
+      const orderResponse = await fetch(`/api/payment/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount,
           email: paymentForm.email,
-          fullName: paymentForm.fullName,
-          phoneNumber: paymentForm.phoneNumber,
+          fullName: paymentForm.fullName || paymentForm.email,
+          phoneNumber: paymentForm.phoneNumber || "",
         }),
       }).catch((fetchErr) => {
-        console.error("Network error creating payment:", fetchErr);
+        console.error("Network error creating order:", fetchErr);
         throw new Error(
           `Cannot connect to payment server. Please check if backend is running.`
         );
@@ -4038,200 +3891,115 @@ function App() {
         const errorData = await orderResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Payment session error:", errorData);
+        console.error("Razorpay order error:", errorData);
         throw new Error(
           errorData.error ||
             errorData.message ||
-            "Failed to create payment session"
+            "Failed to create payment order"
         );
       }
 
-      const session = await orderResponse.json();
-      console.log("Cashfree payment session created:", session);
+      const order = await orderResponse.json();
+      console.log("✅ Razorpay order created:", order);
 
-      // ❌ Purchase event removed from here - it will fire on success page instead
-      // Purchase should only fire AFTER payment is confirmed, not when session is created
-      // This prevents duplicate events and ensures tracking happens outside Cashfree checkout
-
-      if (!session.payment_session_id) {
-        throw new Error("No payment session id");
+      if (!order.id) {
+        throw new Error("No order id received from server");
       }
 
-      if (!session.order_id) {
-        throw new Error("Cashfree order ID not received from server");
-      }
+      // Get Razorpay key_id from backend
+      const keyResponse = await fetch(`/api/payment/key`);
+      const keyData = await keyResponse.json();
 
-      // Wait for Cashfree environment to be determined (use ref for synchronous access)
-      if (cashfreeEnvRef.current === null) {
-        console.log("⏳ Waiting for Cashfree environment to load...");
-        // Wait up to 5 seconds for environment to load
-        let attempts = 0;
-        while (cashfreeEnvRef.current === null && attempts < 25) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          attempts++;
-        }
-        if (cashfreeEnvRef.current === null) {
-          // Default to PRODUCTION if still not loaded
-          cashfreeEnvRef.current = "PRODUCTION";
-          console.warn(
-            "⚠️ Cashfree environment not loaded, defaulting to PRODUCTION"
-          );
-        }
-      }
-
-      // Wait for Cashfree SDK to load (eliminates timing issues)
-      const Cashfree = await waitForCashfree();
-
-      // Initialize Cashfree with environment-based mode (use ref for current value)
-      const currentEnv = cashfreeEnvRef.current || "PRODUCTION";
-      const cashfreeMode = currentEnv === "TEST" ? "sandbox" : "production";
-      console.log(
-        `🔧 Initializing Cashfree with mode: ${cashfreeMode} (environment: ${currentEnv})`
-      );
-      const cashfree = new Cashfree({ mode: cashfreeMode });
-
-      console.log(
-        "✅ Opening Cashfree checkout with session:",
-        session.payment_session_id
-      );
-
-      // Defer checkout to next tick (prevents React async state update issues)
-      // Cashfree cannot be called in the same tick as async state updates
-      setTimeout(() => {
-        cashfree.checkout({
-          paymentSessionId: session.payment_session_id,
-          redirectTarget: "_self", // Redirect main window so useEffect can detect return URL
-        });
-      }, 0);
-    } catch (err) {
-      console.error("Cashfree error:", err);
-      alert(err.message || "Failed to process payment. Please try again.");
-    } finally {
-      setPaymentLoading(false);
-    }
-  };
-
-  const handlePlaceOrder = async (e) => {
-    e.preventDefault();
-    try {
-      setPaymentLoading(true);
-
-      // IMPORTANT:
-      // - We must store the user's report BEFORE navigating away.
-      // - Fire-and-forget can be cancelled by browser navigation.
-      const restored = loadLastRun();
-      const rawCards =
-        (Array.isArray(cards) && cards.length > 0
-          ? cards
-          : Array.isArray(restored?.cards) && restored.cards.length > 0
+      // Prepare profile data for verification
+      // const restored = loadLastRun(); // Already declared at start of function
+      const cardsToSend =
+        (Array.isArray(cards) && cards.length > 0 ? cards : null) ||
+        (Array.isArray(restored?.cards) && restored.cards.length > 0
           ? restored.cards
           : []);
-
-      // Full payload (limits handled by backend + reverse proxy)
-      const cardsToSend = rawCards;
-
-      const rawProfile = restored?.profile || profile;
-      // Prefer real username (user input) over INITIAL_PROFILE fallback
-      const usernameFromInput = (usernameInput || "").trim();
+      const profileToSend = restored?.profile || profile;
       const usernameToSend =
-        (usernameFromInput
-          ? usernameFromInput.startsWith("@")
-            ? usernameFromInput
-            : `@${usernameFromInput}`
-          : (rawProfile?.username || "").trim()) || "";
+        profileToSend?.username || profile?.username || "";
 
-      // Build a strong "hero profile" from analysis (real avatar + counts)
-      const hero = analysis?.hero || {};
-      const heroStats = Array.isArray(hero.stats) ? hero.stats : [];
-      const parseNum = (v) => {
-        const n = parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
-        return Number.isFinite(n) ? n : null;
+      // Open Razorpay checkout modal
+      const options = {
+        key: keyData.key_id,
+        amount: order.amount, // Already in paise from backend
+        currency: order.currency || "INR",
+        name: "Samjhona",
+        description: "Unlock Insta Full Report",
+        order_id: order.id,
+        handler: async function (response) {
+          // Payment successful — verify signature on backend
+          try {
+            console.log("✅ Razorpay payment success:", response);
+
+            const verifyRes = await fetch(`/api/payment/verify`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                username: usernameToSend,
+                cards: cardsToSend,
+                profile: profileToSend,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            console.log("📋 Verification result:", verifyData);
+
+            if (verifyData.is_successful) {
+              console.log("✅ Payment verified successfully");
+              alert(
+                "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
+              );
+              setScreen(SCREEN.PAYMENT_SUCCESS);
+            } else {
+              alert("Payment verification failed. Please contact support.");
+              setScreen(SCREEN.PAYMENT);
+            }
+          } catch (verifyErr) {
+            console.error("❌ Verification error:", verifyErr);
+            // Fallback to success (payment was received by Razorpay)
+            setScreen(SCREEN.PAYMENT_SUCCESS);
+          }
+        },
+        prefill: {
+          email: paymentForm.email || "",
+          contact: paymentForm.phoneNumber || "",
+        },
+        theme: {
+          color: "#e23744",
+        },
+        modal: {
+          ondismiss: function () {
+            console.log("⚠️ Razorpay checkout dismissed by user");
+            setPaymentLoading(false);
+          },
+        },
       };
-      const pickStat = (labelIncludes) => {
-        const item = heroStats.find((s) =>
-          String(s?.label || "")
-            .toLowerCase()
-            .includes(labelIncludes)
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", function (response) {
+        console.error("❌ Razorpay payment failed:", response.error);
+        alert(
+          response.error.description ||
+            "Payment failed. Please try again."
         );
-        return item ? parseNum(item.value) : null;
-      };
-
-      // Avoid persisting demo/default name ("Harshit") into paid reports.
-      const isDefaultProfile =
-        rawProfile?.name === INITIAL_PROFILE.name &&
-        rawProfile?.username === INITIAL_PROFILE.username;
-      const fallbackNameFromUsername = usernameToSend
-        ? usernameToSend.replace(/^@/, "")
-        : "";
-
-      const profileToSend = {
-        ...(rawProfile || {}),
-        name: hero.name || (isDefaultProfile ? "" : rawProfile?.name) || fallbackNameFromUsername,
-        username: usernameToSend,
-        posts: pickStat("post") ?? rawProfile?.posts ?? null,
-        followers: pickStat("follower") ?? rawProfile?.followers ?? null,
-        following: pickStat("following") ?? rawProfile?.following ?? null,
-        // Prefer analysis hero image if available
-        avatar: hero.profileImage || rawProfile?.avatar,
-      };
-
-      if (!paymentForm.email) {
-        throw new Error("Email is required");
-      }
-      if (!usernameToSend) {
-        throw new Error("Username is missing. Please generate the report again.");
-      }
-      if (!Array.isArray(cardsToSend) || cardsToSend.length === 0) {
-        throw new Error(
-          "Report data is not ready yet. Please wait for the report to finish loading, then try again."
-        );
-      }
-
-      const bypassRes = await fetch("/api/payment/bypass", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: paymentForm.email,
-          // We don't ask for name anymore; store email as identifier in email template.
-          fullName: paymentForm.email,
-          username: usernameToSend,
-          cards: cardsToSend,
-          profile: profileToSend,
-        }),
+        setPaymentLoading(false);
       });
-
-      if (!bypassRes.ok) {
-        const text = await bypassRes.text().catch(() => "");
-        throw new Error(text || "Failed to generate report link");
-      }
-
-      // Mark purchase intent so the PayU success landing can fire Purchase pixel once.
-      // This avoids duplicates and prevents false triggers on manual visits.
-      try {
-        const pending = {
-          id: `payu_${Date.now()}`,
-          value: 99 * quantity,
-          currency: "INR",
-          ts: Date.now(),
-          provider: "payu",
-        };
-        window.localStorage.setItem(
-          "instaStalker_pending_purchase",
-          JSON.stringify(pending)
-        );
-      } catch {
-        // ignore storage errors
-      }
-
-      // Redirect to PayU only after data is stored
-      window.location.href = "https://u.payu.in/XIhRIisGBtcW";
+      rzp.open();
     } catch (err) {
-      console.error("Place order error:", err);
-      alert(err?.message || "Failed to place order. Please try again.");
-    } finally {
+      console.error("Razorpay error:", err);
+      alert(err.message || "Failed to process payment. Please try again.");
       setPaymentLoading(false);
     }
   };
+
+  // COMMENTED OUT: handlePlaceOrder (replaced by handlePaymentSubmit)
+  // const handlePlaceOrder...
 
   const renderPayment = () => {
     const originalPrice = 1299;
@@ -4296,7 +4064,7 @@ function App() {
               <div className="payment-form-section">
                 <h3 className="payment-form-title">Contact</h3>
                 {/* Only ask for email. Pressing Enter should place the order. */}
-                <form onSubmit={handlePlaceOrder} className="payment-form">
+                <form onSubmit={handlePaymentSubmit} className="payment-form">
                   <div className="payment-form-group">
                     <label htmlFor="email">E-mail*</label>
                     <input
@@ -4454,7 +4222,7 @@ function App() {
                 <button
                   type="button"
                   className="place-order-btn"
-                  onClick={handlePlaceOrder}
+                  onClick={handlePaymentSubmit}
                   disabled={paymentLoading}
                 >
                   {paymentLoading ? "Processing..." : "PLACE ORDER"}
@@ -6004,27 +5772,29 @@ function App() {
   };
 
   return (
-    <div className="app">
-      <div className="screen-container">{renderScreen()}</div>
-      <div className="toast-container">
-        {toasts.map((toast) => (
-          <div className="toast" key={toast.id}>
-            <div className="notification">
-              {toast.image && <img src={toast.image} alt="" />}
-              <div>
-                <p>{toast.message}</p>
-                <small>
-                  {new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </small>
+    <ErrorBoundary>
+      <div className="app">
+        <div className="screen-container">{renderScreen()}</div>
+        <div className="toast-container">
+          {toasts.map((toast) => (
+            <div className="toast" key={toast.id}>
+              <div className="notification">
+                {toast.image && <img src={toast.image} alt="" />}
+                <div>
+                  <p>{toast.message}</p>
+                  <small>
+                    {new Date().toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 
