@@ -2474,7 +2474,7 @@ function App() {
                 className={index <= processingMessageIndex ? "visible" : ""}
               >
                 <div className="processing-list-item-content">
-                  <svg
+                  {/* <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="15"
                     height="15"
@@ -2490,8 +2490,24 @@ function App() {
                   >
                     <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
                     <path d="m9 11 3 3L22 4"></path>
-                  </svg>
-                  <p>{parseBold(message)}</p>
+                  </svg> */}
+                  <p><svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="processing-check-icon"
+                    aria-hidden="true"
+                    style={{ minWidth: "15px", marginTop: "4px" }}
+                  >
+                    <path d="M21.801 10A10 10 0 1 1 17 3.335"></path>
+                    <path d="m9 11 3 3L22 4"></path>
+                  </svg> {parseBold(message)}</p>
                 </div>
               </li>
             ))}
