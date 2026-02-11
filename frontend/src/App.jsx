@@ -675,7 +675,7 @@ function App() {
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
 
-  // ✅ PayU success: fire Purchase pixel ONLY on /successfully-paid path with valid pending purchase
+  // ✅ PayU/Razorpay success: fire Purchase pixel ONLY on success path or screen
   // STRICT VALIDATION: Only fires if all conditions are met
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -686,10 +686,12 @@ function App() {
       return;
     }
 
-    // ✅ CRITICAL FIX #1: Only fire on PayU success redirect path
+    // ✅ CRITICAL FIX #1: Fire on successfully-paid path OR when screen state becomes PAYMENT_SUCCESS
     const currentPath = window.location.pathname;
-    if (currentPath !== "/successfully-paid") {
-      console.log("🔒 Purchase pixel blocked: not on /successfully-paid path (current:", currentPath, ")");
+    const isSuccessPath = currentPath === "/successfully-paid";
+    const isSuccessScreen = screen === SCREEN.PAYMENT_SUCCESS;
+
+    if (!isSuccessPath && !isSuccessScreen) {
       return;
     }
 
@@ -706,92 +708,69 @@ function App() {
       pending = JSON.parse(pendingRaw);
     } catch (err) {
       console.warn("⚠️ Failed to parse pending purchase:", err);
-      // Clean up corrupted data
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
+      try { window.localStorage.removeItem(PENDING_KEY); } catch {}
       return;
     }
 
-    // Prevent false Purchase events if user opens the URL directly
     if (!pending || typeof pending !== "object") {
       console.log("🔒 Purchase pixel blocked: invalid pending purchase data");
       return;
     }
 
-    // ✅ CRITICAL FIX #2: Check expiration (prevent stale purchases from firing)
+    // ✅ CRITICAL FIX #2: Check expiration
     const pendingTimestamp = typeof pending.ts === "number" ? pending.ts : null;
     if (!pendingTimestamp) {
-      console.warn("⚠️ Pending purchase missing timestamp, cleaning up");
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
-      return;
+        console.warn("⚠️ Pending purchase missing timestamp, cleaning up");
+        try { window.localStorage.removeItem(PENDING_KEY); } catch {}
+        return;
     }
 
     const now = Date.now();
     const ageMs = now - pendingTimestamp;
-    if (ageMs > PENDING_EXPIRY_MS) {
-      console.warn("⚠️ Pending purchase expired (age:", Math.round(ageMs / 1000 / 60), "minutes), cleaning up");
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
+    if (ageMs > PENDING_EXPIRY_MS || ageMs < 0) {
+      console.warn("⚠️ Pending purchase expired or invalid (age:", Math.round(ageMs / 1000 / 60), "minutes), cleaning up");
+      try { window.localStorage.removeItem(PENDING_KEY); } catch {}
       return;
     }
 
-    // ✅ CRITICAL FIX #3: Additional validation - ensure pending purchase is recent (within 30 min)
-    if (ageMs < 0) {
-      console.warn("⚠️ Pending purchase has future timestamp, cleaning up");
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
-      return;
-    }
-
-    const purchaseId =
-      typeof pending.id === "string" && pending.id.trim()
-        ? pending.id.trim()
-        : "payu";
+    const purchaseId = typeof pending.id === "string" && pending.id.trim() ? pending.id.trim() : "payu";
     const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
 
-    // Check if already fired to prevent duplicates
+    // Check if already fired
     try {
       if (window.localStorage.getItem(firedKey)) {
         console.log("⚠️ Purchase pixel already fired for:", purchaseId);
-        // Clean up pending purchase even if already fired
         window.localStorage.removeItem(PENDING_KEY);
         return;
       }
-      // Mark as fired BEFORE firing pixel (prevents race conditions)
+      // Mark as fired BEFORE firing pixel
       window.localStorage.setItem(firedKey, String(Date.now()));
-      // Remove pending purchase immediately to prevent re-firing
       window.localStorage.removeItem(PENDING_KEY);
     } catch (err) {
       console.error("❌ Storage error:", err);
       return;
     }
 
-    const value =
-      typeof pending.value === "number" && Number.isFinite(pending.value)
-        ? pending.value
-        : 99;
-    const currency =
-      typeof pending.currency === "string" && pending.currency.trim()
-        ? pending.currency.trim()
-        : "INR";
+    const value = typeof pending.value === "number" && Number.isFinite(pending.value) ? pending.value : 99;
+    const currency = typeof pending.currency === "string" && pending.currency.trim() ? pending.currency.trim() : "INR";
 
-    // ✅ FIRE PURCHASE PIXEL - Only fires after all validations pass
-    // Minimal Purchase event - only cs_est parameter
+    // ✅ FIRE PURCHASE PIXEL
     trackMetaPixel("Purchase", {
+      value,
+      currency,
+      content_name: "Instagram Stalker Report",
+      content_category: "Digital Product",
+      event_id: purchaseId,
+      order_id: purchaseId,
+      content_ids: [purchaseId],
       cs_est: true,
     });
     
-    // Mark purchase as fired in our Set for consistency
     purchaseEventFiredRef.current.add(purchaseId);
     persistStoredPurchases(purchaseEventFiredRef.current);
 
-    console.log("✅ Purchase pixel fired for PayU:", purchaseId, "(age:", Math.round(ageMs / 1000), "seconds)");
-  }, []); // Empty deps - fires immediately on mount, before screen changes
+    console.log("✅ Purchase pixel fired:", purchaseId, "(age:", Math.round(ageMs / 1000), "seconds)");
+  }, [screen]); // Depend on screen state to trigger on success screen transition
 
   // ✅ Cleanup stale pending purchases on app load (prevents false fires)
   useEffect(() => {
@@ -3782,20 +3761,20 @@ function App() {
         throw new Error("No order id received from server");
       }
 
-      // Get Razorpay key_id from backend
-      const keyResponse = await fetch(`/api/payment/key`);
-      const keyData = await keyResponse.json();
-
-      // Prepare profile data for verification
-      // const restored = loadLastRun(); // Already declared at start of function
-      const cardsToSend =
-        (Array.isArray(cards) && cards.length > 0 ? cards : null) ||
-        (Array.isArray(restored?.cards) && restored.cards.length > 0
-          ? restored.cards
-          : []);
-      const profileToSend = restored?.profile || profile;
-      const usernameToSend =
-        profileToSend?.username || profile?.username || "";
+      // ✅ Store pending purchase in localStorage BEFORE opening modal
+      // This is required for the Purchase pixel to fire upon success
+      try {
+        const pendingData = {
+          id: order.id,
+          value: amount,
+          currency: "INR",
+          ts: Date.now(),
+        };
+        window.localStorage.setItem("instaStalker_pending_purchase", JSON.stringify(pendingData));
+        console.log("💾 Pending purchase stored:", pendingData);
+      } catch (err) {
+        console.warn("⚠️ Failed to store pending purchase:", err);
+      }
 
       // Open Razorpay checkout modal
       const options = {
