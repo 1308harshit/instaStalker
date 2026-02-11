@@ -379,7 +379,7 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
   // 1. Build Hero section
   const hero = {
     name: profileData.full_name || profileData.username || profileState.name,
-    username: profileData.username ? `@${profileData.username}` : profileState.username,
+    username: profileData.username ? `@${profileData.username.replace(/^@/, '')}` : profileState.username,
     profileImage: getAvatarFromApiData(profileData) || profileState.avatar,
     stats: [
       { 
@@ -406,7 +406,7 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
 
   // 2. Build slider cards from followers
   const sliderCards = (followersData || []).map(f => ({
-    username: f.username ? `@${f.username}` : null,
+    username: f.username ? `@${f.username.replace(/^@/, '')}` : null,
     title: f.full_name || f.username || "Instagram User",
     image: getAvatarFromApiData(f),
     isLocked: false,
@@ -422,7 +422,7 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
     `Took a screenshot of your profile and stories`,
   ];
   const addictedTiles = (followersData || []).slice(0, 4).map((f, i) => ({
-    title: f.username ? `@${f.username}` : "hidden_user",
+    title: f.username ? `@${f.username.replace(/^@/, '')}` : "hidden_user",
     image: getAvatarFromApiData(f),
     body: addictedBodies[i] || "",
     blurred: true,
@@ -1938,7 +1938,7 @@ function App() {
       // Update profile state immediately
       setProfile((prev) => ({
         ...prev,
-        username: `@${profileData.username}`,
+        username: `@${profileData.username.replace(/^@/, '')}`,
         name: profileData.full_name || profileData.username,
         avatar: avatar || prev.avatar,
         followers: profileData.follower_count || prev.followers,
@@ -1949,7 +1949,7 @@ function App() {
       setProfileStage({
         avatar: avatar,
         progressPercent: 55,
-        username: `@${profileData.username}`,
+        username: `@${profileData.username.replace(/^@/, '')}`,
         greeting: `Hello, ${profileData.full_name || profileData.username}`,
         question: "Is this your profile?",
         primaryCta: "Continue, the profile is correct",
@@ -2002,7 +2002,7 @@ function App() {
             const avatar = getAvatarFromApiData(profileData);
             setProfile((prev) => ({
               ...prev,
-              username: profileData.username ? `@${profileData.username}` : prev.username,
+              username: profileData.username ? `@${profileData.username.replace(/^@/, '')}` : prev.username,
               name: profileData.full_name || prev.name,
               avatar: avatar || prev.avatar,
               followers: profileData.follower_count || prev.followers,
@@ -2012,7 +2012,7 @@ function App() {
             setProfileStage({
               avatar: avatar,
               progressPercent: 55,
-              username: profileData.username ? `@${profileData.username}` : profile.username,
+              username: profileData.username ? `@${profileData.username.replace(/^@/, '')}` : profile.username,
               greeting: `Hello, ${profileData.full_name || profileData.username}`,
               question: "Is this your profile?",
               primaryCta: "Continue, the profile is correct",
@@ -2029,7 +2029,7 @@ function App() {
             setProcessingStage(
               createProcessingStageData(
                 profileData.username
-                  ? `@${profileData.username}`
+                  ? `@${profileData.username.replace(/^@/, '')}`
                   : profile.username,
                 avatar,
                 geoData?.city
@@ -3261,7 +3261,7 @@ function App() {
                       <span className="blur-text-sm">██████████████████</span>
                   </div>
                   <div className="chat-bubble left">
-                      {profile.username || "pratik"} is
+                      {profile.name || "He"} is
                       <span className="blur-text-sm" style={{ marginLeft: "4px" }}>████</span>
                   </div>
                   <div className="chat-bubble left with-avatar">
