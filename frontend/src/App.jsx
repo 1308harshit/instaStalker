@@ -200,7 +200,7 @@ const LAST_RUN_KEY = "stalker-last-run";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
-const PROFILE_STAGE_HOLD_MS = 5000;
+const PROFILE_STAGE_HOLD_MS = 4000;
 const PROCESSING_STAGE_HOLD_MS = 2000;
 
 const randBetween = (min, max) =>
@@ -1441,7 +1441,7 @@ function App() {
 
     if (
       screen === SCREEN.PROFILE &&
-      apiFollowersData.length > 0 && // Changed from snapshotHtml.processing
+      // Removed check: apiFollowersData.length > 0 (Allow 4s transition regardless of data)
       canAdvanceFromProfile
     ) {
       setScreen(SCREEN.PROCESSING);
