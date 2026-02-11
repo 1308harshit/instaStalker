@@ -1670,27 +1670,66 @@ function App() {
     }
   }, [screen]);
 
+  // ✅ MEMOIZED SLIDER CARDS: Stable across re-renders (fixes random jumping)
+  const processedSliderCards = useMemo(() => {
+    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+    
+    // Check if we already have a blurred/locked card
+    const hasBlurredCard = allCards.some(
+      (card) => card?.blurImage || (!card?.username && card?.image)
+    );
+
+    // If no blurred card exists, inject one at a random position
+    let cardsToRender = [...allCards];
+    if (!hasBlurredCard && allCards.length > 0) {
+      // Filter out locked cards and cards without images
+      const availableCards = allCards.filter(
+        (card) =>
+          !card?.isLocked &&
+          !card?.blurImage &&
+          card?.image &&
+          card?.username // Must have a username (not already locked/blurred)
+      );
+
+      if (availableCards.length > 0) {
+        // Use a stable random seed based on cards length or content if possible,
+        // but for now, since this memo only re-runs when cards change, Math.random() is safe here.
+        const randomIndex = Math.floor(
+          Math.random() * (allCards.length + 1)
+        );
+        const randomCard =
+          availableCards[
+            Math.floor(Math.random() * availableCards.length)
+          ];
+        const blurredCard = {
+          ...randomCard,
+          blurImage: true,
+          username: null,
+          image: randomCard.image,
+        };
+        cardsToRender.splice(randomIndex, 0, blurredCard);
+      }
+    }
+
+    // Filter out cards that come right after blurred cards
+    return cardsToRender
+      .map((card, originalIndex) => ({ card, originalIndex }))
+      .filter(({ originalIndex }) => {
+        const isAfterBlurredCard =
+          originalIndex - 1 > 0 && (originalIndex - 1) % 5 === 0;
+        return !isAfterBlurredCard;
+      });
+  }, [analysis?.slider?.cards, cards]);
+
   // Auto-scroll carousel - Infinite loop with duplicates
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
 
-    const allCards = analysis?.slider?.cards?.length
-      ? analysis.slider.cards
-      : cards;
-    if (allCards.length <= 1) return;
-
-    // Calculate filtered cards length (same logic as in render)
-    // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
-    const filteredCards = allCards.filter((card, index) => {
-      const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
-      return !isAfterBlurredCard;
-    });
-
-    if (filteredCards.length <= 1) return;
+    if (processedSliderCards.length <= 1) return;
 
     // Initialize carousel at offset (after duplicated items at start)
     const offset = 3;
-    if (carouselIndex < offset && filteredCards.length > 0) {
+    if (carouselIndex < offset && processedSliderCards.length > 0) {
       setCarouselIndex(offset);
     }
 
@@ -1705,20 +1744,12 @@ function App() {
     return () => clearInterval(interval);
   }, [screen, cards, analysis]);
 
-  // Handle Carousel Snap Back (Slide then Snap)
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW) return;
-    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
-    if (allCards.length <= 1) return;
-
-    // Filter logic must match the render/interval logic
-    const filteredCards = allCards.filter((card, index) => {
-      const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
-      return !isAfterBlurredCard;
-    });
+    if (processedSliderCards.length <= 1) return;
 
     const offset = 3;
-    const totalRealItems = filteredCards.length;
+    const totalRealItems = processedSliderCards.length;
     
     // If we've slid to the first duplicate (index = offset + totalRealItems)
     if (carouselIndex >= offset + totalRealItems) {
@@ -1735,7 +1766,7 @@ function App() {
       
       return () => clearTimeout(timeout);
     }
-  }, [carouselIndex, screen, cards, analysis]);
+  }, [carouselIndex, screen, processedSliderCards]);
 
   // Auto-scroll stories carousel - Infinite loop with duplicates
   useEffect(() => {
@@ -2804,69 +2835,21 @@ function App() {
               <span style={{ color: "#f43f3f" }}>between 2 to 7 times:</span>
             </h3>
             {(() => {
-              const allCards = slider.cards.length ? slider.cards : cards;
-
-              // Check if we already have a blurred/locked card
-              const hasBlurredCard = allCards.some(
-                (card) => card?.blurImage || (!card?.username && card?.image)
-              );
-
-              // If no blurred card exists, inject one at a random position
-              let cardsToRender = [...allCards];
-              if (!hasBlurredCard && allCards.length > 0) {
-                // Filter out locked cards and cards without images
-                const availableCards = allCards.filter(
-                  (card) =>
-                    !card?.isLocked &&
-                    !card?.blurImage &&
-                    card?.image &&
-                    card?.username // Must have a username (not already locked/blurred)
-                );
-
-                if (availableCards.length > 0) {
-                  const randomIndex = Math.floor(
-                    Math.random() * (allCards.length + 1)
-                  );
-                  // Pick a random card from available (non-locked) cards
-                  const randomCard =
-                    availableCards[
-                      Math.floor(Math.random() * availableCards.length)
-                    ];
-                  const blurredCard = {
-                    ...randomCard,
-                    blurImage: true,
-                    username: null, // Remove username to trigger blur
-                    image: randomCard.image, // Use the actual image from fetched data
-                  };
-                  cardsToRender.splice(randomIndex, 0, blurredCard);
-                }
-              }
-
-              // Filter out cards that come right after blurred cards (positions 6, 11, 16, etc.)
-              // to prevent duplicates, while keeping track of original indices
-              const filteredCardsWithIndex = cardsToRender
-                .map((card, originalIndex) => ({ card, originalIndex }))
-                .filter(({ originalIndex }) => {
-                  const isAfterBlurredCard =
-                    originalIndex - 1 > 0 && (originalIndex - 1) % 5 === 0;
-                  return !isAfterBlurredCard;
-                });
-
-              if (filteredCardsWithIndex.length === 0) return null;
+              if (processedSliderCards.length === 0) return null;
 
               // Create duplicated array for infinite loop
-              // Last 3 items at start + all original items + first 3 items at end
+              // Last 3 items at start + all processed items + first 3 items at end
               const offset = 3;
               const duplicatedCards = [
-                ...filteredCardsWithIndex.slice(-offset).map((item, idx) => ({
+                ...processedSliderCards.slice(-offset).map((item, idx) => ({
                   ...item,
                   duplicateKey: `start-${idx}`,
                 })),
-                ...filteredCardsWithIndex.map((item, idx) => ({
+                ...processedSliderCards.map((item, idx) => ({
                   ...item,
                   duplicateKey: `original-${idx}`,
                 })),
-                ...filteredCardsWithIndex.slice(0, offset).map((item, idx) => ({
+                ...processedSliderCards.slice(0, offset).map((item, idx) => ({
                   ...item,
                   duplicateKey: `end-${idx}`,
                 })),
