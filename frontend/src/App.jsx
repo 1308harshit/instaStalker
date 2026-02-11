@@ -1696,22 +1696,46 @@ function App() {
 
     const interval = setInterval(() => {
       setCarouselIndex((prev) => {
-        const nextIndex = prev + 1;
-        // When we reach duplicated end items, jump to real first items
-        if (nextIndex >= offset + filteredCards.length) {
-          carouselLoopingRef.current = true;
-          setTimeout(() => {
-            carouselLoopingRef.current = false;
-          }, 50);
-          return offset; // Jump to start of second copy
-        }
-        carouselLoopingRef.current = false;
-        return nextIndex;
+        // Allow going ONE step past the real length (into the first duplicate)
+        // The useEffect below will handle the snap back
+        return prev + 1;
       });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
   }, [screen, cards, analysis]);
+
+  // Handle Carousel Snap Back (Slide then Snap)
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    const allCards = analysis?.slider?.cards?.length ? analysis.slider.cards : cards;
+    if (allCards.length <= 1) return;
+
+    // Filter logic must match the render/interval logic
+    const filteredCards = allCards.filter((card, index) => {
+      const isAfterBlurredCard = index - 1 > 0 && (index - 1) % 5 === 0;
+      return !isAfterBlurredCard;
+    });
+
+    const offset = 3;
+    const totalRealItems = filteredCards.length;
+    
+    // If we've slid to the first duplicate (index = offset + totalRealItems)
+    if (carouselIndex >= offset + totalRealItems) {
+      const timeout = setTimeout(() => {
+        carouselLoopingRef.current = true; // Disable transition
+        // Snap to the real first item (which is at index 'offset')
+        setCarouselIndex(offset);
+        
+        // Re-enable transition after a brief moment (enough for the snap render)
+        setTimeout(() => {
+          carouselLoopingRef.current = false;
+        }, 50);
+      }, 500); // Wait 500ms for the slide transition to finish (CSS is 0.4s)
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [carouselIndex, screen, cards, analysis]);
 
   // Auto-scroll stories carousel - Infinite loop with duplicates
   useEffect(() => {
@@ -1728,22 +1752,34 @@ function App() {
 
     const interval = setInterval(() => {
       setStoriesCarouselIndex((prev) => {
-        const nextIndex = prev + 1;
-        // When we reach 2x the length, reset to length (seamless jump to second copy)
-        if (nextIndex >= offset + storiesSlides.length) {
-          storiesCarouselLoopingRef.current = true;
-          setTimeout(() => {
-            storiesCarouselLoopingRef.current = false;
-          }, 50);
-          return offset; // Jump to start of second copy
-        }
-        storiesCarouselLoopingRef.current = false;
-        return nextIndex;
+        // Allow going ONE step past the real length
+        return prev + 1;
       });
     }, 1500); // Change slide every 1.5 seconds
 
     return () => clearInterval(interval);
   }, [screen, analysis]);
+
+  // Handle Stories Carousel Snap Back
+  useEffect(() => {
+    if (screen !== SCREEN.PREVIEW) return;
+    const storiesSlides = analysis?.stories?.slides || [];
+    if (storiesSlides.length <= 1) return;
+    
+    const offset = 3;
+    const totalRealItems = storiesSlides.length;
+
+    if (storiesCarouselIndex >= offset + totalRealItems) {
+      const timeout = setTimeout(() => {
+        storiesCarouselLoopingRef.current = true;
+        setStoriesCarouselIndex(offset);
+        setTimeout(() => {
+           storiesCarouselLoopingRef.current = false;
+        }, 50);
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [storiesCarouselIndex, screen, analysis]);
 
   useEffect(() => {
     if (screen !== SCREEN.PREVIEW || notifications.length === 0) {
