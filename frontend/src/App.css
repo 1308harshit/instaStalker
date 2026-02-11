@@ -669,7 +669,7 @@ body {
 }
 
 .summary-grid article p {
-  font-size: 0.8rem;
+  font-size: 1rem;
   margin: 8px 0 0;
   color: var(--text-light);
   line-height: 1.4;
