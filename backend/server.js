@@ -411,8 +411,9 @@ app.post("/api/payment/bypass", async (req, res) => {
 
         // ✅ Update Mongoose User Model
         try {
+          const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
           await User.findOneAndUpdate(
-            { username: username.toLowerCase() },
+            { username: cleanUsername },
             {
               $set: {
                 paymentDetails: { orderId, method: "bypass" },
@@ -424,7 +425,7 @@ app.post("/api/payment/bypass", async (req, res) => {
             },
             { upsert: true }
           );
-          log(`✅ User updated in Mongoose (Bypass): ${username}`);
+          log(`✅ User updated in Mongoose (Bypass): ${cleanUsername}`);
         } catch (mongooseErr) {
           log(`⚠️ Failed to update User model in bypass: ${mongooseErr.message}`);
         }
@@ -628,8 +629,9 @@ app.post("/api/payment/verify", async (req, res) => {
             // ✅ Update Mongoose User Model
             if (username) {
               try {
-                 await User.findOneAndUpdate(
-                  { username: username.toLowerCase() },
+                const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
+                await User.findOneAndUpdate(
+                  { username: cleanUsername },
                   {
                     $set: {
                       paymentDetails: { 
@@ -645,7 +647,7 @@ app.post("/api/payment/verify", async (req, res) => {
                   },
                   { upsert: true }
                 );
-                log(`✅ User updated in Mongoose (Verify): ${username}`);
+                log(`✅ User updated in Mongoose (Verify): ${cleanUsername}`);
               } catch (mongooseErr) {
                 log(`⚠️ Failed to update User model in verify: ${mongooseErr.message}`);
               }
