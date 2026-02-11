@@ -196,7 +196,7 @@ const NON_EN_SUMMARY_REGEX =
   /(seus seguidores|amoroso|vista\(o\)|você é|dos seus)/i;
 const SUMMARY_EXCLUDE_REGEX = /top.*#.*stalker|stalker.*top/i;
 const QUEUE_MESSAGE = "You are in the queue";
-const LAST_RUN_KEY = "stalker-last-run";
+const LAST_RUN_KEY = "lastScrapeRun";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANALYZING_STAGE_HOLD_MS = 1500;
@@ -1036,15 +1036,19 @@ function App() {
 
     // If URL was cleaned (no query params), try to recover from sessionStorage
     // so refresh doesn't break the post-purchase page.
+    // 🔐 ONLY recover from sessionStorage if we are actually on the post-purchase path
     if (!token || !order) {
-      try {
-        const storedToken = sessionStorage.getItem("postPurchaseToken");
-        const storedOrder = sessionStorage.getItem("postPurchaseOrder");
-        if (storedToken && storedOrder) {
-          token = storedToken;
-          order = storedOrder;
-        }
-      } catch {}
+      if (window.location.pathname.startsWith("/post-purchase")) {
+        try {
+          const storedToken = sessionStorage.getItem("postPurchaseToken");
+          const storedOrder = sessionStorage.getItem("postPurchaseOrder");
+          if (storedToken && storedOrder) {
+            token = storedToken;
+            order = storedOrder;
+            console.log("🔄 Recovered post-purchase session from storage");
+          }
+        } catch {}
+      }
     }
 
     // If we have token and order params, fetch order data
@@ -1182,9 +1186,9 @@ function App() {
               // If the user clicks the email link instantly, DB may not yet contain cards.
               // Retry for a short time and populate cards when they become available.
               if (!hasCards) {
-                for (let attempt = 0; attempt < 20; attempt += 1) {
+                for (let attempt = 0; attempt < 10; attempt += 1) { // Reduced from 20
                   if (cancelled) break;
-                  await new Promise((r) => setTimeout(r, 2000));
+                  await new Promise((r) => setTimeout(r, 3000)); // Increased from 2000
                   const retryRes = await fetch(apiUrl).catch(() => null);
                   if (!retryRes || !retryRes.ok) continue;
                   const retryData = await retryRes.json().catch(() => null);
@@ -1604,8 +1608,10 @@ function App() {
   ]);
 
   // ✅ SAFE BACKGROUND PRE-LOADER: Pre-fetches images and triggers recovery silently
-  // ✅ SAFE BACKGROUND PRE-LOADER: Pre-fetches images and triggers recovery silently
   useEffect(() => {
+    // 🔐 GATE: Only run if we are actually viewing a report/preview
+    const activeScreens = [SCREEN.PROFILE, SCREEN.PROCESSING, SCREEN.PREVIEW, SCREEN.PAYMENT_SUCCESS, SCREEN.FULL_REPORT];
+    if (!activeScreens.includes(screen)) return;
     const allCards = analysis?.slider?.cards || cards || [];
     const allStories = analysis?.stories?.slides || [];
     const allAddicts = analysis?.addicted?.tiles || [];
