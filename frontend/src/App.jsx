@@ -1612,36 +1612,55 @@ function App() {
   ]);
 
   // ✅ SAFE BACKGROUND PRE-LOADER: Pre-fetches images and triggers recovery silently
+  // ✅ SAFE BACKGROUND PRE-LOADER: Pre-fetches images and triggers recovery silently
   useEffect(() => {
     const allCards = analysis?.slider?.cards || cards || [];
     const allStories = analysis?.stories?.slides || [];
     const allAddicts = analysis?.addicted?.tiles || [];
     
-    const allPotentialUsernames = [
-      ...allCards.map(c => c.username),
-      ...allStories.map(s => s.username),
-      ...allAddicts.map(a => a.title)
-    ].map(u => (u || "").replace('@', '').trim()).filter(Boolean);
+    // Collect all unique usernames and their associated image URLs
+    const usersToPreload = [];
+    const seenUsernames = new Set();
 
-    const unique = [...new Set(allPotentialUsernames)];
+    const processItem = (item) => {
+      const u = (item.username || item.title || "").replace('@', '').trim();
+      if (!u || seenUsernames.has(u)) return;
+      
+      // Get the best available image URL
+      let imageUrl = null;
+      if (freshAvatars[u]) {
+        imageUrl = freshAvatars[u];
+      } else if (item.image) {
+        // If it's a proxy url, use it directly, otherwise proxy it
+        imageUrl = item.image.includes("weserv.nl") ? item.image : proxyImage(item.image);
+      }
 
-    unique.forEach(u => {
-      if (!attemptedFreshAvatars.current.has(u)) {
-        // Just pre-fetch. If it fails, recovery will trigger on render or here.
+      if (imageUrl) {
+        seenUsernames.add(u);
+        usersToPreload.push({ username: u, url: imageUrl });
+      }
+    };
+
+    allCards.forEach(processItem);
+    allStories.forEach(processItem);
+    allAddicts.forEach(processItem);
+
+    usersToPreload.forEach(({ username, url }) => {
+      if (!attemptedFreshAvatars.current.has(username)) {
         const img = new Image();
-        img.src = freshAvatars[u] || proxyImage(`https://www.instagram.com/${u}/`); // dummy trigger
+        img.src = url;
         img.onerror = () => {
-          if (!attemptedFreshAvatars.current.has(u)) {
-             attemptedFreshAvatars.current.add(u);
-             console.log(`🚀 BG Recovery: ${u}`);
-             fetchProfileDataDirectly(u, true).then(url => {
-               if (url) setFreshAvatars(p => ({ ...p, [u]: url }));
+          if (!attemptedFreshAvatars.current.has(username)) {
+             attemptedFreshAvatars.current.add(username);
+             console.log(`🚀 BG Recovery: ${username}`);
+             fetchProfileDataDirectly(username, true).then(url => {
+               if (url) setFreshAvatars(p => ({ ...p, [username]: url }));
              }); 
           }
         };
       }
     });
-  }, [analysis, cards]);
+  }, [analysis, cards, freshAvatars]);
 
   // Reset carousel indices when entering PREVIEW or PAYMENT_SUCCESS
   useEffect(() => {
@@ -2862,7 +2881,7 @@ function App() {
                                     src={imageUrl}
                                     alt="Blurred user"
                                     referrerPolicy="no-referrer"
-                                    loading="lazy"
+                                    loading="eager"
                                     style={{
                                       width: "100%",
                                       height: "100%",
@@ -2935,7 +2954,7 @@ function App() {
                                     src={imageUrl}
                                     alt="Blurred user"
                                     referrerPolicy="no-referrer"
-                                    loading="lazy"
+                                    loading="eager"
                                     onError={(e) => {
                                       if (usernameForFresh && !attemptedFreshAvatars.current.has(usernameForFresh)) {
                                         attemptedFreshAvatars.current.add(usernameForFresh);
@@ -2986,7 +3005,7 @@ function App() {
                                     src={imageUrl}
                                     alt={card.username || "Card image"}
                                     referrerPolicy="no-referrer"
-                                    loading="lazy"
+                                    loading="eager"
                                     onError={(e) => {
                                       if (usernameForFresh && !attemptedFreshAvatars.current.has(usernameForFresh)) {
                                         attemptedFreshAvatars.current.add(usernameForFresh);
@@ -3115,7 +3134,7 @@ function App() {
                                     src={proxyImage(story.image)}
                                     alt="Story"
                                     referrerPolicy="no-referrer"
-                                    loading="lazy"
+                                    loading="eager"
                                     style={{
                                       width: "100%",
                                       height: "100%",
@@ -5152,7 +5171,7 @@ function App() {
                                       src={imageUrl}
                                       alt={card.username || "Instagram user"}
                                       referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                      loading="eager"
                                       onError={(e) => {
                                         if (usernameForFresh && !freshAvatars[usernameForFresh]) {
                                           console.log(`📸 Image failed, fetching fresh avatar for: ${usernameForFresh}`);
@@ -5390,7 +5409,7 @@ function App() {
                                   src={rowImage}
                                   alt={row.name}
                                   referrerPolicy="no-referrer"
-                                  loading="lazy"
+                                  loading="eager"
                                   onError={() => {
                                     if (rowUsername && !attemptedFreshAvatars.current.has(rowUsername)) {
                                       attemptedFreshAvatars.current.add(rowUsername);
