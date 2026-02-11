@@ -6,6 +6,7 @@
 
 // COMMENTED OUT: MongoDB snapshot imports (no longer saving HTML snapshots)
 // import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
+import User from "../models/User.js"; // Import Mongoose User model
 
 const DEBUG_SCRAPE = process.env.DEBUG_SCRAPE === "1";
 
@@ -320,6 +321,31 @@ export async function scrape(username, onStep = null) {
 
     if (DEBUG_SCRAPE) {
       log("📊 Cards sample:", cards.slice(0, 3));
+    }
+
+    // Save to MongoDB (Mongoose) - Stores USER Data
+    try {
+      // Use findOneAndUpdate with upsert to create or update
+      await User.findOneAndUpdate(
+        { username: rawUsername.toLowerCase() },
+        {
+          $set: {
+            profileData: profile,
+            followers: cards,
+            scrapedAt: new Date(),
+            updatedAt: new Date()
+          },
+          $setOnInsert: {
+            username: rawUsername.toLowerCase(),
+            isPaid: false,
+            createdAt: new Date()
+          }
+        },
+        { upsert: true, new: true }
+      );
+      log(`✅ User data saved to MongoDB (Mongoose): ${rawUsername}`);
+    } catch (dbErr) {
+      log(`⚠️ Failed to save user data to MongoDB: ${dbErr.message}`);
     }
 
     // COMMENTED OUT: MongoDB saving

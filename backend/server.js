@@ -38,7 +38,9 @@ import {
   getRecentSnapshot,
   closeDB,
 } from "./utils/mongodb.js";
+import connectMongoose from "./utils/db.js"; // Import Mongoose connection
 import { ObjectId } from "mongodb";
+import User from "./models/User.js"; // Import Mongoose User model
 import { Resend } from "resend";
 import crypto from "crypto";
 import Razorpay from "razorpay";
@@ -387,7 +389,7 @@ app.post("/api/payment/bypass", async (req, res) => {
       token
     )}&order=${encodeURIComponent(orderId)}`;
 
-    // Optional DB save
+    // Optional DB save (Native)
     try {
       const db = await connectDB();
       if (db) {
@@ -406,6 +408,26 @@ app.post("/api/payment/bypass", async (req, res) => {
           verifiedAt: new Date(),
           emailSent: false,
         });
+
+        // ✅ Update Mongoose User Model
+        try {
+          await User.findOneAndUpdate(
+            { username: username.toLowerCase() },
+            {
+              $set: {
+                paymentDetails: { orderId, method: "bypass" },
+                isPaid: true,
+                email: email,
+                fullName: fullName,
+                updatedAt: new Date()
+              }
+            },
+            { upsert: true }
+          );
+          log(`✅ User updated in Mongoose (Bypass): ${username}`);
+        } catch (mongooseErr) {
+          log(`⚠️ Failed to update User model in bypass: ${mongooseErr.message}`);
+        }
       }
     } catch (_) {}
 
@@ -602,6 +624,33 @@ app.post("/api/payment/verify", async (req, res) => {
           // Get order details for email
           const order = await collection.findOne({ orderId: razorpay_order_id });
           if (order && order.email) {
+            
+            // ✅ Update Mongoose User Model
+            if (username) {
+              try {
+                 await User.findOneAndUpdate(
+                  { username: username.toLowerCase() },
+                  {
+                    $set: {
+                      paymentDetails: { 
+                        orderId: razorpay_order_id, 
+                        paymentId: razorpay_payment_id 
+                      },
+                      isPaid: true,
+                      email: order.email,
+                      fullName: order.fullName || "",
+                      phoneNumber: order.phoneNumber || "",
+                      updatedAt: new Date()
+                    }
+                  },
+                  { upsert: true }
+                );
+                log(`✅ User updated in Mongoose (Verify): ${username}`);
+              } catch (mongooseErr) {
+                log(`⚠️ Failed to update User model in verify: ${mongooseErr.message}`);
+              }
+            }
+
             // Send email (non-blocking)
             sendPostPurchaseEmail(
               order.email,
@@ -960,12 +1009,16 @@ app.get("/api/stats", async (req, res) => {
 });
 
 // Initialize MongoDB on server start (non-blocking)
+// Initialize MongoDB on server start (non-blocking)
 connectDB().catch((err) => {
   log(
     "⚠️ MongoDB connection failed on startup (will retry on first use):",
     err.message
   );
 });
+
+// Initialize Mongoose connection
+connectMongoose();
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
