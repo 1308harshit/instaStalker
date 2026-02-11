@@ -3311,7 +3311,7 @@ function App() {
                       <span className="blur-text-sm">██████████████████</span>
                   </div>
                   <div className="chat-bubble left">
-                      {profile.name || "He"} is
+                      {profile.name?.split(" ")[0]} is
                       <span className="blur-text-sm" style={{ marginLeft: "4px" }}>████</span>
                   </div>
                   <div className="chat-bubble left with-avatar">
@@ -4673,9 +4673,11 @@ function App() {
     if (hasStoredReport) return;
 
     // Prefer clean payment-success cards, fallback to generic cards list
-    const sourceCards = (
-      paymentSuccessCards.length ? paymentSuccessCards : cards
-    ).filter((card) => !card?.isLocked && card?.username);
+    // Include carousel data in the source pool for more profiles
+    const sourceCards = [
+      ...(paymentSuccessCards.length ? paymentSuccessCards : cards),
+      ...apiFollowersData
+    ].filter((card) => !card?.isLocked && card?.username);
 
     if (!sourceCards.length) {
       setPaymentSuccessLast7Rows([]);
@@ -4701,7 +4703,7 @@ function App() {
       shuffled[j] = tmp;
     }
 
-    const TOTAL_ROWS = 7;
+    const TOTAL_ROWS = 10;
     const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
     // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
@@ -4732,16 +4734,11 @@ function App() {
 
     const rowCount = selected.length;
 
-    // Choose one row between 3rd–7th (index 2–6) to have screenshots = 1
-    let screenshotRowIndex = null;
-    if (rowCount >= 3) {
-      const minIndex = 2;
-      const maxIndex = Math.min(6, rowCount - 1);
-      screenshotRowIndex = randBetween(minIndex, maxIndex);
+    // Higher frequency and randomized counts (1-3)
+    const screenshotIndices = new Set();
+    while (screenshotIndices.size < 4 && rowCount > 0) {
+      screenshotIndices.add(randBetween(0, Math.min(9, rowCount - 1)));
     }
-
-    // 30% chance that 2nd row also has screenshot = 1
-    const secondRowHasScreenshot = rowCount >= 2 && Math.random() < 0.3;
 
     const rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
       const username = card.username || "";
@@ -4760,21 +4757,15 @@ function App() {
       let visitsHighlighted = false;
       let screenshotsHighlighted = false;
 
-      // First two profiles always have visits = 1 highlighted
-      if (index === 0 || index === 1) {
-        visits = 1;
+      // Higher frequency visits (random 1-3 for first 5 rows)
+      if (index < 5) {
+        visits = randBetween(1, 3);
         visitsHighlighted = true;
       }
 
-      // Exactly one of the rows 3–7 has screenshots = 1 highlighted
-      if (index === screenshotRowIndex) {
-        screenshots = 1;
-        screenshotsHighlighted = true;
-      }
-
-      // 30% chance that row 2 also has screenshots = 1 highlighted
-      if (index === 1 && secondRowHasScreenshot) {
-        screenshots = 1;
+      // Higher frequency screenshots (random 1-3 for selected indices)
+      if (screenshotIndices.has(index)) {
+        screenshots = randBetween(1, 3);
         screenshotsHighlighted = true;
       }
 
@@ -4806,7 +4797,7 @@ function App() {
                 card?.image &&
                 card?.username
             )
-            .slice(0, 6);
+            .slice(0, 10);
 
     // Basic hero/profile info from analysis or fallback to current profile
     const heroData = analysis?.hero || {};
@@ -4826,6 +4817,10 @@ function App() {
       "This user copied your username",
       "This user viewed your profile yesterday",
       "This user took screenshot of your profile",
+      "This user visited your profile and stories multiple times",
+      "This user searched for your username manually",
+      "This user bookmarked one of your recent posts",
+      "This user mentions you frequently in private chats",
     ];
 
     return (
