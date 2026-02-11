@@ -663,9 +663,17 @@ body {
 }
 
 .summary-grid-title {
-  font-size: larger;
+  font-size: medium;
   font-weight: 900 !important;
   -webkit-text-stroke: 0.5px currentColor;
+}
+
+.summary-grid article p {
+  font-size: 0.8rem;
+  margin: 8px 0 0;
+  color: var(--text-light);
+  line-height: 1.4;
+  font-weight: 900 !important;
 }
 
 .slider-section {

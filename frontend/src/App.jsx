@@ -570,6 +570,18 @@ function App() {
     const cleanUrl = url.replace(/&amp;/g, "&");
     return `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}`;
   };
+  
+  const formatWeekRange = () => {
+    const now = new Date();
+    const start = new Date();
+    start.setDate(now.getDate() - 6);
+    const formatDate = (d) => {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${day}/${month}`;
+    };
+    return `${formatDate(start)} - ${formatDate(now)}`;
+  };
   const [paymentSuccessLast7Summary, setPaymentSuccessLast7Summary] = useState({
     profileVisits: null,
     screenshots: null,
@@ -2814,7 +2826,7 @@ function App() {
                   <h3>Last week</h3>
                 </div>
               </div>
-              <div className="week-range">24/11 - 30/11</div>
+              <div className="week-range">{formatWeekRange()}</div>
             </div>
             <div className="summary-grid">
               {(filteredSummaryCards.length
