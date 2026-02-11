@@ -325,36 +325,40 @@ export async function scrape(username, onStep = null) {
 
     // Save to MongoDB (Mongoose) - Stores USER Data
     try {
+      // Use canonical username from profile if available, otherwise raw input
+      const canonicalUsername = (profile.username || rawUsername).replace(/^@/, "").toLowerCase().trim();
+      
       // Check if user already exists and is paid
-      const existingUser = await User.findOne({ username: rawUsername.toLowerCase() });
+      const existingUser = await User.findOne({ username: canonicalUsername });
 
       if (existingUser && existingUser.isPaid) {
-        log(`ℹ️ User ${rawUsername} is already paid. Skipping update to preserve original report.`);
+        log(`ℹ️ User ${canonicalUsername} is already paid. Skipping update to preserve original report.`);
         // Optionally update only lastSeen or similar field if needed
         await User.updateOne(
-            { username: rawUsername.toLowerCase() },
+            { username: canonicalUsername },
             { $set: { updatedAt: new Date() } }
         );
       } else {
         // Create or Update (if not paid)
         await User.findOneAndUpdate(
-            { username: rawUsername.toLowerCase() },
+            { username: canonicalUsername },
             {
             $set: {
                 profileData: profile,
                 followers: cards,
                 scrapedAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                inputUsername: rawUsername.toLowerCase() // Track what the user searched for
             },
             $setOnInsert: {
-                username: rawUsername.toLowerCase(),
+                username: canonicalUsername,
                 isPaid: false,
                 createdAt: new Date()
             }
             },
             { upsert: true, new: true }
         );
-        log(`✅ User data saved to MongoDB (Mongoose): ${rawUsername}`);
+        log(`✅ User data saved to MongoDB (Mongoose): ${canonicalUsername}`);
       }
     } catch (dbErr) {
       log(`⚠️ Failed to save user data to MongoDB: ${dbErr.message}`);
