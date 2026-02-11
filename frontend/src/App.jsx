@@ -418,7 +418,7 @@ const createAnalysisFromApiData = (profileData, followersData, profileState) => 
   const addictedBodies = [
     `Visited your profile <strong>12 times yesterday</strong>`,
     `Visited your profile <strong>late at night</strong>`,
-    `Added <strong>only you</strong> to their close friends`,
+    `Added <span class="red">only you to their close friends</span>`,
     `Took a screenshot of your profile and stories`,
   ];
   const addictedTiles = (followersData || []).slice(0, 4).map((f, i) => ({
@@ -2677,7 +2677,7 @@ function App() {
     return (
       <section className="screen preview-screen">
         <div className="analyzer-shell">
-          <section className="hero-panel">
+          <section className="hero-panel" style={{marginBottom: "50px"}}>
             <div className="hero-top">
               <div className="hero-avatar">
                 <img
@@ -2744,7 +2744,7 @@ function App() {
             )}
           </section>
 
-          <section className="preview-header">
+          <section className="preview-header" style={{marginBottom: "50px"}}>
             <div className="preview-titles">
               {/* <p>{summary.warning || "Don't leave this page."}</p>
               {summary.weekRange && <span>{summary.weekRange}</span>} */}
@@ -2829,8 +2829,8 @@ function App() {
             </div>
           </section>
 
-          <section className="slider-section">
-            <h3>
+          <section className="slider-section" style={{marginBottom: "40px"}}>
+            <h3 style={{fontSize: "1.5rem", marginBottom: "25px", lineHeight: "1.4"}}>
               Visited your profile this week{" "}
               <span style={{ color: "#f43f3f" }}>between 2 to 7 times:</span>
             </h3>
@@ -3089,7 +3089,7 @@ function App() {
           )}
 
           {stories?.slides?.length > 0 && (
-            <section className="stories-section">
+            <section className="stories-section" style={{marginBottom: "50px"}}>
               <h3>{stories.heading || "Stories activity"}</h3>
               {(() => {
                 const storiesSlides = stories.slides || [];
@@ -3284,7 +3284,7 @@ function App() {
               <li>From those who pretend to be your friend</li>
               <li>People interested in you</li>
             </ul>
-            <article className="chat-interface-card">
+            <article className="chat-interface-card" style={{marginBottom: "40px"}}>
                 <div className="chat-header-img-container">
                   <img src={printMessageBg} alt="Chat Header" className="chat-header-img" />
                 </div>
@@ -3342,7 +3342,7 @@ function App() {
           )} */}
 
           {addicted.tiles.length > 0 && (
-            <section className="addicted-panel">
+            <section className="addicted-panel" style={{marginBottom: "50px"}}>
               <h3>{formatAddictedTitle(addicted.title)}</h3>
               <div className="addicted-grid">
                 {addicted.tiles.map((tile, index) => {
@@ -3370,30 +3370,40 @@ function App() {
               {addicted.footer && (
                 <p className="cta-banner">{addicted.footer}</p>
               )}
-              {ctas.tertiary && (
-                <button
-                  className="primary-btn cta-eye-btn"
-                  onClick={handleViewFullReport}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="lucide lucide-eye mr-[10px]"
-                    aria-hidden="true"
+                <div className="cta-button-container" style={{ textAlign: "center", width: "100%" }}>
+                  <button
+                    className="primary-btn cta-eye-btn"
+                    onClick={handleViewFullReport}
+                    style={{ width: "100%", maxWidth: "400px" }}
                   >
-                    <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                  {ctas.tertiary}
-                </button>
-              )}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      className="lucide lucide-eye mr-[10px]"
+                      aria-hidden="true"
+                    >
+                      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    {ctas.tertiary}
+                  </button>
+                  <p style={{ 
+                    color: "#f43f3f", 
+                    fontSize: "1rem", 
+                    marginTop: "12px", 
+                    fontWeight: "700",
+                    
+                  }}>
+                    Available for a limited time
+                  </p>
+                </div>
               {addicted.subfooter && (
                 <small className="small-text-footer-sub">
                   {addicted.subfooter}

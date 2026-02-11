@@ -568,6 +568,7 @@ body {
   align-items: center;
   width: 100%;
   text-align: center;
+  margin-top: -30px;
 }
 
 .preview-titles p {
@@ -1335,7 +1336,7 @@ body {
   width: 100%;
   padding: 0px 70px;
   -webkit-text-stroke: 0.5px currentColor;
-  font-size: larger;
+  font-size: medium;
 }
 
 .secondary-btn {
@@ -1565,8 +1566,8 @@ body {
   border-radius: 12px;
   background: #f43f3f;
   color: #fff;
-  padding: 16px 32px;
-  font-size: 1rem;
+  padding: 16px 16px;
+  font-size: 0.9rem;
   font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
@@ -3441,4 +3442,13 @@ body {
   filter: blur(4px);
   opacity: 0.7;
   display: inline-block;
+}
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.red {
+  color: #f43f3f !important;
 }
