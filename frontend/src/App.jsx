@@ -934,6 +934,7 @@ function App() {
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const paymentSessionRef = useRef(null);
+  const [keyData, setKeyData] = useState(null);
   // COMMENTED OUT: snapshotLookup - no longer using snapshots with API-first approach
   // const snapshotLookup = useMemo(() => {
   //   return snapshots.reduce((acc, step) => {
@@ -3686,6 +3687,23 @@ function App() {
       setRazorpayLoaded(false);
     };
     document.head.appendChild(script);
+  }, []);
+
+  // Fetch Razorpay key from backend
+  useEffect(() => {
+    const fetchKey = async () => {
+      try {
+        const response = await fetch("/api/payment/key");
+        if (response.ok) {
+          const data = await response.json();
+          setKeyData(data);
+          console.log("✅ Razorpay key loaded");
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch Razorpay key:", err);
+      }
+    };
+    fetchKey();
   }, []);
 
   // COMMENTED OUT: Cashfree SDK loading
