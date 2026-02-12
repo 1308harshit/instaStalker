@@ -1694,7 +1694,17 @@ function App() {
       },
       {
         isLocked: true,
+        lockText: "@bluredus took a screenshot of your profile this week.",
+        lockTextBlurred: false,
+      },
+      {
+        isLocked: true,
         lockText: "@bluredus shared your profile with *********.",
+        lockTextBlurred: false,
+      },
+      {
+        isLocked: true,
+        lockText: "@bluredus visited your profile yesterday.",
         lockTextBlurred: false,
       },
       {
@@ -1704,9 +1714,9 @@ function App() {
       },
     ];
 
-    // Inject varieties at regular intervals
+    // Inject varieties at regular intervals (Increased frequency: every 4 cards)
     lockVarieties.forEach((v, i) => {
-      const targetIndex = 2 + i * 5; // Positions: 2, 7, 12, 17
+      const targetIndex = 2 + i * 4; // Positions: 2, 6, 10, 14, 18, 22
       if (cardsToRender.length >= targetIndex) {
         cardsToRender.splice(targetIndex, 0, v);
       } else {
@@ -3088,7 +3098,7 @@ function App() {
 
           {revealStalkersCta && (
             <div className="cta-inline">
-              <button className="primary-btn" onClick={scrollToFullReport}>
+              <button className="primary-btn primary-btn--large" onClick={scrollToFullReport}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="20"

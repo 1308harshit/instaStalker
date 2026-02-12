@@ -199,7 +199,14 @@ body {
   font-size: 1.05rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
+}
+
+.primary-btn--large {
+  padding: 20px 60px !important;
+  font-size: 1.25rem !important;
+  border-radius: 14px !important;
+  min-width: 300px;
 }
 
 .cta button:hover,
