@@ -1679,42 +1679,48 @@ function App() {
 
     // If no blurred card exists, inject one at a random position
     let cardsToRender = [...allCards];
-    if (!hasBlurredCard && allCards.length > 0) {
-      // Filter out locked cards and cards without images
-      const availableCards = allCards.filter(
-        (card) =>
-          !card?.isLocked &&
-          !card?.blurImage &&
-          card?.image &&
-          card?.username // Must have a username (not already locked/blurred)
-      );
+    
+    // ✅ USER REQUEST: Inject multiple "black locked" card varieties
+    const lockVarieties = [
+      {
+        isLocked: true,
+        lockText: "@bluredus is on your profile now.",
+        lockTextBlurred: false,
+      },
+      {
+        isLocked: true,
+        lockText: "@bluredus visited your profile 2 hours ago.",
+        lockTextBlurred: false,
+      },
+      {
+        isLocked: true,
+        lockText: "@bluredus shared your profile with *********.",
+        lockTextBlurred: false,
+      },
+      {
+        isLocked: true,
+        lockText: "@bluredus blocked you",
+        lockTextBlurred: false,
+      },
+    ];
 
-      if (availableCards.length > 0) {
-        // Use a stable random seed based on cards length or content if possible,
-        // but for now, since this memo only re-runs when cards change, Math.random() is safe here.
-        const randomIndex = Math.floor(
-          Math.random() * (allCards.length + 1)
-        );
-        const randomCard =
-          availableCards[
-            Math.floor(Math.random() * availableCards.length)
-          ];
-        const blurredCard = {
-          ...randomCard,
-          blurImage: true,
-          username: null,
-          image: randomCard.image,
-        };
-        cardsToRender.splice(randomIndex, 0, blurredCard);
+    // Inject varieties at regular intervals
+    lockVarieties.forEach((v, i) => {
+      const targetIndex = 2 + i * 5; // Positions: 2, 7, 12, 17
+      if (cardsToRender.length >= targetIndex) {
+        cardsToRender.splice(targetIndex, 0, v);
+      } else {
+        cardsToRender.push(v);
       }
-    }
+    });
 
     // Filter out cards that come right after blurred cards
     return cardsToRender
       .map((card, originalIndex) => ({ card, originalIndex }))
-      .filter(({ originalIndex }) => {
+      .filter(({ card, originalIndex }) => {
+        if (card.isLocked) return true; // ✅ Never filter manual locked injections
         const isAfterBlurredCard =
-          originalIndex - 1 > 0 && (originalIndex - 1) % 5 === 0;
+          originalIndex - 1 >= 0 && (originalIndex - 1) % 5 === 0;
         return !isAfterBlurredCard;
       });
   }, [analysis?.slider?.cards, cards]);
@@ -2877,10 +2883,18 @@ function App() {
                           // ✅ Proxy Instagram images via weserv.nl
                           let imageUrl = freshAvatars[usernameForFresh] || (card.image ? proxyImage(card.image) : (hero.profileImage || profile.avatar));
 
+                          const isLocked = Boolean(
+                            card?.isLocked || card?.title?.includes("🔒")
+                          );
+                          const shouldBlurImage = Boolean(
+                            card?.blurImage || (!card?.username && imageUrl)
+                          );
+
                           // Check if original position is a multiple of 5 starting from 5 (5, 10, 15, 20, etc.)
                           // If yes, render as blurred card with lock icon (no username, grey blur, lock in middle)
+                          // But DON'T clobber cards that are explicitly marked as isLocked (Type 3)
                           const isMultipleOf5 =
-                            originalIndex > 0 && originalIndex % 5 === 0;
+                            originalIndex > 0 && originalIndex % 5 === 0 && !isLocked;
 
                           if (isMultipleOf5 && imageUrl) {
                             return (
@@ -2917,12 +2931,6 @@ function App() {
                             );
                           }
 
-                          const isLocked = Boolean(
-                            card?.isLocked || card?.title?.includes("🔒")
-                          );
-                          const shouldBlurImage = Boolean(
-                            card?.blurImage || (!card?.username && imageUrl)
-                          );
                           const lockText =
                             card?.lockText ||
                             card?.lines?.[0]?.text ||

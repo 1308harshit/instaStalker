@@ -792,12 +792,12 @@ body {
 
 .carousel-track .slider-card--locked {
   opacity: 0.6;
-  background: radial-gradient(circle at 30% 20%, #3e3e3e, #181818 55%, #050505 100%) !important;
+  background: #000 !important;
 }
 
 .carousel-track .slider-card--locked.active {
   opacity: 1;
-  background: radial-gradient(circle at 30% 20%, #3e3e3e, #181818 55%, #050505 100%) !important;
+  background: #000 !important;
 }
 
 .carousel-btn {
@@ -1202,7 +1202,7 @@ body {
   position: relative;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: radial-gradient(circle at 30% 20%, #3e3e3e, #181818 55%, #050505 100%);
+  background: #000;
   box-shadow: none;
   color: #fff;
   overflow: hidden;
