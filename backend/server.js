@@ -43,7 +43,10 @@ import { ObjectId } from "mongodb";
 import User from "./models/User.js"; // Import Mongoose User model
 import { Resend } from "resend";
 import crypto from "crypto";
-import Razorpay from "razorpay";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const Paytm = require("paytm-pg-node-sdk");
+const PaytmChecksum = require("paytmchecksum");
 
 const app = express();
 app.use(
@@ -71,30 +74,27 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Razorpay configuration
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+// Paytm configuration (Test API: WEBSTAGING, Production: your website name)
+const PAYTM_MID = (process.env.PAYTM_MID || "").trim();
+const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "").trim();
+const PAYTM_WEBSITE = (process.env.PAYTM_WEBSITE || "WEBSTAGING").trim();
+const PAYTM_CLIENT_ID = (process.env.PAYTM_CLIENT_ID || process.env.PAYTM_MID || "").trim() || PAYTM_MID;
+const PAYTM_ENV = (process.env.PAYTM_ENV || "STAGING").trim().toUpperCase();
 
 // Validate required environment variables
-if (!RAZORPAY_KEY_ID) {
+if (!PAYTM_MID) {
   throw new Error(
-    "❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables."
+    "❌ PAYTM_MID environment variable is required. Please set it in .env file or Railway environment variables."
   );
 }
 
-if (!RAZORPAY_KEY_SECRET) {
+if (!PAYTM_MERCHANT_KEY) {
   throw new Error(
-    "❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables."
+    "❌ PAYTM_MERCHANT_KEY environment variable is required. Please set it in .env file or Railway environment variables."
   );
 }
 
-// Initialize Razorpay instance
-const razorpayInstance = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET,
-});
-
-// COMMENTED OUT: Cashfree configuration (replaced by Razorpay)
+// COMMENTED OUT: Cashfree configuration (replaced by Paytm)
 // const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
 // const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
 // const CASHFREE_ENV = process.env.CASHFREE_ENV || "PRODUCTION";
@@ -262,22 +262,53 @@ function buildStoredReport({ cards = [], profile = null }) {
   };
 }
 
-// Log credentials at startup to verify environment configuration
-log(`🚀 Razorpay credentials loaded:`);
-log(`   Key ID: ${RAZORPAY_KEY_ID}`);
-log(
-  `   Key Secret: ${
-    RAZORPAY_KEY_SECRET
-      ? "Present (length: " + RAZORPAY_KEY_SECRET.length + ")"
-      : "MISSING"
-  }`
-);
-
-// Email configuration
+// Email configuration (also used for Paytm callback)
 const BASE_URL = (process.env.BASE_URL || "https://samjhona.com").replace(
   /\/+$/,
   ""
 );
+
+// Initialize Paytm SDK (must be after BASE_URL)
+const paytmEnvironment =
+  PAYTM_ENV === "PRODUCTION"
+    ? Paytm.LibraryConstants.PRODUCTION_ENVIRONMENT
+    : Paytm.LibraryConstants.STAGING_ENVIRONMENT;
+Paytm.MerchantProperties.setCallbackUrl(
+  `${BASE_URL}/api/payment/paytm-callback`
+);
+// SDK initialize() takes 4 params only: (environment, mid, merchantKey, website) — not client_id
+Paytm.MerchantProperties.initialize(
+  paytmEnvironment,
+  PAYTM_MID,
+  PAYTM_MERCHANT_KEY,
+  PAYTM_WEBSITE
+);
+Paytm.MerchantProperties.setClientId(PAYTM_CLIENT_ID || PAYTM_MID);
+
+// SDK defaults to securestage.paytmpayments.com — override to securegw-stage.paytm.in for correct gateway
+const PAYTM_INITIATE_TXN_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://securegw.paytm.in/theia/api/v1/initiateTransaction"
+    : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
+Paytm.MerchantProperties.getInitiateTxnUrl = () => PAYTM_INITIATE_TXN_URL;
+
+const PAYTM_PAYMENT_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://securegw.paytm.in/theia/api/v1/showPaymentPage"
+    : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
+
+// Log credentials at startup (MID length helps spot copy-paste issues)
+log(`🚀 Paytm credentials loaded (${PAYTM_ENV}):`);
+log(`   MID: ${PAYTM_MID} (length: ${PAYTM_MID.length})`);
+log(`   websiteName: ${PAYTM_WEBSITE}`);
+log(`   InitiateTransaction URL: ${PAYTM_INITIATE_TXN_URL}`);
+log(`   ShowPaymentPage URL: ${PAYTM_PAYMENT_URL}`);
+log(
+  `   Merchant Key: ${
+    PAYTM_MERCHANT_KEY ? "Present (length: " + PAYTM_MERCHANT_KEY.length + ")" : "MISSING"
+  }`
+);
+log(`   Callback URL: ${BASE_URL}/api/payment/paytm-callback (Paytm must be able to reach this)`);
 
 // Create Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -461,18 +492,13 @@ app.post("/api/payment/bypass", async (req, res) => {
 });
 
 // ============================================================================
-// RAZORPAY PAYMENT ROUTES (replaces Cashfree)
+// PAYTM PAYMENT ROUTES
 // ============================================================================
 
-// Return Razorpay key_id to frontend (never expose the secret)
-app.get("/api/payment/key", (req, res) => {
-  res.json({ key_id: RAZORPAY_KEY_ID });
-});
-
-// Create Razorpay order
+// Create Paytm order (transaction token) and return redirect params
 app.post("/api/payment/create-order", async (req, res) => {
   try {
-    const { amount, email, fullName, phoneNumber } = req.body;
+    const { amount, email, fullName, phoneNumber, username, cards, profile } = req.body;
 
     log(`📥 Create order request: amount=${amount}, email=${email}`);
 
@@ -482,217 +508,189 @@ app.post("/api/payment/create-order", async (req, res) => {
         .json({ error: "Amount is required and must be greater than 0" });
     }
 
-    // Razorpay expects amount in paise (1 INR = 100 paise)
-    const amountInPaise = Math.round(amount * 100);
+    const orderId =
+      "ORDER_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 12);
+    const amountStr = Number(amount).toFixed(2);
+    const customerId = email || "CUST_" + Date.now();
 
-    const options = {
-      amount: amountInPaise,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      notes: {
-        email: email || "",
-        fullName: fullName || "Customer",
-      },
-    };
+    const txnAmount = Paytm.Money.constructWithCurrencyAndValue(
+      Paytm.EnumCurrency.INR,
+      amountStr
+    );
+    const userInfo = new Paytm.UserInfo(customerId);
+    if (email) userInfo.setEmail(email);
+    if (phoneNumber) userInfo.setMobile(phoneNumber);
+    userInfo.setFirstName((fullName || email || "Customer").slice(0, 50));
 
-    log(`💰 Creating Razorpay order: ₹${amount} (${amountInPaise} paise)`);
+    const channelId = Paytm.EChannelId.WEB;
+    const paymentDetailBuilder = new Paytm.PaymentDetailBuilder(
+      channelId,
+      orderId,
+      txnAmount,
+      userInfo
+    );
+    const paymentDetail = paymentDetailBuilder.build();
 
-    const order = await razorpayInstance.orders.create(options);
+    log(`💰 Creating Paytm txn token: ₹${amountStr}, orderId=${orderId}`);
 
-    log(`✅ Razorpay order created: ${order.id}`);
+    const response = await Paytm.Payment.createTxnToken(paymentDetail);
+    const body = response?.responseObject?.body ?? response?.body ?? {};
+    const txnToken =
+      body.txnToken ||
+      response?.responseObject?.body?.txnToken ||
+      response?.body?.txnToken ||
+      response?.txnToken;
 
-    // Save order to MongoDB (optional, don't fail if DB is unavailable)
-    if (email) {
-      try {
-        const database = await connectDB();
-        if (database) {
-          const collection = database.collection(COLLECTION_NAME);
-          await collection.insertOne({
-            orderId: order.id,
-            email,
-            fullName: fullName || email,
-            phoneNumber: phoneNumber || "",
-            amount: amount,
-            status: "created",
-            provider: "razorpay",
-            createdAt: new Date(),
-          });
-          log(`✅ Order saved to MongoDB: ${order.id}`);
-        }
-      } catch (dbErr) {
-        log(
-          "⚠️ Failed to save order to MongoDB (continuing anyway):",
-          dbErr.message
-        );
-      }
+    if (!txnToken) {
+      const resultInfo = body.resultInfo || response?.responseObject?.body?.resultInfo || {};
+      const paytmMsg = resultInfo.resultMsg || resultInfo.resultCode || "";
+      const details = paytmMsg
+        ? `Paytm: ${paytmMsg} (code: ${resultInfo.resultCode || "—"})`
+        : "No txnToken in response";
+      log("❌ No txnToken in Paytm response:", JSON.stringify(response));
+      return res.status(500).json({
+        error: "Failed to create payment token",
+        details,
+      });
     }
 
-    // Return order data for frontend
+    log(`✅ Paytm order created: ${orderId}`);
+
+    // Save order to MongoDB
+    try {
+      const database = await connectDB();
+      if (database) {
+        const collection = database.collection(COLLECTION_NAME);
+        await collection.insertOne({
+          orderId,
+          email: email || "",
+          fullName: fullName || email || "",
+          phoneNumber: phoneNumber || "",
+          amount: Number(amount),
+          status: "created",
+          provider: "paytm",
+          username: username || null,
+          cards: Array.isArray(cards) ? cards : [],
+          profile: profile && typeof profile === "object" ? profile : null,
+          createdAt: new Date(),
+        });
+        log(`✅ Order saved to MongoDB: ${orderId}`);
+      }
+    } catch (dbErr) {
+      log(
+        "⚠️ Failed to save order to MongoDB (continuing anyway):",
+        dbErr.message
+      );
+    }
+
     res.json({
-      id: order.id,
-      amount: order.amount,
-      currency: order.currency,
+      orderId,
+      txnToken,
+      mid: PAYTM_MID,
+      paytmPaymentUrl: PAYTM_PAYMENT_URL,
+      amount: Number(amount),
+      currency: "INR",
     });
   } catch (err) {
-    log("❌ Error creating Razorpay order:", err.message);
-    console.error("Full Razorpay error:", err);
+    log("❌ Error creating Paytm order:", err.message);
+    console.error("Paytm createTxnToken error:", err);
     res.status(500).json({
-      error: "Failed to create Razorpay order",
+      error: "Failed to create Paytm order",
       details: err.message,
     });
   }
 });
 
-// Verify Razorpay payment signature and save profile data
-app.post("/api/payment/verify", async (req, res) => {
-  try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      username,
-      cards,
-      profile,
-    } = req.body;
+function redirectHtml(url) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url.replace(/"/g, "&quot;")}"></head><body>Redirecting…</body></html>`;
+}
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({
-        error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required",
-      });
-    }
+// Paytm callback (user's browser is redirected here after payment; Paytm POSTs form data)
+app.post(
+  "/api/payment/paytm-callback",
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
 
-    log(`� Verifying Razorpay payment: order=${razorpay_order_id}, payment=${razorpay_payment_id}`);
-
-    // Verify signature using HMAC SHA256
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", RAZORPAY_KEY_SECRET)
-      .update(body)
-      .digest("hex");
-
-    const isSignatureValid = expectedSignature === razorpay_signature;
-
-    log(`✅ Signature valid: ${isSignatureValid}`);
-
-    if (!isSignatureValid) {
-      return res.status(400).json({
-        error: "Payment verification failed - invalid signature",
-        is_successful: false,
-      });
-    }
-
-    // Payment is verified — save profile data and generate post-purchase link
+// (Paytm callback body - verify route removed)
     try {
-      const database = await connectDB();
-      if (database) {
-        const collection = database.collection(COLLECTION_NAME);
+      const body = { ...req.body };
+      const checksumHash = body.CHECKSUMHASH || body.checksumhash;
+      const orderId = body.ORDERID || body.orderId;
 
-        const existingOrder = await collection.findOne({ orderId: razorpay_order_id });
+      log(`📥 Paytm callback: ORDERID=${orderId}, STATUS=${body.STATUS || body.status}`);
 
-        // Generate unique post-purchase link
-        const accessToken = crypto.randomBytes(32).toString("hex");
-        const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
-          accessToken
-        )}&order=${encodeURIComponent(razorpay_order_id)}`;
+      if (!orderId || !checksumHash) {
+        return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_callback`));
+      }
 
-        const updateData = {
-          status: "paid",
-          paymentId: razorpay_payment_id,
-          verifiedAt: new Date(),
-          postPurchaseLink: postPurchaseLink,
-          accessToken: accessToken,
-          emailSent: false,
-        };
+      const isSignatureValid = PaytmChecksum.verifySignature(body, PAYTM_MERCHANT_KEY, checksumHash);
+      if (!isSignatureValid) {
+        return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_checksum`));
+      }
 
-        // Add profile data if provided
-        if (username) updateData.username = username;
-        if (Array.isArray(cards) && cards.length > 0) updateData.cards = cards;
-        if (profile && typeof profile === "object" && Object.keys(profile).length > 0) {
-          updateData.profile = profile;
-        }
-        if (!existingOrder?.report && Array.isArray(cards) && cards.length > 0) {
-          updateData.report = buildStoredReport({ cards, profile });
-        }
+      const status = (body.STATUS || body.status || "").toUpperCase();
+      if (status !== "TXN_SUCCESS") {
+        return res.send(redirectHtml(`${BASE_URL}/?payment=failed&order=${encodeURIComponent(orderId)}`));
+      }
 
-        const updateResult = await collection.updateOne(
-          { orderId: razorpay_order_id },
-          { $set: updateData }
-        );
+      const txnId = body.TXNID || body.txnId || "";
 
-        if (updateResult.matchedCount > 0) {
-          log(`✅ Database updated: Order ${razorpay_order_id} marked as paid`);
-
-          // Get order details for email
-          const order = await collection.findOne({ orderId: razorpay_order_id });
-          if (order && order.email) {
-            
-            // ✅ Update Mongoose User Model
-            if (username) {
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          const existingOrder = await collection.findOne({ orderId });
+          const accessToken = crypto.randomBytes(32).toString("hex");
+          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(accessToken)}&order=${encodeURIComponent(orderId)}`;
+          const updateData = {
+            status: "paid",
+            paymentId: txnId,
+            verifiedAt: new Date(),
+            postPurchaseLink,
+            accessToken,
+            emailSent: false,
+          };
+          if (!existingOrder?.report && Array.isArray(existingOrder?.cards) && existingOrder.cards.length > 0) {
+            updateData.report = buildStoredReport({ cards: existingOrder.cards, profile: existingOrder.profile });
+          }
+          await collection.updateOne({ orderId }, { $set: updateData });
+          log(`✅ Order ${orderId} marked as paid`);
+          const order = await collection.findOne({ orderId });
+          if (order?.email) {
+            if (order.username) {
               try {
-                const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
+                const cleanUsername = order.username.replace(/^@/, "").toLowerCase().trim();
                 await User.findOneAndUpdate(
                   { username: cleanUsername },
-                  {
-                    $set: {
-                      paymentDetails: { 
-                        orderId: razorpay_order_id, 
-                        paymentId: razorpay_payment_id 
-                      },
-                      isPaid: true,
-                      email: order.email,
-                      fullName: order.fullName || "",
-                      phoneNumber: order.phoneNumber || "",
-                      updatedAt: new Date()
-                    }
-                  },
+                  { $set: { paymentDetails: { orderId, paymentId: txnId }, isPaid: true, email: order.email, fullName: order.fullName || "", phoneNumber: order.phoneNumber || "", updatedAt: new Date() } },
                   { upsert: true }
                 );
-                log(`✅ User updated in Mongoose (Verify): ${cleanUsername}`);
+                log(`✅ User updated in Mongoose (Paytm): ${cleanUsername}`);
               } catch (mongooseErr) {
-                log(`⚠️ Failed to update User model in verify: ${mongooseErr.message}`);
+                log(`⚠️ Mongoose update failed: ${mongooseErr.message}`);
               }
             }
-
-            // Send email (non-blocking)
-            sendPostPurchaseEmail(
-              order.email,
-              order.fullName || "Customer",
-              postPurchaseLink
-            )
-              .then(() => {
-                collection
-                  .updateOne(
-                    { orderId: razorpay_order_id },
-                    { $set: { emailSent: true, emailSentAt: new Date() } }
-                  )
-                  .catch(() => {});
-              })
-              .catch((emailErr) => {
-                log(`⚠️ Email sending failed: ${emailErr.message}`);
-              });
+            sendPostPurchaseEmail(order.email, order.fullName || "Customer", postPurchaseLink)
+              .then(() => collection.updateOne({ orderId }, { $set: { emailSent: true, emailSentAt: new Date() } }).catch(() => {}))
+              .catch((emailErr) => log(`⚠️ Email failed: ${emailErr.message}`));
           }
-        } else {
-          log(`⚠️ Order ${razorpay_order_id} not found in database`);
         }
+      } catch (dbErr) {
+        log(`⚠️ DB error in callback: ${dbErr.message}`);
       }
-    } catch (dbErr) {
-      log(`⚠️ Failed to update database: ${dbErr.message}`);
-      // Don't fail payment verification if DB update fails
+
+      res.send(redirectHtml(postPurchaseLink));
+    } catch (err) {
+      log(`❌ Paytm callback error: ${err.message}`);
+      res.status(500).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=error`));
     }
-
-    res.json({
-      is_successful: true,
-      order_id: razorpay_order_id,
-      payment_id: razorpay_payment_id,
-    });
-  } catch (err) {
-    log(`❌ Error verifying payment: ${err.message}`);
-    res
-      .status(500)
-      .json({ error: "Failed to verify payment", details: err.message });
   }
-});
+);
 
+// (Razorpay verify route removed)
 // Validate post-purchase link endpoint (kept from original - not Cashfree-specific)
 app.get("/api/payment/post-purchase", async (req, res) => {
   try {
