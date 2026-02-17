@@ -43,9 +43,9 @@ import { ObjectId } from "mongodb";
 import User from "./models/User.js"; // Import Mongoose User model
 import { Resend } from "resend";
 import crypto from "crypto";
+import axios from "axios";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const Paytm = require("paytm-pg-node-sdk");
 const PaytmChecksum = require("paytmchecksum");
 
 const app = express();
@@ -74,25 +74,11 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Paytm configuration (Test API: WEBSTAGING, Production: your website name)
-const PAYTM_MID = (process.env.PAYTM_MID || "").trim();
-const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "").trim();
+// Paytm — temporarily hardcoded (move to .env later)
+const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152").trim();
+const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "Q22WldyyCskNM&%&").trim();
 const PAYTM_WEBSITE = (process.env.PAYTM_WEBSITE || "WEBSTAGING").trim();
-const PAYTM_CLIENT_ID = (process.env.PAYTM_CLIENT_ID || process.env.PAYTM_MID || "").trim() || PAYTM_MID;
 const PAYTM_ENV = (process.env.PAYTM_ENV || "STAGING").trim().toUpperCase();
-
-// Validate required environment variables
-if (!PAYTM_MID) {
-  throw new Error(
-    "❌ PAYTM_MID environment variable is required. Please set it in .env file or Railway environment variables."
-  );
-}
-
-if (!PAYTM_MERCHANT_KEY) {
-  throw new Error(
-    "❌ PAYTM_MERCHANT_KEY environment variable is required. Please set it in .env file or Railway environment variables."
-  );
-}
 
 // COMMENTED OUT: Cashfree configuration (replaced by Paytm)
 // const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
@@ -263,52 +249,23 @@ function buildStoredReport({ cards = [], profile = null }) {
 }
 
 // Email configuration (also used for Paytm callback)
-const BASE_URL = (process.env.BASE_URL || "https://samjhona.com").replace(
+// Local: http://localhost:5173 (frontend; proxy /api to backend). Production: https://samjhona.com
+const BASE_URL = (process.env.BASE_URL || "http://localhost:5173").replace(
   /\/+$/,
   ""
 );
 
-// Initialize Paytm SDK (must be after BASE_URL)
-const paytmEnvironment =
-  PAYTM_ENV === "PRODUCTION"
-    ? Paytm.LibraryConstants.PRODUCTION_ENVIRONMENT
-    : Paytm.LibraryConstants.STAGING_ENVIRONMENT;
-Paytm.MerchantProperties.setCallbackUrl(
-  `${BASE_URL}/api/payment/paytm-callback`
-);
-// SDK initialize() takes 4 params only: (environment, mid, merchantKey, website) — not client_id
-Paytm.MerchantProperties.initialize(
-  paytmEnvironment,
-  PAYTM_MID,
-  PAYTM_MERCHANT_KEY,
-  PAYTM_WEBSITE
-);
-Paytm.MerchantProperties.setClientId(PAYTM_CLIENT_ID || PAYTM_MID);
-
-// SDK defaults to securestage.paytmpayments.com — override to securegw-stage.paytm.in for correct gateway
-const PAYTM_INITIATE_TXN_URL =
+// Paytm API URLs (direct integration — no SDK)
+const PAYTM_INITIATE_URL =
   PAYTM_ENV === "PRODUCTION"
     ? "https://securegw.paytm.in/theia/api/v1/initiateTransaction"
     : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
-Paytm.MerchantProperties.getInitiateTxnUrl = () => PAYTM_INITIATE_TXN_URL;
-
 const PAYTM_PAYMENT_URL =
   PAYTM_ENV === "PRODUCTION"
     ? "https://securegw.paytm.in/theia/api/v1/showPaymentPage"
     : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
 
-// Log credentials at startup (MID length helps spot copy-paste issues)
-log(`🚀 Paytm credentials loaded (${PAYTM_ENV}):`);
-log(`   MID: ${PAYTM_MID} (length: ${PAYTM_MID.length})`);
-log(`   websiteName: ${PAYTM_WEBSITE}`);
-log(`   InitiateTransaction URL: ${PAYTM_INITIATE_TXN_URL}`);
-log(`   ShowPaymentPage URL: ${PAYTM_PAYMENT_URL}`);
-log(
-  `   Merchant Key: ${
-    PAYTM_MERCHANT_KEY ? "Present (length: " + PAYTM_MERCHANT_KEY.length + ")" : "MISSING"
-  }`
-);
-log(`   Callback URL: ${BASE_URL}/api/payment/paytm-callback (Paytm must be able to reach this)`);
+log(`🚀 Paytm (direct API): MID=${PAYTM_MID}, website=${PAYTM_WEBSITE}, callback=${BASE_URL}/api/payment/paytm-callback`);
 
 // Create Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -495,7 +452,7 @@ app.post("/api/payment/bypass", async (req, res) => {
 // PAYTM PAYMENT ROUTES
 // ============================================================================
 
-// Create Paytm order (transaction token) and return redirect params
+// Create Paytm order — direct API (initiateTransaction) with axios + paytmchecksum
 app.post("/api/payment/create-order", async (req, res) => {
   try {
     const { amount, email, fullName, phoneNumber, username, cards, profile } = req.body;
@@ -515,42 +472,59 @@ app.post("/api/payment/create-order", async (req, res) => {
       Math.random().toString(36).substring(2, 12);
     const amountStr = Number(amount).toFixed(2);
     const customerId = email || "CUST_" + Date.now();
+    const callbackUrl = `${BASE_URL}/api/payment/paytm-callback`;
 
-    const txnAmount = Paytm.Money.constructWithCurrencyAndValue(
-      Paytm.EnumCurrency.INR,
-      amountStr
-    );
-    const userInfo = new Paytm.UserInfo(customerId);
-    if (email) userInfo.setEmail(email);
-    if (phoneNumber) userInfo.setMobile(phoneNumber);
-    userInfo.setFirstName((fullName || email || "Customer").slice(0, 50));
-
-    const channelId = Paytm.EChannelId.WEB;
-    const paymentDetailBuilder = new Paytm.PaymentDetailBuilder(
-      channelId,
+    // IMPORTANT: Build body keys in same order as Paytm's Node SDK does
+    // (helps avoid signature mismatches that Paytm often surfaces as "System Error")
+    const requestBody = {
+      requestType: "Payment",
+      mid: PAYTM_MID,
       orderId,
-      txnAmount,
-      userInfo
-    );
-    const paymentDetail = paymentDetailBuilder.build();
+      websiteName: PAYTM_WEBSITE,
+      txnAmount: { value: amountStr, currency: "INR" },
+      userInfo: {
+        custId: customerId,
+        email: email || "",
+        firstName: (fullName || email || "Customer").slice(0, 50),
+        mobile: phoneNumber || "",
+      },
+      callbackUrl,
+    };
 
     log(`💰 Creating Paytm txn token: ₹${amountStr}, orderId=${orderId}`);
 
-    const response = await Paytm.Payment.createTxnToken(paymentDetail);
-    const body = response?.responseObject?.body ?? response?.body ?? {};
-    const txnToken =
-      body.txnToken ||
-      response?.responseObject?.body?.txnToken ||
-      response?.body?.txnToken ||
-      response?.txnToken;
+    const signature = await PaytmChecksum.generateSignature(
+      JSON.stringify(requestBody),
+      PAYTM_MERCHANT_KEY
+    );
+
+    // Build head similar to SDK (Paytm may reject if required header fields missing)
+    const head = {
+      version: "v2",
+      channelId: "WEB",
+      requestTimestamp: Date.now().toString(),
+      workFlow: null,
+      clientId: PAYTM_MID,
+      signature,
+    };
+
+    const apiUrl = `${PAYTM_INITIATE_URL}?mid=${encodeURIComponent(PAYTM_MID)}&orderId=${encodeURIComponent(orderId)}`;
+    const { data } = await axios.post(
+      apiUrl,
+      { body: requestBody, head },
+      { headers: { "Content-Type": "application/json" }, timeout: 15000 }
+    );
+
+    const resBody = data?.body ?? data;
+    const txnToken = resBody?.txnToken;
 
     if (!txnToken) {
-      const resultInfo = body.resultInfo || response?.responseObject?.body?.resultInfo || {};
+      const resultInfo = resBody?.resultInfo || {};
       const paytmMsg = resultInfo.resultMsg || resultInfo.resultCode || "";
       const details = paytmMsg
         ? `Paytm: ${paytmMsg} (code: ${resultInfo.resultCode || "—"})`
         : "No txnToken in response";
-      log("❌ No txnToken in Paytm response:", JSON.stringify(response));
+      log("❌ No txnToken in Paytm response:", JSON.stringify(data));
       return res.status(500).json({
         error: "Failed to create payment token",
         details,
