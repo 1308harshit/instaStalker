@@ -255,17 +255,9 @@ const BASE_URL = (process.env.BASE_URL || "http://localhost:5173").replace(
   ""
 );
 
-// Paytm API URLs (direct integration — no SDK)
-const PAYTM_INITIATE_URL =
-  PAYTM_ENV === "PRODUCTION"
-    ? "https://securegw.paytm.in/theia/api/v1/initiateTransaction"
-    : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
-const PAYTM_PAYMENT_URL =
-  PAYTM_ENV === "PRODUCTION"
-    ? "https://securegw.paytm.in/theia/api/v1/showPaymentPage"
-    : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
-
-log(`🚀 Paytm (direct API): MID=${PAYTM_MID}, website=${PAYTM_WEBSITE}, callback=${BASE_URL}/api/payment/paytm-callback`);
+log(`🚀 Paytm: MID=${PAYTM_MID} (${PAYTM_MID.length} chars), KEY=${PAYTM_MERCHANT_KEY.substring(0,4)}... (${PAYTM_MERCHANT_KEY.length} chars), website=${PAYTM_WEBSITE}, env=${PAYTM_ENV}`);
+log(`   BASE_URL=${BASE_URL}, callback=${BASE_URL}/api/payment/paytm-callback`);
+log(`   initiateTransaction: ${PAYTM_ENV === "PRODUCTION" ? "secure.paytmpayments.com" : "securestage.paytmpayments.com"}`);
 
 // Create Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -452,7 +444,17 @@ app.post("/api/payment/bypass", async (req, res) => {
 // PAYTM PAYMENT ROUTES
 // ============================================================================
 
-// Create Paytm order — direct API (initiateTransaction) with axios + paytmchecksum
+// Correct Paytm API endpoints (paytmpayments.com, NOT securegw.paytm.in!)
+const PAYTM_INITIATE_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://secure.paytmpayments.com/theia/api/v1/initiateTransaction"
+    : "https://securestage.paytmpayments.com/theia/api/v1/initiateTransaction";
+const PAYTM_PAYMENT_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://secure.paytmpayments.com/theia/api/v1/showPaymentPage"
+    : "https://securestage.paytmpayments.com/theia/api/v1/showPaymentPage";
+
+// Create Paytm order — initiateTransaction API (correct endpoint)
 app.post("/api/payment/create-order", async (req, res) => {
   try {
     const { amount, email, fullName, phoneNumber, username, cards, profile } = req.body;
@@ -474,44 +476,30 @@ app.post("/api/payment/create-order", async (req, res) => {
     const customerId = email || "CUST_" + Date.now();
     const callbackUrl = `${BASE_URL}/api/payment/paytm-callback`;
 
-    // IMPORTANT: Build body keys in same order as Paytm's Node SDK does
-    // (helps avoid signature mismatches that Paytm often surfaces as "System Error")
-    const requestBody = {
+    const paytmBody = {
       requestType: "Payment",
       mid: PAYTM_MID,
-      orderId,
       websiteName: PAYTM_WEBSITE,
+      orderId: orderId,
+      callbackUrl: callbackUrl,
       txnAmount: { value: amountStr, currency: "INR" },
-      userInfo: {
-        custId: customerId,
-        email: email || "",
-        firstName: (fullName || email || "Customer").slice(0, 50),
-        mobile: phoneNumber || "",
-      },
-      callbackUrl,
+      userInfo: { custId: customerId },
     };
 
-    log(`💰 Creating Paytm txn token: ₹${amountStr}, orderId=${orderId}`);
+    log(`💰 Creating Paytm txn: ₹${amountStr}, orderId=${orderId}`);
+    log(`   callbackUrl: ${callbackUrl}`);
 
     const signature = await PaytmChecksum.generateSignature(
-      JSON.stringify(requestBody),
+      JSON.stringify(paytmBody),
       PAYTM_MERCHANT_KEY
     );
 
-    // Build head similar to SDK (Paytm may reject if required header fields missing)
-    const head = {
-      version: "v2",
-      channelId: "WEB",
-      requestTimestamp: Date.now().toString(),
-      workFlow: null,
-      clientId: PAYTM_MID,
-      signature,
-    };
+    const apiUrl = `${PAYTM_INITIATE_URL}?mid=${PAYTM_MID}&orderId=${orderId}`;
+    log(`   POST ${apiUrl}`);
 
-    const apiUrl = `${PAYTM_INITIATE_URL}?mid=${encodeURIComponent(PAYTM_MID)}&orderId=${encodeURIComponent(orderId)}`;
     const { data } = await axios.post(
       apiUrl,
-      { body: requestBody, head },
+      { body: paytmBody, head: { signature } },
       { headers: { "Content-Type": "application/json" }, timeout: 15000 }
     );
 
@@ -531,7 +519,7 @@ app.post("/api/payment/create-order", async (req, res) => {
       });
     }
 
-    log(`✅ Paytm order created: ${orderId}`);
+    log(`✅ Paytm txnToken received for ${orderId}`);
 
     // Save order to MongoDB
     try {
@@ -560,6 +548,7 @@ app.post("/api/payment/create-order", async (req, res) => {
       );
     }
 
+    // Return txnToken + payment URL to frontend
     res.json({
       orderId,
       txnToken,
@@ -570,7 +559,7 @@ app.post("/api/payment/create-order", async (req, res) => {
     });
   } catch (err) {
     log("❌ Error creating Paytm order:", err.message);
-    console.error("Paytm createTxnToken error:", err);
+    console.error("Paytm createOrder error:", err);
     res.status(500).json({
       error: "Failed to create Paytm order",
       details: err.message,
@@ -592,33 +581,56 @@ app.post(
     try {
       const body = { ...req.body };
       const checksumHash = body.CHECKSUMHASH || body.checksumhash;
-      const orderId = body.ORDERID || body.orderId;
+      const orderId = body.ORDERID || body.orderId || body.ORDER_ID;
 
       log(`📥 Paytm callback: ORDERID=${orderId}, STATUS=${body.STATUS || body.status}`);
+      log(`   RESPCODE=${body.RESPCODE}, RESPMSG=${body.RESPMSG}`);
+      log(`   Full callback body: ${JSON.stringify(body)}`);
 
-      if (!orderId || !checksumHash) {
+      if (!orderId) {
+        log(`❌ Missing orderId in callback`);
         return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_callback`));
       }
 
-      const isSignatureValid = PaytmChecksum.verifySignature(body, PAYTM_MERCHANT_KEY, checksumHash);
+      const status = (body.STATUS || body.status || "").toUpperCase();
+
+      // If CHECKSUMHASH is missing, we can still handle failures safely
+      // but we MUST have it for successful payments (security)
+      if (!checksumHash) {
+        log(`⚠️ No CHECKSUMHASH in callback (status=${status})`);
+        if (status === "TXN_SUCCESS") {
+          return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_callback`));
+        }
+        // For failures, redirect to failed page without verification
+        return res.send(redirectHtml(`${BASE_URL}/?payment=failed&order=${encodeURIComponent(orderId)}`));
+      }
+
+      // Remove CHECKSUMHASH from body before verifying (must not be part of the signed data)
+      const verifyBody = { ...body };
+      delete verifyBody.CHECKSUMHASH;
+      delete verifyBody.checksumhash;
+
+      const isSignatureValid = PaytmChecksum.verifySignature(verifyBody, PAYTM_MERCHANT_KEY, checksumHash);
       if (!isSignatureValid) {
+        log(`❌ Invalid checksum in callback for ${orderId}`);
         return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_checksum`));
       }
 
-      const status = (body.STATUS || body.status || "").toUpperCase();
+      log(`✅ Checksum verified for ${orderId}, status=${status}`);
+
       if (status !== "TXN_SUCCESS") {
         return res.send(redirectHtml(`${BASE_URL}/?payment=failed&order=${encodeURIComponent(orderId)}`));
       }
 
       const txnId = body.TXNID || body.txnId || "";
+      const accessToken = crypto.randomBytes(32).toString("hex");
+      const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(accessToken)}&order=${encodeURIComponent(orderId)}`;
 
       try {
         const database = await connectDB();
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
           const existingOrder = await collection.findOne({ orderId });
-          const accessToken = crypto.randomBytes(32).toString("hex");
-          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(accessToken)}&order=${encodeURIComponent(orderId)}`;
           const updateData = {
             status: "paid",
             paymentId: txnId,
