@@ -4618,7 +4618,7 @@ function App() {
     }
   }, [screen, paymentSuccess90DayVisits, hasStoredReport]);
 
-  // Build 7-profile list for payment success with highlight rules
+  // Build 10-profile list for payment success with highlight rules
   useEffect(() => {
     if (screen !== SCREEN.PAYMENT_SUCCESS) return;
     if (hasStoredReport) return;
@@ -4657,7 +4657,7 @@ function App() {
     const TOTAL_ROWS = 10;
     const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
-    // Fallback: if fewer than 7, backfill from all cards (can include duplicates / placeholders)
+    // Fallback: if fewer than 10, backfill from all cards (skip duplicates)
     let fallbackIndex = 0;
     while (
       selected.length < TOTAL_ROWS &&
@@ -5252,7 +5252,7 @@ function App() {
             </div>
           )}
 
-          {/* Last 7 days 7-profile table (keep, remove 90-day summary) */}
+          {/* Last 7 days 10-profile table */}
           <section
             style={{
               marginTop: "clamp(10px, 3vw, 18px)",
