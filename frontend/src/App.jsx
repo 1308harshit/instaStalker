@@ -672,10 +672,9 @@ function App() {
   // const [cashfreeEnv, setCashfreeEnv] = useState(null);
   // const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
   // const cashfreeEnvRef = useRef(null);
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  // Paytm: payment via redirect (no SDK state needed)
 
-
-  // ✅ PayU/Razorpay success: fire Purchase pixel ONLY on success path or screen
+  // ✅ PayU/Paytm success: fire Purchase pixel ONLY on success path or screen
   // STRICT VALIDATION: Only fires if all conditions are met
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -934,7 +933,7 @@ function App() {
   const activeRequestRef = useRef(0);
   const stepHtmlFetchRef = useRef({});
   const paymentSessionRef = useRef(null);
-  const [keyData, setKeyData] = useState(null);
+  // keyData unused (Paytm uses server redirect)
   // COMMENTED OUT: snapshotLookup - no longer using snapshots with API-first approach
   // const snapshotLookup = useMemo(() => {
   //   return snapshots.reduce((acc, step) => {
@@ -3710,41 +3709,7 @@ function App() {
   //   }
   // }, [screen]);
 
-  // Load Razorpay checkout script
-  useEffect(() => {
-    if (document.querySelector('script[src*="razorpay"]')) {
-      setRazorpayLoaded(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => {
-      console.log("✅ Razorpay SDK loaded");
-      setRazorpayLoaded(true);
-    };
-    script.onerror = () => {
-      console.error("❌ Failed to load Razorpay SDK");
-      setRazorpayLoaded(false);
-    };
-    document.head.appendChild(script);
-  }, []);
-
-  // Fetch Razorpay key from backend
-  useEffect(() => {
-    const fetchKey = async () => {
-      try {
-        const response = await fetch("/api/payment/key");
-        if (response.ok) {
-          const data = await response.json();
-          setKeyData(data);
-          console.log("✅ Razorpay key loaded");
-        }
-      } catch (err) {
-        console.error("❌ Failed to fetch Razorpay key:", err);
-      }
-    };
-    fetchKey();
-  }, []);
+  // Paytm: no script or key needed — redirect to Paytm payment page via form POST
 
   // COMMENTED OUT: Cashfree SDK loading
   // useEffect(() => { fetchCashfreeEnv(); }, []);
@@ -3766,24 +3731,25 @@ function App() {
     setPaymentLoading(true);
 
     try {
-      // Validate report data exists before payment
       const restored = loadLastRun();
       const cardsToCheck =
         (Array.isArray(cards) && cards.length > 0 ? cards : null) ||
         (Array.isArray(restored?.cards) && restored.cards.length > 0
           ? restored.cards
           : []);
-      
+
       if (!Array.isArray(cardsToCheck) || cardsToCheck.length === 0) {
         throw new Error(
           "Report data is not ready yet. Please wait for the report to finish loading, then try again."
         );
       }
 
+      const amount = 99 * quantity;
+      const rawUsername = profile?.username || profileRef.current?.username || (usernameInput ? `@${String(usernameInput).replace(/^@/, "")}` : "");
+      const usernameToSend = rawUsername ? (rawUsername.startsWith("@") ? rawUsername : `@${rawUsername}`) : null;
+      const cardsToSend = cardsToCheck;
+      const profileToSend = profile || profileRef.current || null;
 
-
-      // Create Razorpay order
-      const amount = 99 * quantity; // 99₹ per item
       const orderResponse = await fetch(`/api/payment/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3792,11 +3758,14 @@ function App() {
           email: paymentForm.email,
           fullName: paymentForm.fullName || paymentForm.email,
           phoneNumber: paymentForm.phoneNumber || "",
+          username: usernameToSend,
+          cards: cardsToSend,
+          profile: profileToSend,
         }),
       }).catch((fetchErr) => {
         console.error("Network error creating order:", fetchErr);
         throw new Error(
-          `Cannot connect to payment server. Please check if backend is running.`
+          "Cannot connect to payment server. Please check if backend is running."
         );
       });
 
@@ -3804,7 +3773,7 @@ function App() {
         const errorData = await orderResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Razorpay order error:", errorData);
+        console.error("Paytm order error:", errorData);
         throw new Error(
           errorData.error ||
             errorData.message ||
@@ -3812,100 +3781,45 @@ function App() {
         );
       }
 
-      const order = await orderResponse.json();
-      console.log("✅ Razorpay order created:", order);
+      const data = await orderResponse.json();
+      const { orderId, txnToken, mid, paytmPaymentUrl } = data;
 
-      if (!order.id) {
-        throw new Error("No order id received from server");
+      if (!orderId || !txnToken || !mid || !paytmPaymentUrl) {
+        throw new Error("Invalid response from payment server");
       }
 
-      // ✅ Store pending purchase in localStorage BEFORE opening modal
-      // This is required for the Purchase pixel to fire upon success
       try {
         const pendingData = {
-          id: order.id,
+          id: orderId,
           value: amount,
           currency: "INR",
           ts: Date.now(),
         };
         window.localStorage.setItem("instaStalker_pending_purchase", JSON.stringify(pendingData));
-        console.log("💾 Pending purchase stored:", pendingData);
       } catch (err) {
-        console.warn("⚠️ Failed to store pending purchase:", err);
+        console.warn("Failed to store pending purchase:", err);
       }
 
-      // Open Razorpay checkout modal
-      const options = {
-        key: keyData.key_id,
-        amount: order.amount, // Already in paise from backend
-        currency: order.currency || "INR",
-        name: "Samjhona",
-        description: "Unlock Insta Full Report",
-        order_id: order.id,
-        handler: async function (response) {
-          // Payment successful — verify signature on backend
-          try {
-            console.log("✅ Razorpay payment success:", response);
-
-            const verifyRes = await fetch(`/api/payment/verify`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                username: usernameToSend,
-                cards: cardsToSend,
-                profile: profileToSend,
-              }),
-            });
-
-            const verifyData = await verifyRes.json();
-            console.log("📋 Verification result:", verifyData);
-
-            if (verifyData.is_successful) {
-              console.log("✅ Payment verified successfully");
-              alert(
-                "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
-              );
-              setScreen(SCREEN.PAYMENT_SUCCESS);
-            } else {
-              alert("Payment verification failed. Please contact support.");
-              setScreen(SCREEN.PAYMENT);
-            }
-          } catch (verifyErr) {
-            console.error("❌ Verification error:", verifyErr);
-            // Fallback to success (payment was received by Razorpay)
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-          }
-        },
-        prefill: {
-          email: paymentForm.email || "",
-          contact: paymentForm.phoneNumber || "",
-        },
-        theme: {
-          color: "#3399cc",
-        },
-        modal: {
-          ondismiss: function () {
-            console.log("⚠️ Razorpay checkout dismissed by user");
-            setPaymentLoading(false);
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on("payment.failed", function (response) {
-        console.error("❌ Razorpay payment failed:", response.error);
-        alert(
-          response.error.description ||
-            "Payment failed. Please try again."
-        );
-        setPaymentLoading(false);
+      // Redirect to Paytm showPaymentPage with txnToken
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = `${paytmPaymentUrl}?mid=${encodeURIComponent(mid)}&orderId=${encodeURIComponent(orderId)}`;
+      form.style.display = "none";
+      [
+        { name: "mid", value: mid },
+        { name: "orderId", value: orderId },
+        { name: "txnToken", value: txnToken },
+      ].forEach(({ name, value }) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
       });
-      rzp.open();
+      document.body.appendChild(form);
+      form.submit();
     } catch (err) {
-      console.error("Razorpay error:", err);
+      console.error("Paytm error:", err);
       alert(err.message || "Failed to process payment. Please try again.");
       setPaymentLoading(false);
     }
@@ -4353,7 +4267,7 @@ function App() {
                 2. Payment Terms
               </h3>
               <p>
-                All payments are processed securely through Cashfree payment
+                All payments are processed securely through Paytm payment
                 gateway. Payment is required before accessing the full report.
                 All prices are in Indian Rupees (INR).
               </p>
