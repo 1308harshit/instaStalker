@@ -94,8 +94,8 @@ export default function SuccessfullyPaid() {
           not see the message. You do <strong>NOT</strong> need to pay again.
         </p>
 
-        <a href="mailto:customercare@samjhona.com" style={support}>
-          customercare@samjhona.com
+        <a href="mailto:support@roomov.co" style={support}>
+          support@roomov.co
         </a>
       </div>
     </div>

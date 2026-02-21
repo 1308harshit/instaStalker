@@ -43,13 +43,18 @@ import { ObjectId } from "mongodb";
 import User from "./models/User.js"; // Import Mongoose User model
 import { Resend } from "resend";
 import crypto from "crypto";
-import Razorpay from "razorpay";
+import { Cashfree, CFEnvironment } from "cashfree-pg";
+
+function log(message, data = null) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, data || "");
+}
 
 const app = express();
 app.use(
   cors({
     origin: [
-      "https://samjhona.com",
+      "https://uk.roomov.co",
       "http://localhost:5173",
       "http://localhost:3000",
     ],
@@ -57,7 +62,15 @@ app.use(
   })
 );
 // Increase body size limit (needed for report payloads)
-app.use(express.json({ limit: "50mb" })); // For parsing JSON request bodies
+app.use(
+  express.json({
+    limit: "50mb",
+    verify: (req, _res, buf) => {
+      // Needed for Cashfree webhook signature verification
+      req.rawBody = buf?.toString("utf8") || "";
+    },
+  })
+); // For parsing JSON request bodies
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,40 +84,38 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Razorpay configuration
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+// Cashfree configuration
+const CASHFREE_APP_ID =
+  process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID || "";
+const CASHFREE_SECRET_KEY =
+  process.env.CASHFREE_SECRET_KEY || process.env.CASHFREE_CLIENT_SECRET || "";
+const CASHFREE_ENV = (process.env.CASHFREE_ENV || "PRODUCTION").toUpperCase();
+const CASHFREE_API_VERSION = process.env.CASHFREE_API_VERSION || "2023-08-01";
 
 // Validate required environment variables
-if (!RAZORPAY_KEY_ID) {
+if (!CASHFREE_APP_ID) {
   throw new Error(
-    "❌ RAZORPAY_KEY_ID environment variable is required. Please set it in .env file or Railway environment variables."
+    "❌ CASHFREE_APP_ID environment variable is required. Please set it in backend .env or server environment."
   );
 }
 
-if (!RAZORPAY_KEY_SECRET) {
+if (!CASHFREE_SECRET_KEY) {
   throw new Error(
-    "❌ RAZORPAY_KEY_SECRET environment variable is required. Please set it in .env file or Railway environment variables."
+    "❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in backend .env or server environment."
   );
 }
 
-// Initialize Razorpay instance
-const razorpayInstance = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET,
-});
+const cashfree = new Cashfree(
+  CASHFREE_ENV === "SANDBOX" ? CFEnvironment.SANDBOX : CFEnvironment.PRODUCTION,
+  CASHFREE_APP_ID,
+  CASHFREE_SECRET_KEY
+);
 
-// COMMENTED OUT: Cashfree configuration (replaced by Razorpay)
-// const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
-// const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
-// const CASHFREE_ENV = process.env.CASHFREE_ENV || "PRODUCTION";
-// const CASHFREE_API_BASE_URL = CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
-//   ? "https://sandbox.cashfree.com/pg" : "https://api.cashfree.com/pg";
+log(`🚀 Cashfree initialized (${CASHFREE_ENV})`);
 
-const log = (message, data = null) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data || "");
-};
+// COMMENTED OUT: Razorpay configuration (replaced by Cashfree)
+// const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+// const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 // CRITICAL: Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
@@ -178,7 +189,7 @@ function buildStoredReport({ cards = [], profile = null }) {
   }
   const last7Summary = { profileVisits: visits, screenshots };
 
-  // 7-row table: pick 7 unique profiles and assign fixed highlight rules
+  // 10-row table: pick 10 unique profiles and assign fixed highlight rules
   const uniqueCards = pickUniqueByUsername(usable, 200);
   // One-time shuffle for variety (stable because stored)
   const shuffled = [...uniqueCards];
@@ -189,10 +200,10 @@ function buildStoredReport({ cards = [], profile = null }) {
     shuffled[j] = tmp;
   }
 
-  const TOTAL_ROWS = 7;
+  const TOTAL_ROWS = 10;
   const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
 
-  // Padding to 7 rows (should be rare if cards exist)
+  // Padding to 10 rows (should be rare if cards exist)
   while (selected.length < TOTAL_ROWS) {
     const idx = selected.length + 1;
     selected.push({
@@ -203,9 +214,12 @@ function buildStoredReport({ cards = [], profile = null }) {
   }
 
   const rowCount = selected.length;
-  const screenshotRowIndex =
-    rowCount >= 3 ? randIntInclusive(2, Math.min(6, rowCount - 1)) : null;
-  const secondRowHasScreenshot = rowCount >= 2 && randIntInclusive(1, 100) <= 30;
+
+  // Pick 4 random rows for screenshot highlights
+  const screenshotIndices = new Set();
+  while (screenshotIndices.size < 4 && rowCount > 0) {
+    screenshotIndices.add(randIntInclusive(0, Math.min(9, rowCount - 1)));
+  }
 
   const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
     const username = normalizeUsername(card.username || "");
@@ -222,21 +236,15 @@ function buildStoredReport({ cards = [], profile = null }) {
     let visitsHighlighted = false;
     let screenshotsHighlighted = false;
 
-    // First two profiles always have visits = 1 highlighted
-    if (index === 0 || index === 1) {
-      rowVisits = 1;
+    // First 5 profiles have visits = 1-3 highlighted
+    if (index < 5) {
+      rowVisits = randIntInclusive(1, 3);
       visitsHighlighted = true;
     }
 
-    // Exactly one of the rows 3–7 has screenshots = 1 highlighted
-    if (screenshotRowIndex !== null && index === screenshotRowIndex) {
-      rowScreenshots = 1;
-      screenshotsHighlighted = true;
-    }
-
-    // 30% chance that row 2 also has screenshots = 1 highlighted
-    if (index === 1 && secondRowHasScreenshot) {
-      rowScreenshots = 1;
+    // Selected rows have screenshots = 1-3 highlighted
+    if (screenshotIndices.has(index)) {
+      rowScreenshots = randIntInclusive(1, 3);
       screenshotsHighlighted = true;
     }
 
@@ -262,19 +270,10 @@ function buildStoredReport({ cards = [], profile = null }) {
   };
 }
 
-// Log credentials at startup to verify environment configuration
-log(`🚀 Razorpay credentials loaded:`);
-log(`   Key ID: ${RAZORPAY_KEY_ID}`);
-log(
-  `   Key Secret: ${
-    RAZORPAY_KEY_SECRET
-      ? "Present (length: " + RAZORPAY_KEY_SECRET.length + ")"
-      : "MISSING"
-  }`
-);
+// Credentials already logged during initialization above
 
 // Email configuration
-const BASE_URL = (process.env.BASE_URL || "https://samjhona.com").replace(
+const BASE_URL = (process.env.BASE_URL || "http://localhost:5173").replace(
   /\/+$/,
   ""
 );
@@ -461,45 +460,54 @@ app.post("/api/payment/bypass", async (req, res) => {
 });
 
 // ============================================================================
-// RAZORPAY PAYMENT ROUTES (replaces Cashfree)
+// CASHFREE PAYMENT ROUTES (replaces Razorpay)
 // ============================================================================
 
-// Return Razorpay key_id to frontend (never expose the secret)
-app.get("/api/payment/key", (req, res) => {
-  res.json({ key_id: RAZORPAY_KEY_ID });
-});
-
-// Create Razorpay order
-app.post("/api/payment/create-order", async (req, res) => {
+// Create Cashfree payment session
+app.post("/api/payment/create-session", async (req, res) => {
   try {
-    const { amount, email, fullName, phoneNumber } = req.body;
+    const { amount, email, fullName, phoneNumber, username } = req.body;
 
-    log(`📥 Create order request: amount=${amount}, email=${email}`);
+    log(`📥 Create session request: amount=${amount}, email=${email}`);
 
-    if (!amount || amount <= 0) {
+    const orderAmount = Number(amount);
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
       return res
         .status(400)
         .json({ error: "Amount is required and must be greater than 0" });
     }
 
-    // Razorpay expects amount in paise (1 INR = 100 paise)
-    const amountInPaise = Math.round(amount * 100);
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
 
-    const options = {
-      amount: amountInPaise,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      notes: {
-        email: email || "",
-        fullName: fullName || "Customer",
+    // Generate unique order ID
+    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
+    // Create Cashfree payment session request
+    const request = {
+      order_amount: Number(orderAmount.toFixed(2)),
+      order_currency: "INR",
+      order_id: orderId,
+      customer_details: {
+        customer_id: email.split("@")[0] + "_" + Date.now(),
+        customer_email: email,
+        customer_phone: phoneNumber || "9999999999",
+        customer_name: fullName || "Customer",
+      },
+      order_meta: {
+        return_url: `${BASE_URL}/payment-return?order_id={order_id}`,
+        notify_url: `${BASE_URL}/api/payment/webhook`,
       },
     };
 
-    log(`💰 Creating Razorpay order: ₹${amount} (${amountInPaise} paise)`);
+    log(`💰 Creating Cashfree session: ₹${orderAmount}, order: ${orderId}`);
 
-    const order = await razorpayInstance.orders.create(options);
+    // SDK signature: PGCreateOrder(request)
+    const apiResponse = await cashfree.PGCreateOrder(request);
+    const orderData = apiResponse?.data ?? apiResponse;
 
-    log(`✅ Razorpay order created: ${order.id}`);
+    log(`✅ Cashfree session created: ${orderId}`);
 
     // Save order to MongoDB (optional, don't fail if DB is unavailable)
     if (email) {
@@ -508,16 +516,18 @@ app.post("/api/payment/create-order", async (req, res) => {
         if (database) {
           const collection = database.collection(COLLECTION_NAME);
           await collection.insertOne({
-            orderId: order.id,
+            orderId: orderId,
             email,
             fullName: fullName || email,
             phoneNumber: phoneNumber || "",
+            username: username || "",
             amount: amount,
             status: "created",
-            provider: "razorpay",
+            provider: "cashfree",
             createdAt: new Date(),
+            sessionId: orderData?.payment_session_id || null,
           });
-          log(`✅ Order saved to MongoDB: ${order.id}`);
+          log(`✅ Order saved to MongoDB: ${orderId}`);
         }
       } catch (dbErr) {
         log(
@@ -527,164 +537,249 @@ app.post("/api/payment/create-order", async (req, res) => {
       }
     }
 
-    // Return order data for frontend
+    // Return session data for frontend
     res.json({
-      id: order.id,
-      amount: order.amount,
-      currency: order.currency,
+      order_id: orderId,
+      payment_session_id: orderData?.payment_session_id,
+      order_amount: orderAmount,
     });
   } catch (err) {
-    log("❌ Error creating Razorpay order:", err.message);
-    console.error("Full Razorpay error:", err);
+    const status = err?.response?.status;
+    const apiMsg =
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.response?.data?.details ||
+      null;
+    const details = apiMsg
+      ? `${apiMsg}${status ? ` (status ${status})` : ""}`
+      : err?.message;
+
+    log("❌ Error creating Cashfree session:", details);
+    console.error("Full Cashfree error:", err?.response?.data || err);
     res.status(500).json({
-      error: "Failed to create Razorpay order",
-      details: err.message,
+      error: "Failed to create Cashfree session",
+      details,
     });
   }
 });
 
-// Verify Razorpay payment signature and save profile data
+// Cashfree webhook (notify_url) — verify signature + update order status
+app.post("/api/payment/webhook", async (req, res) => {
+  try {
+    const signature = req.headers["x-webhook-signature"];
+    const timestamp = req.headers["x-webhook-timestamp"];
+    const rawBody =
+      typeof req.rawBody === "string" && req.rawBody.length
+        ? req.rawBody
+        : JSON.stringify(req.body || {});
+
+    if (!signature || !timestamp) {
+      return res.status(400).send("Missing webhook signature headers");
+    }
+
+    try {
+      cashfree.PGVerifyWebhookSignature(signature, rawBody, timestamp);
+    } catch (verifyErr) {
+      log(`❌ Cashfree webhook signature mismatch: ${verifyErr.message}`);
+      return res.status(400).send("Invalid webhook signature");
+    }
+
+    const payload = req.body || {};
+    const orderId =
+      payload?.data?.order?.order_id ||
+      payload?.data?.order?.orderId ||
+      payload?.order_id ||
+      null;
+    const orderStatus =
+      payload?.data?.order?.order_status || payload?.data?.order?.status || null;
+    const paymentStatus =
+      payload?.data?.payment?.payment_status ||
+      payload?.data?.payment?.status ||
+      null;
+
+    if (orderId) {
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          const update = {
+            webhookReceivedAt: new Date(),
+            webhook: payload,
+          };
+          if (orderStatus) update.cashfreeOrderStatus = orderStatus;
+          if (paymentStatus) update.cashfreePaymentStatus = paymentStatus;
+          await collection.updateOne({ orderId }, { $set: update });
+        }
+      } catch (dbErr) {
+        log(`⚠️ Webhook DB update failed (non-blocking): ${dbErr.message}`);
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (err) {
+    log(`❌ Webhook handler error: ${err.message}`);
+    return res.status(500).send("Webhook handler error");
+  }
+});
+
+// Verify Cashfree payment and save profile data
 app.post("/api/payment/verify", async (req, res) => {
   try {
     const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
+      order_id,
       username,
       cards,
       profile,
     } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!order_id) {
       return res.status(400).json({
-        error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required",
+        error: "order_id is required",
       });
     }
 
-    log(`� Verifying Razorpay payment: order=${razorpay_order_id}, payment=${razorpay_payment_id}`);
+    log(`🔍 Verifying Cashfree payment: order=${order_id}`);
 
-    // Verify signature using HMAC SHA256
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", RAZORPAY_KEY_SECRET)
-      .update(body)
-      .digest("hex");
+    // Verify payment status with Cashfree
+    try {
+      // SDK signature: PGFetchOrder(orderId)
+      const orderResp = await cashfree.PGFetchOrder(order_id);
+      const orderData = orderResp?.data ?? orderResp;
+      const orderStatus = String(orderData?.order_status || "").toUpperCase();
 
-    const isSignatureValid = expectedSignature === razorpay_signature;
+      if (orderStatus !== "PAID") {
+        return res.status(400).json({
+          error: "Payment verification failed - order not PAID",
+          order_status: orderData?.order_status,
+          is_successful: false,
+        });
+      }
 
-    log(`✅ Signature valid: ${isSignatureValid}`);
+      // Fetch a payment id if available (optional)
+      let cfPaymentId = null;
+      try {
+        // SDK signature: PGOrderFetchPayments(orderId)
+        const payResp = await cashfree.PGOrderFetchPayments(order_id);
+        const payments = payResp?.data ?? payResp;
+        const successful =
+          Array.isArray(payments) &&
+          payments.find(
+            (p) => String(p?.payment_status || "").toUpperCase() === "SUCCESS"
+          );
+        cfPaymentId = successful?.cf_payment_id || successful?.payment_id || null;
+      } catch (_) {}
 
-    if (!isSignatureValid) {
+      // Payment is verified — save profile data and generate post-purchase link
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+
+          const existingOrder = await collection.findOne({ orderId: order_id });
+
+          // Generate unique post-purchase link
+          const accessToken = crypto.randomBytes(32).toString("hex");
+          const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
+            accessToken
+          )}&order=${encodeURIComponent(order_id)}`;
+
+          const updateData = {
+            status: "paid",
+            paymentId: cfPaymentId,
+            verifiedAt: new Date(),
+            postPurchaseLink: postPurchaseLink,
+            accessToken: accessToken,
+            emailSent: false,
+          };
+
+          // Add profile data if provided
+          if (username) updateData.username = username;
+          if (Array.isArray(cards) && cards.length > 0) updateData.cards = cards;
+          if (profile && typeof profile === "object" && Object.keys(profile).length > 0) {
+            updateData.profile = profile;
+          }
+          if (!existingOrder?.report && Array.isArray(cards) && cards.length > 0) {
+            updateData.report = buildStoredReport({ cards, profile });
+          }
+
+          const updateResult = await collection.updateOne(
+            { orderId: order_id },
+            { $set: updateData }
+          );
+
+          if (updateResult.matchedCount > 0) {
+            log(`✅ Database updated: Order ${order_id} marked as paid`);
+
+            // Get order details for email
+            const order = await collection.findOne({ orderId: order_id });
+            if (order && order.email) {
+              
+              // ✅ Update Mongoose User Model
+              if (username) {
+                try {
+                  const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
+                  await User.findOneAndUpdate(
+                    { username: cleanUsername },
+                    {
+                      $set: {
+                        paymentDetails: { 
+                          orderId: order_id, 
+                          paymentId: cfPaymentId 
+                        },
+                        isPaid: true,
+                        email: order.email,
+                        fullName: order.fullName || "",
+                        phoneNumber: order.phoneNumber || "",
+                        updatedAt: new Date()
+                      }
+                    },
+                    { upsert: true }
+                  );
+                  log(`✅ User updated in Mongoose (Verify): ${cleanUsername}`);
+                } catch (mongooseErr) {
+                  log(`⚠️ Failed to update User model in verify: ${mongooseErr.message}`);
+                }
+              }
+
+              // Send email (non-blocking)
+              sendPostPurchaseEmail(
+                order.email,
+                order.fullName || "Customer",
+                postPurchaseLink
+              )
+                .then(() => {
+                  collection
+                    .updateOne(
+                      { orderId: order_id },
+                      { $set: { emailSent: true, emailSentAt: new Date() } }
+                    )
+                    .catch(() => {});
+                })
+                .catch((emailErr) => {
+                  log(`⚠️ Email sending failed: ${emailErr.message}`);
+                });
+            }
+          } else {
+            log(`⚠️ Order ${order_id} not found in database`);
+          }
+        }
+      } catch (dbErr) {
+        log(`⚠️ Failed to update database: ${dbErr.message}`);
+        // Don't fail payment verification if DB update fails
+      }
+
+      res.json({
+        is_successful: true,
+        order_id: order_id,
+        payment_id: cfPaymentId,
+      });
+    } catch (cashfreeErr) {
+      log(`❌ Cashfree verification error: ${cashfreeErr.message}`);
       return res.status(400).json({
-        error: "Payment verification failed - invalid signature",
+        error: "Payment verification failed",
         is_successful: false,
       });
     }
-
-    // Payment is verified — save profile data and generate post-purchase link
-    try {
-      const database = await connectDB();
-      if (database) {
-        const collection = database.collection(COLLECTION_NAME);
-
-        const existingOrder = await collection.findOne({ orderId: razorpay_order_id });
-
-        // Generate unique post-purchase link
-        const accessToken = crypto.randomBytes(32).toString("hex");
-        const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
-          accessToken
-        )}&order=${encodeURIComponent(razorpay_order_id)}`;
-
-        const updateData = {
-          status: "paid",
-          paymentId: razorpay_payment_id,
-          verifiedAt: new Date(),
-          postPurchaseLink: postPurchaseLink,
-          accessToken: accessToken,
-          emailSent: false,
-        };
-
-        // Add profile data if provided
-        if (username) updateData.username = username;
-        if (Array.isArray(cards) && cards.length > 0) updateData.cards = cards;
-        if (profile && typeof profile === "object" && Object.keys(profile).length > 0) {
-          updateData.profile = profile;
-        }
-        if (!existingOrder?.report && Array.isArray(cards) && cards.length > 0) {
-          updateData.report = buildStoredReport({ cards, profile });
-        }
-
-        const updateResult = await collection.updateOne(
-          { orderId: razorpay_order_id },
-          { $set: updateData }
-        );
-
-        if (updateResult.matchedCount > 0) {
-          log(`✅ Database updated: Order ${razorpay_order_id} marked as paid`);
-
-          // Get order details for email
-          const order = await collection.findOne({ orderId: razorpay_order_id });
-          if (order && order.email) {
-            
-            // ✅ Update Mongoose User Model
-            if (username) {
-              try {
-                const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
-                await User.findOneAndUpdate(
-                  { username: cleanUsername },
-                  {
-                    $set: {
-                      paymentDetails: { 
-                        orderId: razorpay_order_id, 
-                        paymentId: razorpay_payment_id 
-                      },
-                      isPaid: true,
-                      email: order.email,
-                      fullName: order.fullName || "",
-                      phoneNumber: order.phoneNumber || "",
-                      updatedAt: new Date()
-                    }
-                  },
-                  { upsert: true }
-                );
-                log(`✅ User updated in Mongoose (Verify): ${cleanUsername}`);
-              } catch (mongooseErr) {
-                log(`⚠️ Failed to update User model in verify: ${mongooseErr.message}`);
-              }
-            }
-
-            // Send email (non-blocking)
-            sendPostPurchaseEmail(
-              order.email,
-              order.fullName || "Customer",
-              postPurchaseLink
-            )
-              .then(() => {
-                collection
-                  .updateOne(
-                    { orderId: razorpay_order_id },
-                    { $set: { emailSent: true, emailSentAt: new Date() } }
-                  )
-                  .catch(() => {});
-              })
-              .catch((emailErr) => {
-                log(`⚠️ Email sending failed: ${emailErr.message}`);
-              });
-          }
-        } else {
-          log(`⚠️ Order ${razorpay_order_id} not found in database`);
-        }
-      }
-    } catch (dbErr) {
-      log(`⚠️ Failed to update database: ${dbErr.message}`);
-      // Don't fail payment verification if DB update fails
-    }
-
-    res.json({
-      is_successful: true,
-      order_id: razorpay_order_id,
-      payment_id: razorpay_payment_id,
-    });
   } catch (err) {
     log(`❌ Error verifying payment: ${err.message}`);
     res

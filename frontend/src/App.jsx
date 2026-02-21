@@ -48,8 +48,8 @@ import profileNewPng from "./assets/profile-new.png";
 import instaLogo from "./assets/insta-logo.jpeg";
 import paymentHeader from "./assets/payment-header.jpeg";
 
-// Production API URL - hardcoded to samjhona.com (NEVER localhost)
-const API_URL = import.meta.env.VITE_API_URL?.trim() || "https://samjhona.com/api/stalkers";
+// Production API URL - hardcoded to uk.roomov.co (NEVER localhost)
+const API_URL = import.meta.env.VITE_API_URL?.trim() || "https://uk.roomov.co/myinstastalker/api/stalkers";
 
 const API_BASE = (() => {
   try {
@@ -61,7 +61,7 @@ const API_BASE = (() => {
     return `${url.protocol}//${url.host}`;
   } catch (err) {
     // Fallback to production domain
-    return "https://samjhona.com";
+    return "https://uk.roomov.co/myinstastalker";
 
   }
 })();
@@ -668,14 +668,12 @@ function App() {
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
   const [isInQueue, setIsInQueue] = useState(false);
-  // COMMENTED OUT: Cashfree state (replaced by Razorpay)
-  // const [cashfreeEnv, setCashfreeEnv] = useState(null);
-  // const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
-  // const cashfreeEnvRef = useRef(null);
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [cashfreeSdkLoaded, setCashfreeSdkLoaded] = useState(false);
+  // COMMENTED OUT: Razorpay state (replaced by Cashfree)
+  // const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
 
-  // ✅ PayU/Razorpay success: fire Purchase pixel ONLY on success path or screen
+  // ✅ Cashfree success: fire Purchase pixel ONLY on success path or screen
   // STRICT VALIDATION: Only fires if all conditions are met
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2400,73 +2398,6 @@ function App() {
           Additionally, This site is NOT endorsed by Google or Meta in any way.
         </small>
       </form>
-      <div className="landing-footer">
-        <div className="landing-links">
-          <a
-            href="https://samjhona.com/aboutus.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            About Us
-          </a>
-          <a
-            href="https://samjhona.com/contact.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Contact Us
-          </a>
-          <a
-            href="https://samjhona.com/pricing.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Pricing
-          </a>
-          <a
-            href="https://samjhona.com/terms-and-conditions.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Terms &amp; Conditions
-          </a>
-          <a
-            href="https://samjhona.com/privacy-policy.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Privacy Policy
-          </a>
-          <a
-            href="https://samjhona.com/shipping.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Shipping Policy
-          </a>
-          <a
-            href="https://samjhona.com/refund.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Refund Policy
-          </a>
-          <a
-            href="https://samjhona.com/cancellation.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Cancellation Policy
-          </a>
-          {/* <a
-            href="https://samjhona.com/return.html"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Return Policy
-          </a> */}
-        </div>
-      </div>
     </section>
   );
 
@@ -3710,47 +3641,102 @@ function App() {
   //   }
   // }, [screen]);
 
-  // Load Razorpay checkout script
+  // Load Cashfree checkout SDK
   useEffect(() => {
-    if (document.querySelector('script[src*="razorpay"]')) {
-      setRazorpayLoaded(true);
+    if (document.querySelector('script[src*="cashfree"]')) {
+      setCashfreeSdkLoaded(true);
       return;
     }
     const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
     script.onload = () => {
-      console.log("✅ Razorpay SDK loaded");
-      setRazorpayLoaded(true);
+      console.log("✅ Cashfree SDK loaded");
+      setCashfreeSdkLoaded(true);
     };
     script.onerror = () => {
-      console.error("❌ Failed to load Razorpay SDK");
-      setRazorpayLoaded(false);
+      console.error("❌ Failed to load Cashfree SDK");
+      setCashfreeSdkLoaded(false);
     };
     document.head.appendChild(script);
   }, []);
 
-  // Fetch Razorpay key from backend
+  // COMMENTED OUT: Razorpay key fetching
+  // useEffect(() => { fetchRazorpay Key(); }, []);
+
+  // Cashfree payment return URL handler - verify payment after redirect
   useEffect(() => {
-    const fetchKey = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('order_id');
+    
+    if (!orderId) return; // Not a payment return
+    
+    console.log("🔍 Detected payment return, order_id:", orderId);
+    
+    // Retrieve stored order data
+    let orderData = null;
+    try {
+      const stored = window.localStorage.getItem("instaStalker_payment_order");
+      if (stored) {
+        orderData = JSON.parse(stored);
+        // Check if this is the same order (within 30 minutes)
+        const age = Date.now() - (orderData.timestamp || 0);
+        if (age > 30 * 60 * 1000 || orderData.order_id !== orderId) {
+          console.warn("⚠️ Stored order data expired or mismatched");
+          orderData = null;
+        }
+      }
+    } catch (err) {
+      console.error("❌ Failed to retrieve order data:", err);
+    }
+    
+    // Verify payment with backend
+    const verifyPayment = async () => {
       try {
-        const response = await fetch("/api/payment/key");
-        if (response.ok) {
-          const data = await response.json();
-          setKeyData(data);
-          console.log("✅ Razorpay key loaded");
+        console.log("🔐 Verifying payment with backend...");
+        
+        const verifyRes = await fetch(`/api/payment/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_id: orderId,
+            username: orderData?.username || "",
+            cards: orderData?.cards || [],
+            profile: orderData?.profile || null,
+          }),
+        });
+        
+        const verifyData = await verifyRes.json();
+        console.log("📋 Verification result:", verifyData);
+        
+        if (verifyData.is_successful) {
+          console.log("✅ Payment verified successfully");
+          
+          // Clean up stored data
+          try {
+            window.localStorage.removeItem("instaStalker_payment_order");
+          } catch {}
+          
+          // Show success and navigate
+          alert(
+            "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
+          );
+          setScreen(SCREEN.PAYMENT_SUCCESS);
+          
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          alert("Payment verification failed. Please contact support.");
+          setScreen(SCREEN.PAYMENT);
         }
       } catch (err) {
-        console.error("❌ Failed to fetch Razorpay key:", err);
+        console.error("❌ Payment verification error:", err);
+        alert("Failed to verify payment. Please contact support if payment was deducted.");
+        setScreen(SCREEN.PAYMENT);
       }
     };
-    fetchKey();
+    
+    verifyPayment();
   }, []);
-
-  // COMMENTED OUT: Cashfree SDK loading
-  // useEffect(() => { fetchCashfreeEnv(); }, []);
-
-  // COMMENTED OUT: Cashfree payment return URL handler (Razorpay uses modal, no redirect)
-  // useEffect(() => { /* Cashfree return URL verification */ }, []);
 
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -3780,11 +3766,36 @@ function App() {
         );
       }
 
+      const usernameRaw =
+        (usernameInput || "").trim() ||
+        String(restored?.profileData?.username || restored?.profile?.username || "")
+          .trim()
+          .replace(/^@/, "");
+      const usernameToSend = usernameRaw
+        ? usernameRaw.startsWith("@")
+          ? usernameRaw
+          : `@${usernameRaw}`
+        : "";
+
+      const cardsToSend = cardsToCheck;
+      const profileToSend =
+        (profile &&
+        typeof profile === "object" &&
+        Object.keys(profile || {}).length > 0
+          ? profile
+          : null) ||
+        (restored?.profileData && typeof restored.profileData === "object"
+          ? restored.profileData
+          : null) ||
+        (restored?.profile && typeof restored.profile === "object"
+          ? restored.profile
+          : null);
 
 
-      // Create Razorpay order
+
+      // Create Cashfree payment session
       const amount = 99 * quantity; // 99₹ per item
-      const orderResponse = await fetch(`/api/payment/create-order`, {
+      const sessionResponse = await fetch(`/api/payment/create-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3792,38 +3803,39 @@ function App() {
           email: paymentForm.email,
           fullName: paymentForm.fullName || paymentForm.email,
           phoneNumber: paymentForm.phoneNumber || "",
+          username: usernameToSend,
         }),
       }).catch((fetchErr) => {
-        console.error("Network error creating order:", fetchErr);
+        console.error("Network error creating session:", fetchErr);
         throw new Error(
           `Cannot connect to payment server. Please check if backend is running.`
         );
       });
 
-      if (!orderResponse.ok) {
-        const errorData = await orderResponse
+      if (!sessionResponse.ok) {
+        const errorData = await sessionResponse
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        console.error("Razorpay order error:", errorData);
+        console.error("Cashfree session error:", errorData);
         throw new Error(
           errorData.error ||
             errorData.message ||
-            "Failed to create payment order"
+            "Failed to create payment session"
         );
       }
 
-      const order = await orderResponse.json();
-      console.log("✅ Razorpay order created:", order);
+      const session = await sessionResponse.json();
+      console.log("✅ Cashfree session created:", session);
 
-      if (!order.id) {
-        throw new Error("No order id received from server");
+      if (!session.payment_session_id) {
+        throw new Error("No payment session ID received from server");
       }
 
-      // ✅ Store pending purchase in localStorage BEFORE opening modal
+      // ✅ Store pending purchase in localStorage BEFORE opening checkout
       // This is required for the Purchase pixel to fire upon success
       try {
         const pendingData = {
-          id: order.id,
+          id: session.order_id,
           value: amount,
           currency: "INR",
           ts: Date.now(),
@@ -3834,78 +3846,40 @@ function App() {
         console.warn("⚠️ Failed to store pending purchase:", err);
       }
 
-      // Open Razorpay checkout modal
-      const options = {
-        key: keyData.key_id,
-        amount: order.amount, // Already in paise from backend
-        currency: order.currency || "INR",
-        name: "Samjhona",
-        description: "Unlock Insta Full Report",
-        order_id: order.id,
-        handler: async function (response) {
-          // Payment successful — verify signature on backend
-          try {
-            console.log("✅ Razorpay payment success:", response);
+      // Store order data for verification after redirect
+      try {
+        window.localStorage.setItem("instaStalker_payment_order", JSON.stringify({
+          order_id: session.order_id,
+          username: usernameToSend,
+          cards: cardsToSend,
+          profile: profileToSend,
+          timestamp: Date.now(),
+        }));
+      } catch (err) {
+        console.warn("⚠️ Failed to store order data:", err);
+      }
 
-            const verifyRes = await fetch(`/api/payment/verify`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                username: usernameToSend,
-                cards: cardsToSend,
-                profile: profileToSend,
-              }),
-            });
+      // Initialize Cashfree and open checkout
+      if (!window.Cashfree) {
+        throw new Error("Cashfree SDK not loaded. Please refresh the page.");
+      }
 
-            const verifyData = await verifyRes.json();
-            console.log("📋 Verification result:", verifyData);
+      const cashfree = await window.Cashfree({
+        mode: "production"
+      });
 
-            if (verifyData.is_successful) {
-              console.log("✅ Payment verified successfully");
-              alert(
-                "✅ Payment Successful!\n\nThis is your final report. Please take a screenshot to save it for future reference."
-              );
-              setScreen(SCREEN.PAYMENT_SUCCESS);
-            } else {
-              alert("Payment verification failed. Please contact support.");
-              setScreen(SCREEN.PAYMENT);
-            }
-          } catch (verifyErr) {
-            console.error("❌ Verification error:", verifyErr);
-            // Fallback to success (payment was received by Razorpay)
-            setScreen(SCREEN.PAYMENT_SUCCESS);
-          }
-        },
-        prefill: {
-          email: paymentForm.email || "",
-          contact: paymentForm.phoneNumber || "",
-        },
-        theme: {
-          color: "#3399cc",
-        },
-        modal: {
-          ondismiss: function () {
-            console.log("⚠️ Razorpay checkout dismissed by user");
-            setPaymentLoading(false);
-          },
-        },
+      const checkoutOptions = {
+        paymentSessionId: session.payment_session_id,
+        redirectTarget: "_self"
       };
 
-      const rzp = new window.Razorpay(options);
-      rzp.on("payment.failed", function (response) {
-        console.error("❌ Razorpay payment failed:", response.error);
-        alert(
-          response.error.description ||
-            "Payment failed. Please try again."
-        );
-        setPaymentLoading(false);
-      });
-      rzp.open();
+      console.log("🚀 Opening Cashfree checkout...");
+      cashfree.checkout(checkoutOptions);
+      
+      // Note: Cashfree will redirect to return URL after payment
+      // The verification will happen on the return URL handler
     } catch (err) {
-      console.error("Razorpay error:", err);
+      console.error("Cashfree error:", err);
       alert(err.message || "Failed to process payment. Please try again.");
       setPaymentLoading(false);
     }
