@@ -141,7 +141,12 @@ const markInitiateCheckoutFired = () => {
 
 // Meta Pixel Helper Function
 // Only allows: PageView, InitiateCheckout, and Purchase events
-const META_PIXEL_ID = "1752528628790870";
+// sensorahub.com uses a different pixel than samjhona.com
+const META_PIXEL_ID =
+  typeof window !== "undefined" &&
+  window.location.hostname.indexOf("sensorahub") !== -1
+    ? "710646615238495"
+    : "1752528628790870";
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
 
