@@ -1174,37 +1174,9 @@ function App() {
                 });
               }
 
-              // Show payment success screen
-              if (!cancelled) {
-                setScreen(SCREEN.PAYMENT_SUCCESS);
-              }
-
-              // Clean URL but keep /post-purchase path
-              window.history.replaceState({}, "", "/post-purchase");
-
-              // If the user clicks the email link instantly, DB may not yet contain cards.
-              // Retry for a short time and populate cards when they become available.
-              if (!hasCards) {
-                for (let attempt = 0; attempt < 10; attempt += 1) { // Reduced from 20
-                  if (cancelled) break;
-                  await new Promise((r) => setTimeout(r, 3000)); // Increased from 2000
-                  const retryRes = await fetch(apiUrl).catch(() => null);
-                  if (!retryRes || !retryRes.ok) continue;
-                  const retryData = await retryRes.json().catch(() => null);
-                  const retryCards =
-                    retryData && Array.isArray(retryData.cards) ? retryData.cards : [];
-                  if (retryData?.success && retryCards.length > 0) {
-                    if (!cancelled) {
-                      setCards(retryCards);
-                      setPaymentSuccessCards(retryCards);
-                    }
-                    break;
-                  }
-                }
-              }
-
-              // Fallback: if backend has no stored report/cards (because we do not send them in payment-init),
-              // use localStorage last run so the success screen still has content.
+              // Fallback: if backend has no stored report/cards (we no longer send
+              // them during payment-init), use localStorage immediately so the
+              // success screen renders fast instead of polling the DB for 30s.
               if (!validateData.report && !hasCards) {
                 const restored = loadLastRun();
                 const restoredCards =
@@ -1224,6 +1196,14 @@ function App() {
                   }
                 }
               }
+
+              // Show payment success screen
+              if (!cancelled) {
+                setScreen(SCREEN.PAYMENT_SUCCESS);
+              }
+
+              // Clean URL but keep /post-purchase path
+              window.history.replaceState({}, "", "/post-purchase");
             }
           }
         } catch (err) {
