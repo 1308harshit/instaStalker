@@ -3832,6 +3832,12 @@ function App() {
       }
 
       const data = await orderResponse.json();
+      // Backward/forward-compatible: backend may return Instamojo redirect on sensorahub.com
+      // even if the client accidentally called the Paytm endpoint.
+      if (data?.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
       const { orderId, txnToken, mid, paytmPaymentUrl } = data;
 
       if (!orderId || !txnToken || !mid || !paytmPaymentUrl) {

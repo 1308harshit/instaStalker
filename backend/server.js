@@ -257,7 +257,11 @@ const BASE_URL = (process.env.BASE_URL || "http://localhost:5173").replace(
 
 log(`🚀 Paytm: MID=${PAYTM_MID} (${PAYTM_MID.length} chars), KEY=${PAYTM_MERCHANT_KEY.substring(0,4)}... (${PAYTM_MERCHANT_KEY.length} chars), website=${PAYTM_WEBSITE}, env=${PAYTM_ENV}`);
 log(`   BASE_URL=${BASE_URL}, callback=${BASE_URL}/api/payment/paytm-callback`);
-log(`   initiateTransaction: ${PAYTM_ENV === "PRODUCTION" ? "secure.paytmpayments.com" : "securestage.paytmpayments.com"}`);
+log(
+  `   initiateTransaction: ${
+    PAYTM_ENV === "PRODUCTION" ? "securegw.paytm.in" : "securegw-stage.paytm.in"
+  }`
+);
 
 // Instamojo configuration (sensorahub.com)
 const INSTAMOJO_API_KEY = (process.env.INSTAMOJO_API_KEY || "").trim();
@@ -295,6 +299,21 @@ function getRequestBaseUrl(req) {
   return BASE_URL;
 }
 
+function isSensorahubRequest(req) {
+  const origin = String(req.headers?.origin || "").toLowerCase();
+  const host = String(req.headers?.host || "").toLowerCase();
+  return origin.includes("sensorahub.com") || host.includes("sensorahub.com");
+}
+
+function httpError(status, payload) {
+  const message =
+    (payload && (payload.error || payload.message)) || `HTTP ${status}`;
+  const err = new Error(String(message));
+  err.status = status;
+  err.payload = payload;
+  return err;
+}
+
 // Validate Instamojo webhook MAC
 function validateInstamojoWebhook(data, macProvided, salt) {
   const payload = { ...(data || {}) };
@@ -311,6 +330,192 @@ function validateInstamojoWebhook(data, macProvided, salt) {
     .digest("hex");
 
   return macCalculated === macProvided;
+}
+
+async function createInstamojoPayment(input, req) {
+  const requestId = `imojo_${Date.now()}_${Math.random()
+    .toString(16)
+    .slice(2, 10)}`;
+
+  const missingConfig = [];
+  if (!INSTAMOJO_API_KEY) missingConfig.push("INSTAMOJO_API_KEY");
+  if (!INSTAMOJO_AUTH_TOKEN) missingConfig.push("INSTAMOJO_AUTH_TOKEN");
+  if (!INSTAMOJO_SALT) missingConfig.push("INSTAMOJO_SALT");
+  if (missingConfig.length) {
+    throw httpError(500, {
+      error: "Instamojo not configured",
+      missing: missingConfig,
+      requestId,
+    });
+  }
+
+  const {
+    amount,
+    email,
+    phone,
+    buyer_name,
+    existingOrderId,
+    cards,
+    profile,
+    username: usernameBody,
+  } = input || {};
+
+  if (
+    !amount ||
+    Number.isNaN(Number(amount)) ||
+    !email ||
+    !phone ||
+    !buyer_name
+  ) {
+    throw httpError(400, {
+      error: "Invalid request",
+      details: {
+        amount: !amount ? "missing" : "present",
+        email: !email ? "missing" : "present",
+        phone: !phone ? "missing" : "present",
+        buyer_name: !buyer_name ? "missing" : "present",
+      },
+      requestId,
+    });
+  }
+
+  const orderId =
+    existingOrderId ||
+    `ORDER_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+  const accessToken = crypto.randomBytes(32).toString("hex");
+
+  const baseForLinks = getRequestBaseUrl(req);
+  const redirectUrl = `${baseForLinks}/api/payment/instamojo/redirect`;
+  const webhookUrl = `${baseForLinks}/api/payment/instamojo/webhook`;
+  const postPurchaseLink = `${baseForLinks}/post-purchase?token=${encodeURIComponent(
+    accessToken
+  )}&order=${encodeURIComponent(orderId)}`;
+
+  // Persist or update order (non-blocking failure)
+  try {
+    const db = await connectDB();
+    if (db) {
+      const collection = db.collection(COLLECTION_NAME);
+      const update = {
+        status: "pending",
+        provider: "instamojo",
+        amount: Number(amount),
+        currency: "INR",
+        quantity: 1,
+        instamojoAmount: Number(amount),
+        instamojoStatus: "pending",
+        accessToken,
+        postPurchaseLink,
+        email: String(email || ""),
+        phoneNumber: String(phone || ""),
+        fullName: String(buyer_name || ""),
+        username:
+          typeof usernameBody === "string" && usernameBody.trim()
+            ? usernameBody.trim()
+            : null,
+        cards: Array.isArray(cards) ? cards : [],
+        profile: profile && typeof profile === "object" ? profile : null,
+        updatedAt: new Date(),
+      };
+
+      if (existingOrderId) {
+        await collection.updateOne({ orderId: existingOrderId }, { $set: update });
+      } else {
+        await collection.insertOne({
+          orderId,
+          createdAt: new Date(),
+          ...update,
+        });
+      }
+      log("✅ Instamojo order stored", { requestId, orderId });
+    }
+  } catch (dbErr) {
+    log("⚠️ Failed to store Instamojo order (continuing):", dbErr.message);
+  }
+
+  const paymentRequestData = new URLSearchParams({
+    amount: String(amount),
+    purpose: orderId,
+    buyer_name: String(buyer_name),
+    email: String(email),
+    phone: String(phone),
+    redirect_url: redirectUrl,
+    webhook: webhookUrl,
+    send_email: "false",
+    send_sms: "false",
+  });
+
+  const apiUrl = `${INSTAMOJO_API_BASE_URL}/payment-requests/`;
+  log("📤 Calling Instamojo API", { requestId, apiUrl });
+
+  const apiResponse = await axios.post(apiUrl, paymentRequestData.toString(), {
+    headers: {
+      "X-Api-Key": INSTAMOJO_API_KEY,
+      "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    timeout: 15000,
+    validateStatus: () => true,
+  });
+
+  if (apiResponse.status < 200 || apiResponse.status >= 300) {
+    log("❌ Instamojo API error", {
+      requestId,
+      status: apiResponse.status,
+      data: apiResponse.data,
+    });
+    throw httpError(502, {
+      error: "Instamojo payment creation failed",
+      status: apiResponse.status,
+      body: apiResponse.data,
+      requestId,
+    });
+  }
+
+  const responseData = apiResponse.data;
+  const longurl = responseData?.payment_request?.longurl;
+  const paymentRequestId = responseData?.payment_request?.id;
+
+  if (!responseData?.success || !longurl || !paymentRequestId) {
+    log("❌ Instamojo returned invalid structure", { requestId, responseData });
+    throw httpError(500, {
+      error: "Instamojo create payment failed",
+      details: responseData?.message || "Invalid response",
+      requestId,
+    });
+  }
+
+  // Persist Instamojo identifiers (best-effort)
+  try {
+    const db = await connectDB();
+    if (db) {
+      await db.collection(COLLECTION_NAME).updateOne(
+        { orderId },
+        {
+          $set: {
+            instamojoLongUrl: longurl,
+            instamojoPaymentRequestId: paymentRequestId,
+          },
+        }
+      );
+    }
+  } catch (dbErr) {
+    log("⚠️ Failed to save instamojo ids:", dbErr.message);
+  }
+
+  log("✅ ========== INSTAMOJO PAYMENT REQUEST SUCCESS ==========", {
+    requestId,
+    orderId,
+    paymentRequestId,
+  });
+
+  return {
+    redirectUrl: longurl,
+    requestId,
+    orderId,
+    paymentRequestId,
+    provider: "instamojo",
+  };
 }
 
 // Helper function to send post-purchase email
@@ -496,203 +701,22 @@ app.post("/api/payment/bypass", async (req, res) => {
 // ============================================================================
 
 app.post("/api/payment/instamojo/create", async (req, res) => {
-  const requestId = `imojo_${Date.now()}_${Math.random()
-    .toString(16)
-    .slice(2, 10)}`;
-  log("🔥 ========== INSTAMOJO PAYMENT REQUEST START ==========", { requestId });
-
   try {
-    const missingConfig = [];
-    if (!INSTAMOJO_API_KEY) missingConfig.push("INSTAMOJO_API_KEY");
-    if (!INSTAMOJO_AUTH_TOKEN) missingConfig.push("INSTAMOJO_AUTH_TOKEN");
-    if (!INSTAMOJO_SALT) missingConfig.push("INSTAMOJO_SALT");
-    if (missingConfig.length) {
-      log("❌ Instamojo config missing", { requestId, missingConfig });
-      return res
-        .status(500)
-        .json({ error: "Instamojo not configured", missing: missingConfig });
-    }
-
-    const {
-      amount,
-      email,
-      phone,
-      buyer_name,
-      existingOrderId,
-      cards,
-      profile,
-      username: usernameBody,
-    } = req.body || {};
-
-    if (
-      !amount ||
-      Number.isNaN(Number(amount)) ||
-      !email ||
-      !phone ||
-      !buyer_name
-    ) {
-      log("❌ Instamojo invalid request body", { requestId });
-      return res.status(400).json({
-        error: "Invalid request",
-        details: {
-          amount: !amount ? "missing" : "present",
-          email: !email ? "missing" : "present",
-          phone: !phone ? "missing" : "present",
-          buyer_name: !buyer_name ? "missing" : "present",
-        },
-      });
-    }
-
-    const orderId =
-      existingOrderId ||
-      `ORDER_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
-    const accessToken = crypto.randomBytes(32).toString("hex");
-
-    const baseForLinks = getRequestBaseUrl(req);
-    const redirectUrl = `${baseForLinks}/api/payment/instamojo/redirect`;
-    const webhookUrl = `${baseForLinks}/api/payment/instamojo/webhook`;
-    const postPurchaseLink = `${baseForLinks}/post-purchase?token=${encodeURIComponent(
-      accessToken
-    )}&order=${encodeURIComponent(orderId)}`;
-
-    // Persist or update order (non-blocking failure)
-    try {
-      const db = await connectDB();
-      if (db) {
-        const collection = db.collection(COLLECTION_NAME);
-        const update = {
-          status: "pending",
-          provider: "instamojo",
-          amount: Number(amount),
-          currency: "INR",
-          quantity: 1,
-          instamojoAmount: Number(amount),
-          instamojoStatus: "pending",
-          accessToken,
-          postPurchaseLink,
-          email: String(email || ""),
-          phoneNumber: String(phone || ""),
-          fullName: String(buyer_name || ""),
-          username:
-            typeof usernameBody === "string" && usernameBody.trim()
-              ? usernameBody.trim()
-              : null,
-          cards: Array.isArray(cards) ? cards : [],
-          profile: profile && typeof profile === "object" ? profile : null,
-          updatedAt: new Date(),
-        };
-
-        if (existingOrderId) {
-          await collection.updateOne({ orderId: existingOrderId }, { $set: update });
-        } else {
-          await collection.insertOne({
-            orderId,
-            createdAt: new Date(),
-            ...update,
-          });
-        }
-        log("✅ Instamojo order stored", { requestId, orderId });
-      }
-    } catch (dbErr) {
-      log("⚠️ Failed to store Instamojo order (continuing):", dbErr.message);
-    }
-
-    const paymentRequestData = new URLSearchParams({
-      amount: String(amount),
-      purpose: orderId,
-      buyer_name: String(buyer_name),
-      email: String(email),
-      phone: String(phone),
-      redirect_url: redirectUrl,
-      webhook: webhookUrl,
-      send_email: "false",
-      send_sms: "false",
-    });
-
-    const apiUrl = `${INSTAMOJO_API_BASE_URL}/payment-requests/`;
-    log("📤 Calling Instamojo API", { requestId, apiUrl });
-
-    const apiResponse = await axios.post(apiUrl, paymentRequestData.toString(), {
-      headers: {
-        "X-Api-Key": INSTAMOJO_API_KEY,
-        "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      timeout: 15000,
-      validateStatus: () => true,
-    });
-
-    if (apiResponse.status < 200 || apiResponse.status >= 300) {
-      log("❌ Instamojo API error", {
-        requestId,
-        status: apiResponse.status,
-        data: apiResponse.data,
-      });
-      return res.status(502).json({
-        error: "Instamojo payment creation failed",
-        status: apiResponse.status,
-        body: apiResponse.data,
-        requestId,
-      });
-    }
-
-    const responseData = apiResponse.data;
-    const longurl = responseData?.payment_request?.longurl;
-    const paymentRequestId = responseData?.payment_request?.id;
-
-    if (!responseData?.success || !longurl || !paymentRequestId) {
-      log("❌ Instamojo returned invalid structure", {
-        requestId,
-        responseData,
-      });
-      return res.status(500).json({
-        error: "Instamojo create payment failed",
-        details: responseData?.message || "Invalid response",
-        requestId,
-      });
-    }
-
-    // Persist Instamojo identifiers (best-effort)
-    try {
-      const db = await connectDB();
-      if (db) {
-        await db.collection(COLLECTION_NAME).updateOne(
-          { orderId },
-          {
-            $set: {
-              instamojoLongUrl: longurl,
-              instamojoPaymentRequestId: paymentRequestId,
-            },
-          }
-        );
-      }
-    } catch (dbErr) {
-      log("⚠️ Failed to save instamojo ids:", dbErr.message);
-    }
-
-    log("✅ ========== INSTAMOJO PAYMENT REQUEST SUCCESS ==========", {
-      requestId,
-      orderId,
-      paymentRequestId,
-    });
-
-    return res.json({
-      redirectUrl: longurl,
-      requestId,
-      orderId,
-      paymentRequestId,
-    });
+    log("🔥 ========== INSTAMOJO PAYMENT REQUEST START ==========");
+    const result = await createInstamojoPayment(req.body, req);
+    return res.json(result);
   } catch (err) {
     log("❌ ========== INSTAMOJO PAYMENT REQUEST ERROR ==========", {
-      requestId,
       errorName: err?.name,
       errorMessage: err?.message || String(err),
     });
-    return res.status(500).json({
-      error: "Instamojo init failed",
-      details: err?.message || String(err),
-      requestId,
-    });
+    const status = err?.status || 500;
+    return res.status(status).json(
+      err?.payload || {
+        error: "Instamojo init failed",
+        details: err?.message || String(err),
+      }
+    );
   }
 });
 
@@ -913,20 +937,36 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
 // PAYTM PAYMENT ROUTES
 // ============================================================================
 
-// Correct Paytm API endpoints (paytmpayments.com, NOT securegw.paytm.in!)
+// Paytm API endpoints (official securegw hosts)
 const PAYTM_INITIATE_URL =
   PAYTM_ENV === "PRODUCTION"
-    ? "https://secure.paytmpayments.com/theia/api/v1/initiateTransaction"
-    : "https://securestage.paytmpayments.com/theia/api/v1/initiateTransaction";
+    ? "https://securegw.paytm.in/theia/api/v1/initiateTransaction"
+    : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
 const PAYTM_PAYMENT_URL =
   PAYTM_ENV === "PRODUCTION"
-    ? "https://secure.paytmpayments.com/theia/api/v1/showPaymentPage"
-    : "https://securestage.paytmpayments.com/theia/api/v1/showPaymentPage";
+    ? "https://securegw.paytm.in/theia/api/v1/showPaymentPage"
+    : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
 
 // Create Paytm order — initiateTransaction API (correct endpoint)
 app.post("/api/payment/create-order", async (req, res) => {
   try {
     const { amount, email, fullName, phoneNumber, username, cards, profile } = req.body;
+
+    // Safety net: if request comes from sensorahub.com, force Instamojo.
+    // This prevents Paytm from being triggered on sensorahub even if an older frontend is deployed/cached.
+    if (isSensorahubRequest(req)) {
+      const instamojoInput = {
+        amount,
+        email,
+        phone: phoneNumber,
+        buyer_name: fullName || email,
+        cards,
+        profile,
+        username,
+      };
+      const result = await createInstamojoPayment(instamojoInput, req);
+      return res.json(result);
+    }
 
     log(`📥 Create order request: amount=${amount}, email=${email}`);
 
