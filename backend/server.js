@@ -953,7 +953,7 @@ const PAYTM_PAYMENT_URL =
 // Create Paytm order — initiateTransaction API (correct endpoint)
 app.post("/api/payment/create-order", async (req, res) => {
   try {
-    const { amount, email, fullName, phoneNumber, username, cards, profile } = req.body;
+    const { amount, email, fullName, phoneNumber } = req.body;
 
     // Safety net: if request comes from sensorahub.com, force Instamojo.
     // This prevents Paytm from being triggered on sensorahub even if an older frontend is deployed/cached.
@@ -963,9 +963,6 @@ app.post("/api/payment/create-order", async (req, res) => {
         email,
         phone: phoneNumber,
         buyer_name: fullName || email,
-        cards,
-        profile,
-        username,
       };
       const result = await createInstamojoPayment(instamojoInput, req);
       return res.json(result);
@@ -1045,7 +1042,7 @@ app.post("/api/payment/create-order", async (req, res) => {
 
     log(`✅ Paytm txnToken received for ${orderId}`);
 
-    // Save order to MongoDB
+    // Save order to MongoDB (minimal fields only; do not store large report payloads here)
     try {
       const database = await connectDB();
       if (database) {
@@ -1058,9 +1055,6 @@ app.post("/api/payment/create-order", async (req, res) => {
           amount: Number(amount),
           status: "created",
           provider: "paytm",
-          username: username || null,
-          cards: Array.isArray(cards) ? cards : [],
-          profile: profile && typeof profile === "object" ? profile : null,
           createdAt: new Date(),
         });
         log(`✅ Order saved to MongoDB: ${orderId}`);

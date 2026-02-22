@@ -1202,6 +1202,28 @@ function App() {
                   }
                 }
               }
+
+              // Fallback: if backend has no stored report/cards (because we do not send them in payment-init),
+              // use localStorage last run so the success screen still has content.
+              if (!validateData.report && !hasCards) {
+                const restored = loadLastRun();
+                const restoredCards =
+                  restored && Array.isArray(restored.cards) ? restored.cards : [];
+                const restoredProfile = restored?.profile || null;
+
+                if (restoredCards.length > 0) {
+                  if (!cancelled) {
+                    setCards(restoredCards);
+                    setPaymentSuccessCards(restoredCards);
+                  }
+                }
+
+                if (restoredProfile) {
+                  if (!cancelled) {
+                    setProfile((prev) => ({ ...prev, ...restoredProfile }));
+                  }
+                }
+              }
             }
           }
         } catch (err) {
@@ -3747,8 +3769,8 @@ function App() {
       const amount = 99 * quantity;
       const rawUsername = profile?.username || profileRef.current?.username || (usernameInput ? `@${String(usernameInput).replace(/^@/, "")}` : "");
       const usernameToSend = rawUsername ? (rawUsername.startsWith("@") ? rawUsername : `@${rawUsername}`) : null;
-      const cardsToSend = cardsToCheck;
-      const profileToSend = profile || profileRef.current || null;
+      // IMPORTANT: Do NOT send cards/profile in payment-init calls.
+      // They are large and can trigger 413 (nginx) and aren't required for gateway initiation.
 
       const hostname =
         typeof window !== "undefined" && window.location?.hostname
@@ -3766,9 +3788,6 @@ function App() {
             email: paymentForm.email,
             phone: paymentForm.phoneNumber || "",
             buyer_name: paymentForm.fullName || paymentForm.email,
-            username: usernameToSend,
-            cards: cardsToSend,
-            profile: profileToSend,
           }),
         }).catch((fetchErr) => {
           console.error("Network error creating Instamojo payment:", fetchErr);
@@ -3808,9 +3827,6 @@ function App() {
           email: paymentForm.email,
           fullName: paymentForm.fullName || paymentForm.email,
           phoneNumber: paymentForm.phoneNumber || "",
-          username: usernameToSend,
-          cards: cardsToSend,
-          profile: profileToSend,
         }),
       }).catch((fetchErr) => {
         console.error("Network error creating order:", fetchErr);
