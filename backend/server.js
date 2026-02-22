@@ -77,8 +77,11 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Paytm — temporarily hardcoded (move to .env later)
-const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152").trim();
+// Paytm
+// NOTE: Paytm MIDs are typically uppercase; normalize to avoid accidental casing issues in env.
+const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152")
+  .trim()
+  .toUpperCase();
 const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "Q22WldyyCskNM&%&").trim();
 const PAYTM_WEBSITE = (process.env.PAYTM_WEBSITE || "WEBSTAGING").trim();
 const PAYTM_ENV = (process.env.PAYTM_ENV || "STAGING").trim().toUpperCase();
@@ -983,12 +986,22 @@ app.post("/api/payment/create-order", async (req, res) => {
       Math.random().toString(36).substring(2, 12);
     const amountStr = Number(amount).toFixed(2);
     const customerId = email || "CUST_" + Date.now();
-    const callbackUrl = `${BASE_URL}/api/payment/paytm-callback`;
+    // IMPORTANT: Callback must match the domain that initiated the payment (samjhona.com).
+    // Using request-derived base prevents misrouting when one backend serves multiple domains.
+    const callbackBase = getRequestBaseUrl(req);
+    const callbackUrl = `${callbackBase}/api/payment/paytm-callback`;
+
+    // Paytm expects websiteName to match the environment.
+    // Staging typically uses WEBSTAGING; Production uses DEFAULT.
+    const websiteName =
+      PAYTM_ENV === "PRODUCTION"
+        ? "DEFAULT"
+        : (PAYTM_WEBSITE || "WEBSTAGING").trim();
 
     const paytmBody = {
       requestType: "Payment",
       mid: PAYTM_MID,
-      websiteName: PAYTM_WEBSITE,
+      websiteName,
       orderId: orderId,
       callbackUrl: callbackUrl,
       txnAmount: { value: amountStr, currency: "INR" },
@@ -1025,6 +1038,8 @@ app.post("/api/payment/create-order", async (req, res) => {
       return res.status(500).json({
         error: "Failed to create payment token",
         details,
+        // include raw resultInfo for debugging (no secrets)
+        resultInfo,
       });
     }
 
