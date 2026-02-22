@@ -3750,6 +3750,56 @@ function App() {
       const cardsToSend = cardsToCheck;
       const profileToSend = profile || profileRef.current || null;
 
+      const hostname =
+        typeof window !== "undefined" && window.location?.hostname
+          ? window.location.hostname.toLowerCase()
+          : "";
+      const useInstamojo =
+        hostname === "sensorahub.com" || hostname.endsWith(".sensorahub.com");
+
+      if (useInstamojo) {
+        const instamojoRes = await fetch("/api/payment/instamojo/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount,
+            email: paymentForm.email,
+            phone: paymentForm.phoneNumber || "",
+            buyer_name: paymentForm.fullName || paymentForm.email,
+            username: usernameToSend,
+            cards: cardsToSend,
+            profile: profileToSend,
+          }),
+        }).catch((fetchErr) => {
+          console.error("Network error creating Instamojo payment:", fetchErr);
+          throw new Error(
+            "Cannot connect to payment server. Please check if backend is running."
+          );
+        });
+
+        if (!instamojoRes.ok) {
+          const errorData = await instamojoRes
+            .json()
+            .catch(() => ({ error: "Unknown error" }));
+          console.error("Instamojo error:", errorData);
+          throw new Error(
+            errorData.error ||
+              errorData.message ||
+              "Failed to create Instamojo payment"
+          );
+        }
+
+        const data = await instamojoRes.json();
+        const redirectUrl = data?.redirectUrl;
+        if (!redirectUrl) {
+          throw new Error("Invalid response from payment server");
+        }
+
+        window.location.href = redirectUrl;
+        return;
+      }
+
+      // Default: samjhona.com → Paytm
       const orderResponse = await fetch(`/api/payment/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3795,7 +3845,10 @@ function App() {
           currency: "INR",
           ts: Date.now(),
         };
-        window.localStorage.setItem("instaStalker_pending_purchase", JSON.stringify(pendingData));
+        window.localStorage.setItem(
+          "instaStalker_pending_purchase",
+          JSON.stringify(pendingData)
+        );
       } catch (err) {
         console.warn("Failed to store pending purchase:", err);
       }
@@ -3803,7 +3856,9 @@ function App() {
       // Redirect to Paytm showPaymentPage with txnToken
       const form = document.createElement("form");
       form.method = "POST";
-      form.action = `${paytmPaymentUrl}?mid=${encodeURIComponent(mid)}&orderId=${encodeURIComponent(orderId)}`;
+      form.action = `${paytmPaymentUrl}?mid=${encodeURIComponent(
+        mid
+      )}&orderId=${encodeURIComponent(orderId)}`;
       form.style.display = "none";
       [
         { name: "mid", value: mid },
