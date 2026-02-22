@@ -262,7 +262,7 @@ log(`🚀 Paytm: MID=${PAYTM_MID} (${PAYTM_MID.length} chars), KEY=${PAYTM_MERCH
 log(`   BASE_URL=${BASE_URL}, callback=${BASE_URL}/api/payment/paytm-callback`);
 log(
   `   initiateTransaction: ${
-    PAYTM_ENV === "PRODUCTION" ? "securegw.paytm.in" : "securegw-stage.paytm.in"
+    PAYTM_ENV === "PRODUCTION" ? "secure.paytmpayments.com" : "securegw-stage.paytm.in"
   }`
 );
 
@@ -940,14 +940,14 @@ app.post("/api/payment/instamojo/webhook", async (req, res) => {
 // PAYTM PAYMENT ROUTES
 // ============================================================================
 
-// Paytm API endpoints (official securegw hosts)
+// Paytm API endpoints
 const PAYTM_INITIATE_URL =
   PAYTM_ENV === "PRODUCTION"
-    ? "https://securegw.paytm.in/theia/api/v1/initiateTransaction"
+    ? "https://secure.paytmpayments.com/theia/api/v1/initiateTransaction"
     : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
 const PAYTM_PAYMENT_URL =
   PAYTM_ENV === "PRODUCTION"
-    ? "https://securegw.paytm.in/theia/api/v1/showPaymentPage"
+    ? "https://secure.paytmpayments.com/theia/api/v1/showPaymentPage"
     : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
 
 // Create Paytm order — initiateTransaction API (correct endpoint)
