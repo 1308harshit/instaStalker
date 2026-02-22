@@ -79,9 +79,7 @@ const COLLECTION_NAME = "user_orders";
 
 // Paytm
 // NOTE: Paytm MIDs are typically uppercase; normalize to avoid accidental casing issues in env.
-const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152")
-  .trim()
-  .toUpperCase();
+const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152").trim();
 const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "Q22WldyyCskNM&%&").trim();
 const PAYTM_WEBSITE = (process.env.PAYTM_WEBSITE || "WEBSTAGING").trim();
 const PAYTM_ENV = (process.env.PAYTM_ENV || "STAGING").trim().toUpperCase();
