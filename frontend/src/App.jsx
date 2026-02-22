@@ -1141,7 +1141,19 @@ function App() {
 
               if (validateData.profile) {
                 if (!cancelled) {
-                  setProfile((prev) => ({ ...prev, ...validateData.profile }));
+                  // Ensure "posts" isn't left at INITIAL_PROFILE.posts (10) when
+                  // backend profile object doesn't include a posts/media_count field.
+                  const derivedPosts =
+                    validateData.profile.media_count ??
+                    validateData.profile.posts ??
+                    (hasCards ? validateData.cards.length : undefined);
+                  setProfile((prev) => ({
+                    ...prev,
+                    ...validateData.profile,
+                    ...(Number.isFinite(Number(derivedPosts))
+                      ? { posts: Number(derivedPosts) }
+                      : {}),
+                  }));
                 }
               }
 
@@ -1192,7 +1204,17 @@ function App() {
 
                 if (restoredProfile) {
                   if (!cancelled) {
-                    setProfile((prev) => ({ ...prev, ...restoredProfile }));
+                    const derivedPosts =
+                      restoredProfile.media_count ??
+                      restoredProfile.posts ??
+                      (restoredCards.length > 0 ? restoredCards.length : undefined);
+                    setProfile((prev) => ({
+                      ...prev,
+                      ...restoredProfile,
+                      ...(Number.isFinite(Number(derivedPosts))
+                        ? { posts: Number(derivedPosts) }
+                        : {}),
+                    }));
                   }
                 }
               }
