@@ -14,7 +14,7 @@
     })(window,document,'script','dataLayer','GTM-PMRFSQJ9');</script> -->
     <!-- End Google Tag Manager -->
     
-    <!-- Facebook Pixel Code (domain-aware: samjhona vs sensorahub) -->
+    <!-- Facebook Pixel Code (samjhona.com only; sensorahub pixel commented for later use) -->
     <script>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -24,10 +24,11 @@
     t.src=v;s=b.getElementsByTagName(e)[0];
     s.parentNode.insertBefore(t,s)}(window,document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
-    var _isSensora = location.hostname.indexOf('sensorahub') !== -1;
-    var _pixelId = _isSensora ? '710646615238495' : '1752528628790870';
-    fbq('init', _pixelId);
-    fbq('set', 'autoConfig', false, _pixelId);
+    // SENSORAHUB (commented): use 710646615238495 when hostname has sensorahub
+    // var _isSensora = location.hostname.indexOf('sensorahub') !== -1;
+    // var _pixelId = _isSensora ? '710646615238495' : '1752528628790870';
+    fbq('init', '1752528628790870');
+    fbq('set', 'autoConfig', false, '1752528628790870');
     </script>
     <!-- End Facebook Pixel Code -->
   </head>

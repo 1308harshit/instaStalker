@@ -141,12 +141,8 @@ const markInitiateCheckoutFired = () => {
 
 // Meta Pixel Helper Function
 // Only allows: PageView, InitiateCheckout, and Purchase events
-// sensorahub.com uses a different pixel than samjhona.com
-const META_PIXEL_ID =
-  typeof window !== "undefined" &&
-  window.location.hostname.indexOf("sensorahub") !== -1
-    ? "710646615238495"
-    : "1752528628790870";
+// SENSORAHUB (commented): use 710646615238495 when hostname has sensorahub
+const META_PIXEL_ID = "1752528628790870";
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
 
@@ -3779,53 +3775,13 @@ function App() {
       // IMPORTANT: Do NOT send cards/profile in payment-init calls.
       // They are large and can trigger 413 (nginx) and aren't required for gateway initiation.
 
-      const hostname =
-        typeof window !== "undefined" && window.location?.hostname
-          ? window.location.hostname.toLowerCase()
-          : "";
-      const useInstamojo =
-        hostname === "sensorahub.com" || hostname.endsWith(".sensorahub.com");
+      // SENSORAHUB (commented for later use): use Instamojo when domain is sensorahub.com
+      // const hostname = typeof window !== "undefined" && window.location?.hostname
+      //   ? window.location.hostname.toLowerCase() : "";
+      // const useInstamojo = hostname === "sensorahub.com" || hostname.endsWith(".sensorahub.com");
+      // if (useInstamojo) { ... instamojo create + redirect ... return; }
 
-      if (useInstamojo) {
-        const instamojoRes = await fetch("/api/payment/instamojo/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount,
-            email: paymentForm.email,
-            phone: paymentForm.phoneNumber || "",
-            buyer_name: paymentForm.fullName || paymentForm.email,
-          }),
-        }).catch((fetchErr) => {
-          console.error("Network error creating Instamojo payment:", fetchErr);
-          throw new Error(
-            "Cannot connect to payment server. Please check if backend is running."
-          );
-        });
-
-        if (!instamojoRes.ok) {
-          const errorData = await instamojoRes
-            .json()
-            .catch(() => ({ error: "Unknown error" }));
-          console.error("Instamojo error:", errorData);
-          throw new Error(
-            errorData.error ||
-              errorData.message ||
-              "Failed to create Instamojo payment"
-          );
-        }
-
-        const data = await instamojoRes.json();
-        const redirectUrl = data?.redirectUrl;
-        if (!redirectUrl) {
-          throw new Error("Invalid response from payment server");
-        }
-
-        window.location.href = redirectUrl;
-        return;
-      }
-
-      // Default: samjhona.com → Paytm
+      // Primary: Paytm (fallback to Instamojo is done on backend when Paytm fails)
       const orderResponse = await fetch(`/api/payment/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3855,8 +3811,7 @@ function App() {
       }
 
       const data = await orderResponse.json();
-      // Backward/forward-compatible: backend may return Instamojo redirect on sensorahub.com
-      // even if the client accidentally called the Paytm endpoint.
+      // Backend may return Instamojo redirectUrl when Paytm fails (fallback).
       if (data?.redirectUrl) {
         window.location.href = data.redirectUrl;
         return;

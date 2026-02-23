@@ -53,9 +53,10 @@ app.use(
   cors({
     origin: [
       "https://samjhona.com",
-      "https://sensorahub.com",
-      "https://www.sensorahub.com",
-      "http://sensorahub.com",
+      // SENSORAHUB (commented for later use):
+      // "https://sensorahub.com",
+      // "https://www.sensorahub.com",
+      // "http://sensorahub.com",
       "http://localhost:5173",
       "http://localhost:3000",
     ],
@@ -300,11 +301,12 @@ function getRequestBaseUrl(req) {
   return BASE_URL;
 }
 
-function isSensorahubRequest(req) {
-  const origin = String(req.headers?.origin || "").toLowerCase();
-  const host = String(req.headers?.host || "").toLowerCase();
-  return origin.includes("sensorahub.com") || host.includes("sensorahub.com");
-}
+// SENSORAHUB (commented for later use)
+// function isSensorahubRequest(req) {
+//   const origin = String(req.headers?.origin || "").toLowerCase();
+//   const host = String(req.headers?.host || "").toLowerCase();
+//   return origin.includes("sensorahub.com") || host.includes("sensorahub.com");
+// }
 
 function httpError(status, payload) {
   const message =
@@ -953,18 +955,12 @@ app.post("/api/payment/create-order", async (req, res) => {
   try {
     const { amount, email, fullName, phoneNumber } = req.body;
 
-    // Safety net: if request comes from sensorahub.com, force Instamojo.
-    // This prevents Paytm from being triggered on sensorahub even if an older frontend is deployed/cached.
-    if (isSensorahubRequest(req)) {
-      const instamojoInput = {
-        amount,
-        email,
-        phone: phoneNumber,
-        buyer_name: fullName || email,
-      };
-      const result = await createInstamojoPayment(instamojoInput, req);
-      return res.json(result);
-    }
+    // SENSORAHUB (commented for later use): force Instamojo when request is from sensorahub.com
+    // if (isSensorahubRequest(req)) {
+    //   const instamojoInput = { amount, email, phone: phoneNumber, buyer_name: fullName || email };
+    //   const result = await createInstamojoPayment(instamojoInput, req);
+    //   return res.json(result);
+    // }
 
     log(`📥 Create order request: amount=${amount}, email=${email}`);
 
@@ -1026,14 +1022,27 @@ app.post("/api/payment/create-order", async (req, res) => {
     if (!txnToken) {
       const resultInfo = resBody?.resultInfo || {};
       const paytmMsg = resultInfo.resultMsg || resultInfo.resultCode || "";
+      log("❌ No txnToken in Paytm response:", JSON.stringify(data));
+      // Fallback: try Instamojo when Paytm fails (e.g. 501, invalid MID)
+      try {
+        const instamojoInput = {
+          amount,
+          email,
+          phone: phoneNumber,
+          buyer_name: fullName || email,
+        };
+        const fallbackResult = await createInstamojoPayment(instamojoInput, req);
+        log("✅ Instamojo fallback succeeded; returning redirectUrl");
+        return res.json(fallbackResult);
+      } catch (instamojoErr) {
+        log("⚠️ Instamojo fallback failed:", instamojoErr?.message || String(instamojoErr));
+      }
       const details = paytmMsg
         ? `Paytm: ${paytmMsg} (code: ${resultInfo.resultCode || "—"})`
         : "No txnToken in response";
-      log("❌ No txnToken in Paytm response:", JSON.stringify(data));
       return res.status(500).json({
         error: "Failed to create payment token",
         details,
-        // include raw resultInfo for debugging (no secrets)
         resultInfo,
       });
     }
