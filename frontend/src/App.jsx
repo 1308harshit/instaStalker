@@ -678,45 +678,43 @@ function App() {
   // const cashfreeEnvRef = useRef(null);
   // Paytm: payment via redirect (no SDK state needed)
 
-  // ✅ Purchase pixel: fire IMMEDIATELY when success screen is shown
-  // Matches the exact Razorpay branch logic — simple, direct fbq call.
+  // ✅ Purchase pixel: fire when success screen is shown
+  // Backend redirects to /post-purchase after Paytm/Instamojo — we still have pending in localStorage, so fire.
   useEffect(() => {
-    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
-    if (postPurchaseLockRef.current) return;
+    if (typeof window === "undefined" || screen !== SCREEN.PAYMENT_SUCCESS) return;
 
-    // Read orderId from pending purchase in localStorage
     const PENDING_KEY = "instaStalker_pending_purchase";
-    let orderId = "order_unknown";
-    let paymentId = "";
+    let orderId = null;
     let numItems = 1;
     try {
       const raw = window.localStorage.getItem(PENDING_KEY);
       if (raw) {
         const pending = JSON.parse(raw);
-        if (pending?.id) orderId = pending.id;
-        if (pending?.quantity) numItems = pending.quantity;
-        window.localStorage.removeItem(PENDING_KEY);
+        if (pending?.id) orderId = String(pending.id).trim();
+        if (typeof pending?.quantity === "number") numItems = pending.quantity;
       }
     } catch {}
 
-    if (purchaseEventFiredRef.current.has(orderId)) {
-      console.log('⚠️ Purchase already fired for:', orderId);
-      return;
-    }
+    // If no pending, we're on post-purchase email link (or direct URL) — don't fire here
+    if (!orderId) return;
+    if (purchaseEventFiredRef.current.has(orderId)) return;
 
-    if (typeof window.fbq === 'function') {
-      window.fbq('track', 'Purchase', {
+    if (typeof window.fbq === "function") {
+      window.fbq("track", "Purchase", {
         value: 99 * numItems,
-        currency: 'INR',
+        currency: "INR",
         content_ids: [orderId],
         order_id: orderId,
         transaction_id: orderId,
-        content_name: 'Instagram Stalker Report',
-        content_type: 'product',
-        num_items: numItems
+        content_name: "Instagram Stalker Report",
+        content_type: "product",
+        num_items: numItems,
       });
-      console.log('✅ Purchase pixel fired on success page load:', orderId);
+      console.log("✅ Purchase pixel fired:", orderId);
       purchaseEventFiredRef.current.add(orderId);
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
     }
   }, [screen]);
 
@@ -1113,13 +1111,28 @@ function App() {
                 }
               }
 
-              // Fire purchase pixel once when arriving via post-purchase link
+              // Fire Purchase pixel when arriving via post-purchase link (email / no pending in localStorage)
               const orderIdForPixel =
                 validateData.orderId || order || validateData.payment_request_id;
-              
-              // Old Razorpay setup did not fire an extra Purchase event
-              // for post-purchase links; we now rely on the main success
-              // flow Purchase pixel instead.
+              if (
+                orderIdForPixel &&
+                !cancelled &&
+                !purchaseEventFiredRef.current.has(orderIdForPixel) &&
+                typeof window.fbq === "function"
+              ) {
+                purchaseEventFiredRef.current.add(orderIdForPixel);
+                window.fbq("track", "Purchase", {
+                  value: 99,
+                  currency: "INR",
+                  content_ids: [orderIdForPixel],
+                  order_id: orderIdForPixel,
+                  transaction_id: orderIdForPixel,
+                  content_name: "Instagram Stalker Report",
+                  content_type: "product",
+                  num_items: 1,
+                });
+                console.log("✅ Purchase pixel fired (post-purchase link):", orderIdForPixel);
+              }
 
               // Fallback: if backend has no stored report/cards (we no longer send
               // them during payment-init), use localStorage immediately so the
