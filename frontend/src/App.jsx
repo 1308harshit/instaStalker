@@ -678,83 +678,45 @@ function App() {
   // const cashfreeEnvRef = useRef(null);
   // Paytm: payment via redirect (no SDK state needed)
 
-  // ✅ Paytm/Instamojo success: fire Purchase pixel when success screen is shown
-  // Mirrors the simpler, fast logic from the Razorpay branch.
+  // ✅ Purchase pixel: fire IMMEDIATELY when success screen is shown
+  // Matches the exact Razorpay branch logic — simple, direct fbq call.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (screen !== SCREEN.PAYMENT_SUCCESS) return;
+    if (postPurchaseLockRef.current) return;
 
-    // Never fire Purchase for post-purchase (email link) flow
-    if (postPurchaseLockRef.current) {
-      console.log("🔐 Purchase pixel blocked: post-purchase flow");
-      return;
-    }
-
-    const currentPath = window.location.pathname;
-    const isSuccessPath = currentPath === "/successfully-paid";
-    const isSuccessScreen = screen === SCREEN.PAYMENT_SUCCESS;
-
-    if (!isSuccessPath && !isSuccessScreen) {
-      return;
-    }
-
+    // Read orderId from pending purchase in localStorage
     const PENDING_KEY = "instaStalker_pending_purchase";
-    let pending = null;
+    let orderId = "order_unknown";
+    let paymentId = "";
+    let numItems = 1;
     try {
       const raw = window.localStorage.getItem(PENDING_KEY);
-      if (!raw) {
-        console.log("🔒 No pending purchase found for Purchase pixel");
-        return;
+      if (raw) {
+        const pending = JSON.parse(raw);
+        if (pending?.id) orderId = pending.id;
+        if (pending?.quantity) numItems = pending.quantity;
+        window.localStorage.removeItem(PENDING_KEY);
       }
-      pending = JSON.parse(raw);
-    } catch (err) {
-      console.warn("⚠️ Failed to parse pending purchase:", err);
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
+    } catch {}
+
+    if (purchaseEventFiredRef.current.has(orderId)) {
+      console.log('⚠️ Purchase already fired for:', orderId);
       return;
     }
 
-    if (!pending || typeof pending !== "object") return;
-
-    const purchaseId =
-      typeof pending.id === "string" && pending.id.trim()
-        ? pending.id.trim()
-        : "order";
-
-    if (purchaseEventFiredRef.current.has(purchaseId)) {
-      console.log("⚠️ Purchase already fired for:", purchaseId);
-      return;
-    }
-
-    const value =
-      typeof pending.value === "number" && Number.isFinite(pending.value)
-        ? pending.value
-        : 99;
-    const currency =
-      typeof pending.currency === "string" && pending.currency.trim()
-        ? pending.currency.trim()
-        : "INR";
-
-    const numItems = typeof pending.quantity === "number" ? pending.quantity : 1;
-
-    if (typeof window.fbq === "function") {
-      window.fbq("track", "Purchase", {
-        value,
-        currency,
-        content_ids: [purchaseId],
-        order_id: purchaseId,
-        transaction_id: purchaseId,
-        content_name: "Instagram Stalker Report",
-        content_type: "product",
-        num_items: numItems,
+    if (typeof window.fbq === 'function') {
+      window.fbq('track', 'Purchase', {
+        value: 99 * numItems,
+        currency: 'INR',
+        content_ids: [orderId],
+        order_id: orderId,
+        transaction_id: orderId,
+        content_name: 'Instagram Stalker Report',
+        content_type: 'product',
+        num_items: numItems
       });
-      console.log("✅ Purchase pixel fired on success page:", purchaseId);
-      purchaseEventFiredRef.current.add(purchaseId);
-      try {
-        window.localStorage.removeItem(PENDING_KEY);
-      } catch {}
-    } else {
-      console.warn("⚠️ Meta Pixel (fbq) not loaded for Purchase");
+      console.log('✅ Purchase pixel fired on success page load:', orderId);
+      purchaseEventFiredRef.current.add(orderId);
     }
   }, [screen]);
 
@@ -996,7 +958,18 @@ function App() {
     // }
 
     if (restored.profile) {
-      setProfile((prev) => ({ ...prev, ...restored.profile }));
+      const restoredCards = Array.isArray(restored.cards) ? restored.cards : [];
+      const derivedPosts =
+        restored.profile.media_count ??
+        restored.profile.posts ??
+        (restoredCards.length > 0 ? restoredCards.length : undefined);
+      setProfile((prev) => ({
+        ...prev,
+        ...restored.profile,
+        ...(Number.isFinite(Number(derivedPosts))
+          ? { posts: Number(derivedPosts) }
+          : {}),
+      }));
     }
   }, []);
 
@@ -3624,41 +3597,29 @@ function App() {
     if (screen === SCREEN.PAYMENT) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
-      // Track InitiateCheckout only once EVER (persisted in localStorage)
-      if (!checkoutEventFiredRef.current) {
-        checkoutEventFiredRef.current = true;
-        markInitiateCheckoutFired(); // Persist to localStorage immediately
+      // META PIXEL: Track InitiateCheckout event (fires when payment page loads)
+      const amount = 99 * quantity;
+      const eventID = `initiate_checkout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        const amount = 99 * quantity;
-        const eventId = `initiate_checkout_${Date.now()}_${Math.random()
-          .toString(36)
-          .substr(2, 9)}`;
-
-        if (typeof window.fbq === "function") {
-          window.fbq(
-            "track",
-            "InitiateCheckout",
-            {
-              currency: "INR",
-              value: amount,
-              content_name: "Instagram Stalker Report",
-              content_category: "product",
-              content_type: "product",
-              num_items: quantity,
-            },
-            {
-              eventID: eventId,
-            }
-          );
-          console.log("✅ Meta Pixel: InitiateCheckout event fired", {
-            value: amount,
-            currency: "INR",
-            quantity,
-            eventId,
-          });
-        } else {
-          console.warn("⚠️ Meta Pixel (fbq) not loaded for InitiateCheckout");
-        }
+      if (typeof window.fbq === 'function') {
+        window.fbq('track', 'InitiateCheckout', {
+          currency: 'INR',
+          value: amount,
+          content_name: 'Instagram Stalker Report',
+          content_category: 'product',
+          content_type: 'product',
+          num_items: quantity
+        }, {
+          eventID: eventID
+        });
+        console.log('✅ Meta Pixel: InitiateCheckout event fired', {
+          value: amount,
+          currency: 'INR',
+          quantity,
+          eventID
+        });
+      } else {
+        console.warn('⚠️ Meta Pixel (fbq) not loaded yet');
       }
 
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
