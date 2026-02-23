@@ -850,7 +850,8 @@ app.get("/api/payment/instamojo/redirect", async (req, res) => {
         .catch((emailErr) => log(`⚠️ Email failed (Instamojo): ${emailErr.message}`));
     }
 
-    return res.redirect(postPurchaseLink);
+    // Same as Paytm: redirect to /successfully-paid so frontend restores from localStorage
+    return res.redirect(`${baseForLinks}/successfully-paid`);
   } catch (err) {
     log("❌ Instamojo redirect handler error:", err?.message || String(err));
     return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
@@ -1193,7 +1194,9 @@ app.post(
         log(`⚠️ DB error in callback: ${dbErr.message}`);
       }
 
-      res.send(redirectHtml(postPurchaseLink));
+      // Redirect to /successfully-paid so frontend shows success and restores cards from localStorage (previous working setup)
+      const successRedirectUrl = `${BASE_URL}/successfully-paid`;
+      res.send(redirectHtml(successRedirectUrl));
     } catch (err) {
       log(`❌ Paytm callback error: ${err.message}`);
       res.status(500).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=error`));

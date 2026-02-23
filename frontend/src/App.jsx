@@ -4515,9 +4515,17 @@ function App() {
           });
         };
 
-        // Carousel: strict criteria (clean profiles only)
+        // Carousel: strict criteria (clean profiles only); fallback to loose so success screen always shows cards
         const carouselCards = getCardsWithCriteria(cards, true, true);
-        setPaymentSuccessCards(carouselCards.slice(0, 6));
+        const fallback =
+          carouselCards.length > 0
+            ? carouselCards.slice(0, 6)
+            : getCardsWithCriteria(cards, false, false).slice(0, 6);
+        if (fallback.length === 0 && (cards || []).length > 0) {
+          setPaymentSuccessCards((cards || []).slice(0, 6));
+        } else {
+          setPaymentSuccessCards(fallback);
+        }
 
         // In API-first mode, we don't have separate additional usernames from results.html yet
         setPaymentSuccessAdditionalUsernames([]);
@@ -4528,6 +4536,19 @@ function App() {
     
     fetchResultsCards();
   }, [screen, cards, hasStoredReport]);  // Removed snapshots dependency
+
+  // Safeguard: when on success screen with cards in state but no carousel yet, populate from cards (handles restore-after-paint)
+  useEffect(() => {
+    if (
+      screen !== SCREEN.PAYMENT_SUCCESS ||
+      hasStoredReport ||
+      paymentSuccessCards.length > 0
+    )
+      return;
+    const list = Array.isArray(cards) && cards.length > 0 ? cards : null;
+    if (!list) return;
+    setPaymentSuccessCards(list.slice(0, 6));
+  }, [screen, hasStoredReport, paymentSuccessCards.length, cards]);
 
   // Reset payment success carousel when cards change
   useEffect(() => {
@@ -4729,19 +4750,14 @@ function App() {
   }, [screen, paymentSuccessCards, cards]);
 
   const renderPaymentSuccess = () => {
-    // Use cards from results.html, fallback to cards from state
+    // Use carousel cards when available, else cards from state (loose filter so we show something)
+    const fromCarousel =
+      paymentSuccessCards.length > 0 ? paymentSuccessCards : null;
+    const fromState = (Array.isArray(cards) ? cards : [])
+      .filter((card) => card?.username && !card?.isLocked)
+      .slice(0, 10);
     const allCards =
-      paymentSuccessCards.length > 0
-        ? paymentSuccessCards
-        : cards
-            .filter(
-              (card) =>
-                !card?.isLocked &&
-                !card?.blurImage &&
-                card?.image &&
-                card?.username
-            )
-            .slice(0, 10);
+      (fromCarousel && fromCarousel.length > 0) ? fromCarousel : fromState;
 
     // Basic hero/profile info from analysis or fallback to current profile
     const heroData = analysis?.hero || {};
@@ -4752,6 +4768,8 @@ function App() {
       heroData.stats && heroData.stats.length
         ? heroData.stats
         : profileStatsFromState();
+    // Post-purchase page: do not show number of posts (commented out from display)
+    const heroStatsDisplay = heroStats.filter((s) => s.label !== "posts");
 
     // Profile action texts (one for each of the 6 profiles in carousel)
     const profileActions = [
@@ -4919,7 +4937,7 @@ function App() {
                     color: "#e5e7eb",
                   }}
                 >
-                  {heroStats.map((stat) => (
+                  {heroStatsDisplay.map((stat) => (
                     <div key={`${stat.label}-${stat.value}`}>
                       <strong style={{ display: "block", fontSize: 14 }}>
                         {stat.value}
