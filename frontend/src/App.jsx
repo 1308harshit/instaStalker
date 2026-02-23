@@ -776,21 +776,16 @@ function App() {
     profileRef.current = profile;
   }, [profile]);
 
-  // Post-purchase entry point - always show success screen
-  // ✅ CRITICAL FIX #6: Set postPurchaseLockRef FIRST before any other effects run
+  // Post-purchase entry point - show success screen when URL is /post-purchase
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Be tolerant of trailing slashes (e.g. /post-purchase/)
     if (window.location.pathname.startsWith("/post-purchase")) {
-      postPurchaseLockRef.current = true; // 🔐 LOCK - Set immediately to prevent race condition
-      // Clean up any pending purchase to prevent false fires
-      try {
-        window.localStorage.removeItem("instaStalker_pending_purchase");
-      } catch {}
+      postPurchaseLockRef.current = true;
       setScreen(SCREEN.PAYMENT_SUCCESS);
+      // Do NOT clear instaStalker_pending_purchase here — Purchase effect needs it to fire, then clears it
     }
-  }, []); // Run FIRST to prevent race conditions
+  }, []);
 
   // Clean URL after showing success screen (remove query params)
   useEffect(() => {
