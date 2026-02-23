@@ -140,21 +140,24 @@ const markInitiateCheckoutFired = () => {
 };
 
 // Meta Pixel Helper Function
-// Only allows: PageView, InitiateCheckout, and Purchase events
+// Only allows: InitiateCheckout and Purchase events (PageView is fired from index.html)
 // SENSORAHUB (commented): use 710646615238495 when hostname has sensorahub
 const META_PIXEL_ID = "1752528628790870";
 const trackMetaPixel = (eventName, eventData = {}) => {
   if (typeof window === "undefined") return;
 
-  // Only allow PageView, InitiateCheckout, and Purchase
-  const allowedEvents = ["PageView", "InitiateCheckout", "Purchase"];
+  // Only allow InitiateCheckout and Purchase here – PageView is handled in index.html
+  const allowedEvents = ["InitiateCheckout", "Purchase"];
   if (!allowedEvents.includes(eventName)) {
-    console.warn(`⚠️ Meta Pixel: Event "${eventName}" is disabled. Only ${allowedEvents.join(", ")} are allowed.`);
+    console.warn(
+      `⚠️ Meta Pixel: Event "${eventName}" is disabled. Only ${allowedEvents.join(
+        ", "
+      )} are allowed.`
+    );
     return;
   }
 
   try {
-    // Ensure fbq is available (should be loaded from index.html)
     if (!window.fbq) {
       console.warn(`⚠️ Meta Pixel: fbq not available for ${eventName}`);
       return;
@@ -675,8 +678,8 @@ function App() {
   // const cashfreeEnvRef = useRef(null);
   // Paytm: payment via redirect (no SDK state needed)
 
-  // ✅ PayU/Paytm success: fire Purchase pixel ONLY on success path or screen
-  // STRICT VALIDATION: Only fires if all conditions are met
+  // ✅ Paytm/Instamojo success: fire Purchase pixel when success screen is shown
+  // Mirrors the simpler, fast logic from the Razorpay branch.
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -686,7 +689,6 @@ function App() {
       return;
     }
 
-    // ✅ CRITICAL FIX #1: Fire on successfully-paid path OR when screen state becomes PAYMENT_SUCCESS
     const currentPath = window.location.pathname;
     const isSuccessPath = currentPath === "/successfully-paid";
     const isSuccessScreen = screen === SCREEN.PAYMENT_SUCCESS;
@@ -696,81 +698,63 @@ function App() {
     }
 
     const PENDING_KEY = "instaStalker_pending_purchase";
-    const PENDING_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes expiration
-
     let pending = null;
     try {
-      const pendingRaw = window.localStorage.getItem(PENDING_KEY);
-      if (!pendingRaw) {
-        console.log("🔒 Purchase pixel blocked: no pending purchase found");
+      const raw = window.localStorage.getItem(PENDING_KEY);
+      if (!raw) {
+        console.log("🔒 No pending purchase found for Purchase pixel");
         return;
       }
-      pending = JSON.parse(pendingRaw);
+      pending = JSON.parse(raw);
     } catch (err) {
       console.warn("⚠️ Failed to parse pending purchase:", err);
-      try { window.localStorage.removeItem(PENDING_KEY); } catch {}
-      return;
-    }
-
-    if (!pending || typeof pending !== "object") {
-      console.log("🔒 Purchase pixel blocked: invalid pending purchase data");
-      return;
-    }
-
-    // ✅ CRITICAL FIX #2: Check expiration
-    const pendingTimestamp = typeof pending.ts === "number" ? pending.ts : null;
-    if (!pendingTimestamp) {
-        console.warn("⚠️ Pending purchase missing timestamp, cleaning up");
-        try { window.localStorage.removeItem(PENDING_KEY); } catch {}
-        return;
-    }
-
-    const now = Date.now();
-    const ageMs = now - pendingTimestamp;
-    if (ageMs > PENDING_EXPIRY_MS || ageMs < 0) {
-      console.warn("⚠️ Pending purchase expired or invalid (age:", Math.round(ageMs / 1000 / 60), "minutes), cleaning up");
-      try { window.localStorage.removeItem(PENDING_KEY); } catch {}
-      return;
-    }
-
-    const purchaseId = typeof pending.id === "string" && pending.id.trim() ? pending.id.trim() : "payu";
-    const firedKey = `instaStalker_purchase_fired_${purchaseId}`;
-
-    // Check if already fired
-    try {
-      if (window.localStorage.getItem(firedKey)) {
-        console.log("⚠️ Purchase pixel already fired for:", purchaseId);
+      try {
         window.localStorage.removeItem(PENDING_KEY);
-        return;
-      }
-      // Mark as fired BEFORE firing pixel
-      window.localStorage.setItem(firedKey, String(Date.now()));
-      window.localStorage.removeItem(PENDING_KEY);
-    } catch (err) {
-      console.error("❌ Storage error:", err);
+      } catch {}
       return;
     }
 
-    const value = typeof pending.value === "number" && Number.isFinite(pending.value) ? pending.value : 99;
-    const currency = typeof pending.currency === "string" && pending.currency.trim() ? pending.currency.trim() : "INR";
+    if (!pending || typeof pending !== "object") return;
 
-    // ✅ FIRE PURCHASE PIXEL
-    trackMetaPixel("Purchase", {
-      value,
-      currency,
-      content_name: "Instagram Stalker Report",
-      content_category: "Digital Product",
-      event_id: purchaseId,
-      order_id: purchaseId,
-      content_ids: [purchaseId],
-      cs_est: true,
-    });
-    
-    purchaseEventFiredRef.current.add(purchaseId);
-    persistStoredPurchases(purchaseEventFiredRef.current);
+    const purchaseId =
+      typeof pending.id === "string" && pending.id.trim()
+        ? pending.id.trim()
+        : "order";
 
-    console.log("✅ Purchase pixel fired:", purchaseId, "(age:", Math.round(ageMs / 1000), "seconds)");
-  }, [screen]); // Depend on screen state to trigger on success screen transition
+    if (purchaseEventFiredRef.current.has(purchaseId)) {
+      console.log("⚠️ Purchase already fired for:", purchaseId);
+      return;
+    }
+
+    const value =
+      typeof pending.value === "number" && Number.isFinite(pending.value)
+        ? pending.value
+        : 99;
+    const currency =
+      typeof pending.currency === "string" && pending.currency.trim()
+        ? pending.currency.trim()
+        : "INR";
+
+    if (typeof window.fbq === "function") {
+      window.fbq("track", "Purchase", {
+        value,
+        currency,
+        content_ids: [purchaseId],
+        order_id: purchaseId,
+        transaction_id: purchaseId,
+        content_name: "Instagram Stalker Report",
+        content_type: "product",
+        num_items: quantity,
+      });
+      console.log("✅ Purchase pixel fired on success page:", purchaseId);
+      purchaseEventFiredRef.current.add(purchaseId);
+      try {
+        window.localStorage.removeItem(PENDING_KEY);
+      } catch {}
+    } else {
+      console.warn("⚠️ Meta Pixel (fbq) not loaded for Purchase");
+    }
+  }, [screen, quantity]);
 
   // ✅ Cleanup stale pending purchases on app load (prevents false fires)
   useEffect(() => {
@@ -979,18 +963,8 @@ function App() {
   const rememberPurchasePixel = () =>
     persistStoredPurchases(purchaseEventFiredRef.current);
 
-  // Track PageView only on landing page and once (persisted across sessions)
-  useEffect(() => {
-    // Only fire PageView on landing page and only once EVER (persisted in localStorage)
-    if (screen === SCREEN.LANDING && !pageViewFiredRef.current) {
-      pageViewFiredRef.current = true;
-      markPageViewFired(); // Persist to localStorage immediately
-      trackMetaPixel("PageView", {
-        content_name: screen,
-        content_category: "Screen Navigation",
-      });
-    }
-  }, [screen]);
+  // PageView is now fired directly from index.html on initial load
+  // (old Razorpay behavior). We no longer send a React-driven PageView here.
 
   // Restore last successful scrape when returning from payment
   useEffect(() => {
@@ -1168,24 +1142,9 @@ function App() {
               const orderIdForPixel =
                 validateData.orderId || order || validateData.payment_request_id;
               
-              if (
-                orderIdForPixel &&
-                !purchaseEventFiredRef.current.has(orderIdForPixel)
-              ) {
-                purchaseEventFiredRef.current.add(orderIdForPixel);
-                const eventId = `purchase_${orderIdForPixel}`;
-              
-                // Minimal Purchase event - only cs_est parameter
-                trackMetaPixel("Purchase", {
-                  cs_est: true,
-                });
-              
-                rememberPurchasePixel();
-              
-                console.log("✅ Meta Purchase fired (frontend)", {
-                  orderId: orderIdForPixel,
-                });
-              }
+              // Old Razorpay setup did not fire an extra Purchase event
+              // for post-purchase links; we now rely on the main success
+              // flow Purchase pixel instead.
 
               // Fallback: if backend has no stored report/cards (we no longer send
               // them during payment-init), use localStorage immediately so the
@@ -3669,11 +3628,35 @@ function App() {
         markInitiateCheckoutFired(); // Persist to localStorage immediately
 
         const amount = 99 * quantity;
+        const eventId = `initiate_checkout_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
 
-        trackMetaPixel("InitiateCheckout", {
-          value: amount,
-          currency: "INR",
-        });
+        if (typeof window.fbq === "function") {
+          window.fbq(
+            "track",
+            "InitiateCheckout",
+            {
+              currency: "INR",
+              value: amount,
+              content_name: "Instagram Stalker Report",
+              content_category: "product",
+              content_type: "product",
+              num_items: quantity,
+            },
+            {
+              eventID: eventId,
+            }
+          );
+          console.log("✅ Meta Pixel: InitiateCheckout event fired", {
+            value: amount,
+            currency: "INR",
+            quantity,
+            eventId,
+          });
+        } else {
+          console.warn("⚠️ Meta Pixel (fbq) not loaded for InitiateCheckout");
+        }
       }
 
       // GTM CODE COMMENTED OUT - Google Tag Manager: Push InitiateCheckout event to dataLayer
