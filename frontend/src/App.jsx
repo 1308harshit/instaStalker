@@ -735,6 +735,8 @@ function App() {
         ? pending.currency.trim()
         : "INR";
 
+    const numItems = typeof pending.quantity === "number" ? pending.quantity : 1;
+
     if (typeof window.fbq === "function") {
       window.fbq("track", "Purchase", {
         value,
@@ -744,7 +746,7 @@ function App() {
         transaction_id: purchaseId,
         content_name: "Instagram Stalker Report",
         content_type: "product",
-        num_items: quantity,
+        num_items: numItems,
       });
       console.log("✅ Purchase pixel fired on success page:", purchaseId);
       purchaseEventFiredRef.current.add(purchaseId);
@@ -754,7 +756,7 @@ function App() {
     } else {
       console.warn("⚠️ Meta Pixel (fbq) not loaded for Purchase");
     }
-  }, [screen, quantity]);
+  }, [screen]);
 
   // ✅ Cleanup stale pending purchases on app load (prevents false fires)
   useEffect(() => {

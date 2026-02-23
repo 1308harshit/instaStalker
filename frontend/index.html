@@ -48,6 +48,50 @@
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> -->
     <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
+
+    <!-- DEBUG: Global error overlay — remove before production deploy -->
+    <script>
+    (function() {
+      var overlay = null;
+      function showOverlay(title, msg, stack) {
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = '_debug_overlay';
+          overlay.style.cssText = [
+            'position:fixed','top:0','left:0','right:0','bottom:0',
+            'background:#1a0000','color:#ff6b6b','font-family:monospace',
+            'font-size:13px','padding:24px','overflow:auto','z-index:99999',
+            'white-space:pre-wrap','word-break:break-all'
+          ].join(';');
+          document.body.appendChild(overlay);
+        }
+        overlay.textContent = '🚨 ' + title + '\n\n' + msg + (stack ? '\n\nSTACK:\n' + stack : '');
+      }
+      window.onerror = function(msg, src, line, col, err) {
+        showOverlay('JavaScript Error', msg + '\n' + src + ':' + line + ':' + col, err && err.stack);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason;
+        var msg = reason instanceof Error ? reason.message : String(reason);
+        var stack = reason instanceof Error ? reason.stack : '';
+        showOverlay('Unhandled Promise Rejection', msg, stack);
+      });
+      console.error = (function(orig) {
+        return function() {
+          orig.apply(console, arguments);
+          var txt = Array.from(arguments).map(function(a) {
+            return a instanceof Error ? a.message + '\n' + a.stack : String(a);
+          }).join(' ');
+          if (txt.toLowerCase().indexOf('error') !== -1 || txt.toLowerCase().indexOf('uncaught') !== -1) {
+            showOverlay('Console Error', txt);
+          }
+        };
+      })(console.error);
+    })();
+    </script>
+    <!-- END DEBUG overlay -->
+
     <!-- Cashfree Payment Gateway SDK - Will be loaded dynamically based on environment -->
     <!-- Fallback: Production SDK (will be replaced if test environment is detected) -->
     <script src="https://sdk.cashfree.com/js/v3/cashfree.js" id="cashfree-sdk-fallback"></script>
