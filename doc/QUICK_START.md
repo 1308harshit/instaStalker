@@ -1,5 +1,9 @@
 # Quick Start Guide
 
+## 🛠️ Prerequisites
+- **Node.js** (v18+)
+- **Redis** (Required for session tracking - see [Redis Setup Guide](./REDIS_SETUP.md))
+
 ## 🚀 Getting Started in 5 Minutes
 
 ### Step 1: Install Dependencies
@@ -96,6 +100,7 @@ npm run dev
 1. Read **[Frontend Developer Guide](./frontend-guide.md)** for detailed instructions
 2. Read **[Workflow Guide](./workflow.md)** to understand the process
 3. Read **[File Structure Reference](./file-structure.md)** to know what each file does
+4. Read **[Redis Setup Guide](./REDIS_SETUP.md)** to install Redis
 
 ---
 

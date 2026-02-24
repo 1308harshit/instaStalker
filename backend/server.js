@@ -1,19 +1,27 @@
 // Load environment variables FIRST (before any other imports that need them)
 // Use dynamic import to load dotenv synchronously
-if (process.env.NODE_ENV !== 'production') {
-  try {
-    // Use import() with await at top level (ES modules support this)
-    const dotenvModule = await import('dotenv');
-    const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    // Explicitly specify .env file path
-    dotenvModule.default.config({ path: path.join(__dirname, '.env') });
-  } catch (e) {
-    // dotenv not installed, continue without it
-    console.warn('⚠️  dotenv not available, using environment variables from system');
+// Always load .env file, regardless of NODE_ENV (needed for PM2 production)
+try {
+  // Use import() with await at top level (ES modules support this)
+  const dotenvModule = await import("dotenv");
+  const path = await import("path");
+  const { fileURLToPath } = await import("url");
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  // Explicitly specify .env file path
+  const envPath = path.join(__dirname, ".env");
+  const result = dotenvModule.default.config({ path: envPath });
+  if (result.error) {
+    console.warn("⚠️  Error loading .env file:", result.error.message);
+  } else {
+    console.log("✅ Loaded .env file from:", envPath);
   }
+} catch (e) {
+  // dotenv not installed, continue without it
+  console.warn(
+    "⚠️  dotenv not available, using environment variables from system:",
+    e.message
+  );
 }
 
 import express from "express";
@@ -23,16 +31,42 @@ import { fileURLToPath } from "url";
 import { scrape } from "./scraper/scrape.js";
 import { scrapeQueue } from "./utils/queue.js";
 import { browserPool } from "./scraper/browserPool.js";
-import { 
-  connectDB, 
-  getSnapshotStep, 
+import { redis } from "./utils/redis.js";
+import {
+  connectDB,
+  getSnapshotStep,
   getRecentSnapshot,
-  closeDB 
+  closeDB,
 } from "./utils/mongodb.js";
+import connectMongoose from "./utils/db.js"; // Import Mongoose connection
+import { ObjectId } from "mongodb";
+import User from "./models/User.js"; // Import Mongoose User model
+import { Resend } from "resend";
+import crypto from "crypto";
+import axios from "axios";
+import { registerHealthRoutes } from "./utils/health.js";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const PaytmChecksum = require("paytmchecksum");
 
 const app = express();
-app.use(cors());
-app.use(express.json()); // For parsing JSON request bodies
+app.use(
+  cors({
+    origin: [
+      "https://samjhona.com",
+      // SENSORAHUB (commented for later use):
+      // "https://sensorahub.com",
+      // "https://www.sensorahub.com",
+      // "http://sensorahub.com",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  })
+);
+// Increase body size limit (needed for report payloads)
+app.use(express.json({ limit: "50mb" })); // For parsing JSON request bodies
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Keep static serving for backward compatibility (if files exist)
@@ -45,247 +79,1227 @@ app.use("/snapshots", express.static(SNAPSHOT_ROOT));
 const COLLECTION_NAME = "user_orders";
 // connectDB is imported from ./utils/mongodb.js and used for both snapshots and payment data
 
-// Cashfree configuration
-const CASHFREE_API_KEY = process.env.CASHFREE_API_KEY;
-const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
-// Cashfree API base URL - sandbox for testing (default is acceptable)
-const CASHFREE_API_URL = process.env.CASHFREE_API_URL;
+// Paytm
+// NOTE: Paytm MIDs are typically uppercase; normalize to avoid accidental casing issues in env.
+const PAYTM_MID = (process.env.PAYTM_MID || "SCINKF38676225955152").trim();
+const PAYTM_MERCHANT_KEY = (process.env.PAYTM_MERCHANT_KEY || "Q22WldyyCskNM&%&").trim();
+const PAYTM_WEBSITE = (process.env.PAYTM_WEBSITE || "WEBSTAGING").trim();
+const PAYTM_ENV = (process.env.PAYTM_ENV || "STAGING").trim().toUpperCase();
 
-// Validate required environment variables
-if (!CASHFREE_API_KEY) {
-  throw new Error("❌ CASHFREE_API_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
-}
-
-if (!CASHFREE_SECRET_KEY) {
-  throw new Error("❌ CASHFREE_SECRET_KEY environment variable is required. Please set it in .env file or Railway environment variables.");
-} 
-// Try different API versions - Cashfree supports multiple versions
-const CASHFREE_API_VERSIONS = ["2023-08-01", "2022-09-01", "2021-05-21"];
-const CASHFREE_API_VERSION = CASHFREE_API_VERSIONS[0]; // Start with latest
+// COMMENTED OUT: Cashfree configuration (replaced by Paytm)
+// const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
+// const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
+// const CASHFREE_ENV = process.env.CASHFREE_ENV || "PRODUCTION";
+// const CASHFREE_API_BASE_URL = CASHFREE_ENV === "TEST" || CASHFREE_ENV === "SANDBOX"
+//   ? "https://sandbox.cashfree.com/pg" : "https://api.cashfree.com/pg";
 
 const log = (message, data = null) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data || '');
+  console.log(`[${timestamp}] ${message}`, data || "");
 };
+
+// CRITICAL: Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  log(`❌ UNHANDLED REJECTION: ${reason}`);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - let PM2 handle restarts
+});
+
+process.on('uncaughtException', (error) => {
+  log(`❌ UNCAUGHT EXCEPTION: ${error.message}`);
+  console.error('Uncaught Exception:', error);
+  // Exit gracefully - PM2 will restart
+  process.exit(1);
+});
+
+// -------------------------------
+// Stored report builder (Option A)
+// -------------------------------
+const normalizeUsername = (value = "") => {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  return v.startsWith("@") ? v : `@${v}`;
+};
+
+const randIntInclusive = (min, max) => {
+  // crypto.randomInt is max-exclusive
+  return crypto.randomInt(min, max + 1);
+};
+
+function buildStoredReport({ cards = [], profile = null }) {
+  const safeCards = Array.isArray(cards) ? cards : [];
+  const heroProfile = profile && typeof profile === "object" ? profile : null;
+
+  // Prefer usable cards (non-locked, has username)
+  const usable = safeCards.filter((c) => !c?.isLocked && c?.username);
+
+  // Carousel cards: try strict first, then relax
+  const strict = usable.filter((c) => c?.image && !c?.blurImage);
+  const relaxedBlur = usable.filter((c) => c?.image);
+  const relaxedNoImage = usable;
+
+  const pickUniqueByUsername = (list, max) => {
+    const seen = new Set();
+    const out = [];
+    for (const c of list) {
+      const u = normalizeUsername(c?.username);
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      out.push({ ...c, username: u });
+      if (out.length >= max) break;
+    }
+    return out;
+  };
+
+  let carouselCards = pickUniqueByUsername(strict, 6);
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedBlur, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+  if (carouselCards.length < 6) {
+    const more = pickUniqueByUsername(relaxedNoImage, 6);
+    carouselCards = pickUniqueByUsername([...carouselCards, ...more], 6);
+  }
+
+  // "Last 7 days" summary: fixed once
+  const visits = randIntInclusive(1, 5);
+  let screenshots = randIntInclusive(1, 5);
+  if (screenshots === visits) {
+    screenshots = (screenshots % 5) + 1;
+    if (screenshots === visits) screenshots = ((screenshots + 1) % 5) + 1;
+  }
+  const last7Summary = { profileVisits: visits, screenshots };
+
+  // 10-row table: pick 10 unique profiles and assign fixed highlight rules
+  const uniqueCards = pickUniqueByUsername(usable, 200);
+  // One-time shuffle for variety (stable because stored)
+  const shuffled = [...uniqueCards];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = randIntInclusive(0, i);
+    const tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
+  }
+
+  const TOTAL_ROWS = 10;
+  const selected = shuffled.slice(0, Math.min(TOTAL_ROWS, shuffled.length));
+
+  // Padding to 10 rows (should be rare if cards exist)
+  while (selected.length < TOTAL_ROWS) {
+    const idx = selected.length + 1;
+    selected.push({
+      username: `@profile${idx}`,
+      title: "Instagram user",
+      image: null,
+    });
+  }
+
+  const rowCount = selected.length;
+
+  // Pick 4 random rows for screenshot highlights
+  const screenshotIndices = new Set();
+  while (screenshotIndices.size < 4 && rowCount > 0) {
+    screenshotIndices.add(randIntInclusive(2, Math.min(9, rowCount - 1)));
+  }
+
+  const last7Rows = selected.slice(0, TOTAL_ROWS).map((card, index) => {
+    const username = normalizeUsername(card.username || "");
+    const name =
+      String((card.title || card.name || "") || "")
+        .trim()
+        .slice(0, 80) ||
+      username.replace(/^@/, "") ||
+      "Instagram user";
+    const image = card.image || card.avatar || null;
+
+    let rowVisits = 0;
+    let rowScreenshots = 0;
+    let visitsHighlighted = false;
+    let screenshotsHighlighted = false;
+
+    // First 5 profiles have visits = 1-3 highlighted
+    if (index < 5) {
+      rowVisits = randIntInclusive(1, 3);
+      visitsHighlighted = true;
+    }
+
+    // Selected rows have screenshots = 1-3 highlighted
+    if (screenshotIndices.has(index)) {
+      rowScreenshots = randIntInclusive(1, 3);
+      screenshotsHighlighted = true;
+    }
+
+    return {
+      id: `${username || "profile"}-${index}`,
+      name,
+      username,
+      image,
+      visits: rowVisits,
+      screenshots: rowScreenshots,
+      visitsHighlighted,
+      screenshotsHighlighted,
+    };
+  });
+
+  return {
+    version: 1,
+    generatedAt: new Date(),
+    heroProfile,
+    carouselCards,
+    last7Summary,
+    last7Rows,
+  };
+}
+
+// Email configuration (also used for Paytm callback)
+// Local: http://localhost:5173 (frontend; proxy /api to backend). Production: https://samjhona.com
+const BASE_URL = (process.env.BASE_URL || "http://localhost:5173").replace(
+  /\/+$/,
+  ""
+);
+
+log(`🚀 Paytm: MID=${PAYTM_MID} (${PAYTM_MID.length} chars), KEY=${PAYTM_MERCHANT_KEY.substring(0, 4)}... (${PAYTM_MERCHANT_KEY.length} chars), website=${PAYTM_WEBSITE}, env=${PAYTM_ENV}`);
+log(`   BASE_URL=${BASE_URL}, callback=${BASE_URL}/api/payment/paytm-callback`);
+log(
+  `   initiateTransaction: ${PAYTM_ENV === "PRODUCTION" ? "secure.paytmpayments.com" : "securegw-stage.paytm.in"
+  }`
+);
+
+// Instamojo configuration (sensorahub.com)
+const INSTAMOJO_API_KEY = (process.env.INSTAMOJO_API_KEY || "").trim();
+const INSTAMOJO_AUTH_TOKEN = (process.env.INSTAMOJO_AUTH_TOKEN || "").trim();
+const INSTAMOJO_SALT = (process.env.INSTAMOJO_SALT || "").trim();
+const INSTAMOJO_API_BASE_URL = (
+  process.env.INSTAMOJO_API_BASE_URL || "https://www.instamojo.com/api/1.1"
+).replace(/\/+$/, "");
+
+log(
+  `🚀 Instamojo: key=${INSTAMOJO_API_KEY ? "***" + INSTAMOJO_API_KEY.slice(-4) : "NOT SET"}, token=${INSTAMOJO_AUTH_TOKEN ? "***" + INSTAMOJO_AUTH_TOKEN.slice(-4) : "NOT SET"}, salt=${INSTAMOJO_SALT ? "***" + INSTAMOJO_SALT.slice(-4) : "NOT SET"}, api=${INSTAMOJO_API_BASE_URL}`
+);
+
+// Create Resend client (EMAILS NO LONGER USED)
+// const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy");
+const resend = { emails: { send: () => Promise.resolve({ success: true, message: "Emails disabled" }) } };
+
+function getRequestBaseUrl(req) {
+  // Prefer Origin from browser calls (works with Vite proxy + production).
+  const origin = req.headers?.origin;
+  if (origin && typeof origin === "string" && /^https?:\/\//i.test(origin)) {
+    return origin.replace(/\/+$/, "");
+  }
+
+  // Fall back to host/proto (works for server-to-server calls without Origin).
+  const xfProto = String(req.headers?.["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const xfHost = String(req.headers?.["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = xfHost || req.get("host") || "";
+  const proto = xfProto || req.protocol || "https";
+  if (host) return `${proto}://${host}`.replace(/\/+$/, "");
+
+  return BASE_URL;
+}
+
+// SENSORAHUB (commented for later use)
+// function isSensorahubRequest(req) {
+//   const origin = String(req.headers?.origin || "").toLowerCase();
+//   const host = String(req.headers?.host || "").toLowerCase();
+//   return origin.includes("sensorahub.com") || host.includes("sensorahub.com");
+// }
+
+function httpError(status, payload) {
+  const message =
+    (payload && (payload.error || payload.message)) || `HTTP ${status}`;
+  const err = new Error(String(message));
+  err.status = status;
+  err.payload = payload;
+  return err;
+}
+
+// Validate Instamojo webhook MAC
+function validateInstamojoWebhook(data, macProvided, salt) {
+  const payload = { ...(data || {}) };
+  delete payload.mac;
+
+  const message = Object.keys(payload)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .map((key) => payload[key])
+    .join("|");
+
+  const macCalculated = crypto
+    .createHmac("sha1", salt)
+    .update(message)
+    .digest("hex");
+
+  return macCalculated === macProvided;
+}
+
+async function createInstamojoPayment(input, req) {
+  const requestId = `imojo_${Date.now()}_${Math.random()
+    .toString(16)
+    .slice(2, 10)}`;
+
+  const missingConfig = [];
+  if (!INSTAMOJO_API_KEY) missingConfig.push("INSTAMOJO_API_KEY");
+  if (!INSTAMOJO_AUTH_TOKEN) missingConfig.push("INSTAMOJO_AUTH_TOKEN");
+  if (!INSTAMOJO_SALT) missingConfig.push("INSTAMOJO_SALT");
+  if (missingConfig.length) {
+    throw httpError(500, {
+      error: "Instamojo not configured",
+      missing: missingConfig,
+      requestId,
+    });
+  }
+
+  const {
+    amount,
+    email,
+    phone,
+    buyer_name,
+    existingOrderId,
+    cards,
+    profile,
+    username: usernameBody,
+  } = input || {};
+
+  if (
+    !amount ||
+    Number.isNaN(Number(amount)) ||
+    !email ||
+    !phone ||
+    !buyer_name
+  ) {
+    throw httpError(400, {
+      error: "Invalid request",
+      details: {
+        amount: !amount ? "missing" : "present",
+        email: !email ? "missing" : "present",
+        phone: !phone ? "missing" : "present",
+        buyer_name: !buyer_name ? "missing" : "present",
+      },
+      requestId,
+    });
+  }
+
+  const orderId =
+    existingOrderId ||
+    `ORDER_${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
+  const accessToken = crypto.randomBytes(32).toString("hex");
+
+  const baseForLinks = getRequestBaseUrl(req);
+  const redirectUrl = `${baseForLinks}/api/payment/instamojo/redirect`;
+  const webhookUrl = `${baseForLinks}/api/payment/instamojo/webhook`;
+  const postPurchaseLink = `${baseForLinks}/post-purchase?token=${encodeURIComponent(
+    accessToken
+  )}&order=${encodeURIComponent(orderId)}`;
+
+  // Persist or update order (non-blocking failure)
+  try {
+    const db = await connectDB();
+    if (db) {
+      const collection = db.collection(COLLECTION_NAME);
+      const update = {
+        status: "pending",
+        provider: "instamojo",
+        amount: Number(amount),
+        currency: "INR",
+        quantity: 1,
+        instamojoAmount: Number(amount),
+        instamojoStatus: "pending",
+        accessToken,
+        postPurchaseLink,
+        email: String(email || ""),
+        phoneNumber: String(phone || ""),
+        fullName: String(buyer_name || ""),
+        username:
+          typeof usernameBody === "string" && usernameBody.trim()
+            ? usernameBody.trim()
+            : null,
+        cards: Array.isArray(cards) ? cards : [],
+        profile: profile && typeof profile === "object" ? profile : null,
+        updatedAt: new Date(),
+      };
+
+      if (existingOrderId) {
+        await collection.updateOne({ orderId: existingOrderId }, { $set: update });
+      } else {
+        await collection.insertOne({
+          orderId,
+          createdAt: new Date(),
+          ...update,
+        });
+      }
+      log("✅ Instamojo order stored", { requestId, orderId });
+    }
+  } catch (dbErr) {
+    log("⚠️ Failed to store Instamojo order (continuing):", dbErr.message);
+  }
+
+  const paymentRequestData = new URLSearchParams({
+    amount: String(amount),
+    purpose: orderId,
+    buyer_name: String(buyer_name),
+    email: String(email),
+    phone: String(phone),
+    redirect_url: redirectUrl,
+    webhook: webhookUrl,
+    send_email: "false",
+    send_sms: "false",
+  });
+
+  const apiUrl = `${INSTAMOJO_API_BASE_URL}/payment-requests/`;
+  log("📤 Calling Instamojo API", { requestId, apiUrl });
+
+  const apiResponse = await axios.post(apiUrl, paymentRequestData.toString(), {
+    headers: {
+      "X-Api-Key": INSTAMOJO_API_KEY,
+      "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    timeout: 15000,
+    validateStatus: () => true,
+  });
+
+  if (apiResponse.status < 200 || apiResponse.status >= 300) {
+    log("❌ Instamojo API error", {
+      requestId,
+      status: apiResponse.status,
+      data: apiResponse.data,
+    });
+    throw httpError(502, {
+      error: "Instamojo payment creation failed",
+      status: apiResponse.status,
+      body: apiResponse.data,
+      requestId,
+    });
+  }
+
+  const responseData = apiResponse.data;
+  const longurl = responseData?.payment_request?.longurl;
+  const paymentRequestId = responseData?.payment_request?.id;
+
+  if (!responseData?.success || !longurl || !paymentRequestId) {
+    log("❌ Instamojo returned invalid structure", { requestId, responseData });
+    throw httpError(500, {
+      error: "Instamojo create payment failed",
+      details: responseData?.message || "Invalid response",
+      requestId,
+    });
+  }
+
+  // Persist Instamojo identifiers (best-effort)
+  try {
+    const db = await connectDB();
+    if (db) {
+      await db.collection(COLLECTION_NAME).updateOne(
+        { orderId },
+        {
+          $set: {
+            instamojoLongUrl: longurl,
+            instamojoPaymentRequestId: paymentRequestId,
+          },
+        }
+      );
+    }
+  } catch (dbErr) {
+    log("⚠️ Failed to save instamojo ids:", dbErr.message);
+  }
+
+  log("✅ ========== INSTAMOJO PAYMENT REQUEST SUCCESS ==========", {
+    requestId,
+    orderId,
+    paymentRequestId,
+  });
+
+  return {
+    redirectUrl: longurl,
+    requestId,
+    orderId,
+    paymentRequestId,
+    provider: "instamojo",
+  };
+}
+
+// Helper function to send post-purchase email
+async function sendPostPurchaseEmail(email, fullName, postPurchaseLink) {
+  try {
+    const label = email || fullName || "there";
+    const result = await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: "Your report link",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h2>Thank you for your purchase!</h2>
+          <p>Hi ${label},</p>
+          <p>Access your report using the link below:</p>
+          <p>
+            <a href="${postPurchaseLink}" 
+               style="background:#ef4444;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">
+              Open my report
+            </a>
+          </p>
+          <p style="font-size:12px;color:#666">
+            If you don't see it, check spam.
+          </p>
+        </div>
+      `,
+    });
+
+    console.log("✅ Email sent via Resend:", result.id);
+    return result;
+  } catch (err) {
+    console.error("❌ Resend email failed:", err);
+    return null;
+  }
+}
 
 // Save user data to MongoDB
 app.post("/api/payment/save-user", async (req, res) => {
   try {
     const { email, fullName, phoneNumber } = req.body;
-    
+
     if (!email || !fullName || !phoneNumber) {
-      return res.status(400).json({ error: "Email, full name, and phone number are required" });
+      return res
+        .status(400)
+        .json({ error: "Email, full name, and phone number are required" });
     }
 
     const database = await connectDB();
     if (!database) {
-      log('⚠️ MongoDB not available, skipping save');
+      log("⚠️ MongoDB not available, skipping save");
       // Still return success so payment flow can continue
-      return res.json({ 
-        success: true, 
-        message: "User data received (MongoDB unavailable)" 
+      return res.json({
+        success: true,
+        message: "User data received (MongoDB unavailable)",
       });
     }
 
     const collection = database.collection(COLLECTION_NAME);
-    
+
     const userData = {
       email,
       fullName,
       phoneNumber,
       createdAt: new Date(),
-      status: "pending"
+      status: "pending",
     };
 
     const result = await collection.insertOne(userData);
     log(`✅ User data saved: ${email}`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       userId: result.insertedId,
-      message: "User data saved successfully" 
+      message: "User data saved successfully",
     });
   } catch (err) {
-    log('❌ Error saving user data:', err.message);
+    log("❌ Error saving user data:", err.message);
     // Still return success so payment flow can continue even if DB fails
-    res.json({ 
-      success: true, 
-      message: "User data received (save may have failed)" 
+    res.json({
+      success: true,
+      message: "User data received (save may have failed)",
     });
   }
 });
 
-// Create Cashfree payment session
-app.post("/api/payment/create-session", async (req, res) => {
+//  BYPASS PAYMENT — SEND EMAIL + REDIRECT TO PAYU
+app.post("/api/payment/bypass", async (req, res) => {
   try {
-    const { email, fullName, phoneNumber, amount } = req.body;
-    
-    if (!email || !fullName || !phoneNumber) {
-      return res.status(400).json({ error: "Email, full name, and phone number are required" });
+    const { email, fullName, username, cards, profile } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" });
+    }
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return res.status(400).json({ error: "Report cards are required" });
     }
 
-    const orderId = `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const orderAmount = amount || 199; // Default to 199₹
-    
-    // Create payment session with Cashfree
-    // Format phone number (ensure it's 10 digits for India)
-    let phone = phoneNumber.replace(/[^0-9]/g, '');
-    if (phone.length === 10) {
-      phone = `91${phone}`; // Add country code for India
-    } else if (!phone.startsWith('91')) {
-      phone = `91${phone}`;
-    }
+    const orderId = `order_${Date.now()}_${Math.random()
+      .toString(36)
+      .substring(2, 10)}`;
+    const token = crypto.randomBytes(32).toString("hex");
 
-    // Generate valid customer_id (alphanumeric with underscores/hyphens only)
-    // Cashfree requires customer_id to be alphanumeric and may contain underscore or hyphens
-    const customerId = email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() || `customer_${Date.now()}`;
+    const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(
+      token
+    )}&order=${encodeURIComponent(orderId)}`;
 
-    const paymentData = {
-      order_id: orderId,
-      order_amount: orderAmount,
-      order_currency: "INR",
-      customer_details: {
-        customer_id: customerId,
-        customer_name: fullName,
-        customer_email: email,
-        customer_phone: phone,
-      },
-      order_meta: {
-        return_url: `${req.protocol}://${req.get('host')}/payment/return?order_id={order_id}`,
+    // Optional DB save (Native)
+    try {
+      const db = await connectDB();
+      if (db) {
+        const report = buildStoredReport({ cards, profile });
+        await db.collection("user_orders").insertOne({
+          orderId,
+          accessToken: token, // ✅ IMPORTANT
+          email,
+          fullName,
+          username,
+          cards,
+          profile: profile || null,
+          report,
+          status: "paid", // IMPORTANT
+          createdAt: new Date(),
+          verifiedAt: new Date(),
+          emailSent: false,
+        });
+
+        // ✅ Update Mongoose User Model
+        try {
+          const cleanUsername = username.replace(/^@/, "").toLowerCase().trim();
+          await User.findOneAndUpdate(
+            { username: cleanUsername },
+            {
+              $set: {
+                paymentDetails: { orderId, method: "bypass" },
+                isPaid: true,
+                email: email,
+                fullName: fullName,
+                updatedAt: new Date()
+              }
+            },
+            { upsert: true }
+          );
+          log(`✅ User updated in Mongoose (Bypass): ${cleanUsername}`);
+        } catch (mongooseErr) {
+          log(`⚠️ Failed to update User model in bypass: ${mongooseErr.message}`);
+        }
       }
+    } catch (_) { }
+
+    // Send email after data is stored (small delay helps consistency)
+    setTimeout(() => {
+      sendPostPurchaseEmail(email, fullName, postPurchaseLink)
+        .then(async () => {
+          try {
+            const db = await connectDB();
+            if (!db) return;
+            await db
+              .collection("user_orders")
+              .updateOne(
+                { orderId },
+                { $set: { emailSent: true, emailSentAt: new Date() } }
+              );
+          } catch (_) { }
+        })
+        .catch((err) => {
+          console.error("Email failed (non-blocking):", err.message);
+        });
+    }, 5000);
+
+    // Respond immediately so redirect is not blocked
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Bypass error:", err);
+    res.status(500).json({ error: "Bypass failed" });
+  }
+});
+
+// ============================================================================
+// INSTAMOJO PAYMENT ROUTES (sensorahub.com)
+// ============================================================================
+
+app.post("/api/payment/instamojo/create", async (req, res) => {
+  try {
+    log("🔥 ========== INSTAMOJO PAYMENT REQUEST START ==========");
+    const result = await createInstamojoPayment(req.body, req);
+    return res.json(result);
+  } catch (err) {
+    log("❌ ========== INSTAMOJO PAYMENT REQUEST ERROR ==========", {
+      errorName: err?.name,
+      errorMessage: err?.message || String(err),
+    });
+    const status = err?.status || 500;
+    return res.status(status).json(
+      err?.payload || {
+        error: "Instamojo init failed",
+        details: err?.message || String(err),
+      }
+    );
+  }
+});
+
+app.get("/api/payment/instamojo/redirect", async (req, res) => {
+  try {
+    const { payment_id, payment_request_id, payment_status } = req.query || {};
+    log("🔄 Instamojo redirect", {
+      payment_id,
+      payment_request_id,
+      payment_status,
+    });
+
+    if (!payment_request_id) {
+      return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
+    }
+
+    const db = await connectDB();
+    if (!db) return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
+
+    const collection = db.collection(COLLECTION_NAME);
+    const order = await collection.findOne({
+      instamojoPaymentRequestId: String(payment_request_id),
+    });
+
+    if (!order) {
+      log("❌ Order not found for payment_request_id", { payment_request_id });
+      return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
+    }
+
+    // Best-effort verify via Instamojo API
+    let isSuccess = String(payment_status || "").toLowerCase() === "credit";
+    try {
+      const verifyResp = await axios.get(
+        `${INSTAMOJO_API_BASE_URL}/payment-requests/${encodeURIComponent(
+          String(payment_request_id)
+        )}/`,
+        {
+          headers: {
+            "X-Api-Key": INSTAMOJO_API_KEY,
+            "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+          },
+          timeout: 15000,
+          validateStatus: () => true,
+        }
+      );
+      if (verifyResp.status >= 200 && verifyResp.status < 300) {
+        const verifyData = verifyResp.data;
+        isSuccess =
+          verifyData?.payment_request?.status === "Completed" || isSuccess;
+      }
+    } catch (verifyErr) {
+      log(
+        "⚠️ Instamojo verify failed, falling back to query param",
+        verifyErr.message
+      );
+    }
+
+    if (!isSuccess) {
+      log("⚠️ Instamojo payment not successful", { payment_status });
+      return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
+    }
+
+    const token = order.accessToken || crypto.randomBytes(32).toString("hex");
+    const baseForLinks = getRequestBaseUrl(req);
+    const postPurchaseLink = `${baseForLinks}/post-purchase?token=${encodeURIComponent(
+      token
+    )}&order=${encodeURIComponent(order.orderId)}`;
+
+    const updateData = {
+      status: "paid",
+      verifiedAt: new Date(),
+      accessToken: token,
+      postPurchaseLink,
+      instamojoPaymentId: payment_id || order.instamojoPaymentId || null,
+      instamojoPaymentStatus: payment_status || "Credit",
+      instamojoStatus: "credit",
+      emailSent: false,
+      provider: "instamojo",
     };
 
-    // Call Cashfree API to create payment session
-    // Cashfree PG API endpoint: /pg/orders
-    const cashfreeEndpoint = `${CASHFREE_API_URL}/orders`;
-    log(`📡 Calling Cashfree API: ${cashfreeEndpoint}`);
-    log(`📡 Using API Key: ${CASHFREE_API_KEY.substring(0, 10)}...`);
-    log(`📡 Using API Version: ${CASHFREE_API_VERSION}`);
-    log(`📡 Secret Key length: ${CASHFREE_SECRET_KEY.length} chars`);
-    log(`📡 Request payload:`, JSON.stringify(paymentData, null, 2));
-    
-    // Try with different API versions if first attempt fails
-    let cashfreeResponse;
-    let lastError;
-    
-    for (const apiVersion of CASHFREE_API_VERSIONS) {
+    if (!order.report && Array.isArray(order.cards) && order.cards.length > 0) {
+      updateData.report = buildStoredReport({
+        cards: order.cards,
+        profile: order.profile,
+      });
+    }
+
+    await collection.updateOne({ orderId: order.orderId }, { $set: updateData });
+
+    // Mirror Paytm behavior: mark user paid in Mongoose (best-effort)
+    if (order?.username) {
       try {
-        log(`🔄 Trying API version: ${apiVersion}`);
-        cashfreeResponse = await fetch(cashfreeEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-version": apiVersion,
-            "x-client-id": CASHFREE_API_KEY,
-            "x-client-secret": CASHFREE_SECRET_KEY,
+        const cleanUsername = String(order.username)
+          .replace(/^@/, "")
+          .toLowerCase()
+          .trim();
+        await User.findOneAndUpdate(
+          { username: cleanUsername },
+          {
+            $set: {
+              paymentDetails: { orderId: order.orderId, paymentId: payment_id || "" },
+              isPaid: true,
+              email: order.email || "",
+              fullName: order.fullName || "",
+              phoneNumber: order.phoneNumber || "",
+              updatedAt: new Date(),
+            },
           },
-          body: JSON.stringify(paymentData),
-        });
-        
-        if (cashfreeResponse.ok) {
-          log(`✅ Success with API version: ${apiVersion}`);
-          break;
-        } else if (cashfreeResponse.status !== 401) {
-          // If not authentication error, break and use this response
-          break;
-        }
-        // If 401, try next version
-        const errorText = await cashfreeResponse.text();
-        log(`⚠️ API version ${apiVersion} failed: ${errorText.substring(0, 200)}`);
-        lastError = errorText;
-      } catch (err) {
-        log(`❌ Error with API version ${apiVersion}:`, err.message);
-        lastError = err.message;
+          { upsert: true }
+        );
+        log(`✅ User updated in Mongoose (Instamojo): ${cleanUsername}`);
+      } catch (mongooseErr) {
+        log(`⚠️ Mongoose update failed (Instamojo): ${mongooseErr.message}`);
       }
     }
-    
-    if (!cashfreeResponse) {
-      throw new Error("All API version attempts failed");
+
+    // Send email with post-purchase link (non-blocking; matches Paytm pattern)
+    if (order?.email) {
+      sendPostPurchaseEmail(order.email, order.fullName || "Customer", postPurchaseLink)
+        .then(() =>
+          collection
+            .updateOne(
+              { orderId: order.orderId },
+              { $set: { emailSent: true, emailSentAt: new Date() } }
+            )
+            .catch(() => { })
+        )
+        .catch((emailErr) => log(`⚠️ Email failed (Instamojo): ${emailErr.message}`));
     }
 
-    const responseText = await cashfreeResponse.text();
-    log(`📡 Cashfree API response status: ${cashfreeResponse.status}`);
-    log(`📡 Cashfree API response: ${responseText.substring(0, 500)}`);
+    // Same as Paytm: redirect to /successfully-paid so frontend restores from localStorage
+    return res.redirect(`${baseForLinks}/successfully-paid`);
+  } catch (err) {
+    log("❌ Instamojo redirect handler error:", err?.message || String(err));
+    return res.redirect(`${getRequestBaseUrl(req)}/payment-failed`);
+  }
+});
 
-    if (!cashfreeResponse.ok) {
-      log('❌ Cashfree API error:', responseText);
-      // Return more detailed error to frontend
-      return res.status(cashfreeResponse.status).json({ 
-        error: "Failed to create payment session",
-        details: responseText,
-        message: "Payment gateway error. Please check backend logs for details."
+app.post("/api/payment/instamojo/webhook", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const macProvided = payload.mac;
+
+    if (!macProvided) {
+      log("❌ Instamojo webhook missing MAC");
+      return res.status(400).send("Invalid webhook");
+    }
+
+    const isValidMac = validateInstamojoWebhook(
+      payload,
+      macProvided,
+      INSTAMOJO_SALT
+    );
+    if (!isValidMac) {
+      log("❌ Instamojo webhook MAC validation failed");
+      return res.status(400).send("Invalid MAC");
+    }
+
+    const { payment_id, payment_request_id, payment_status } = payload;
+
+    log("🔔 Instamojo webhook received", {
+      payment_request_id,
+      payment_id,
+      payment_status,
+    });
+
+    if (payment_status !== "Credit") {
+      log("⚠️ Ignoring non-credit webhook", { payment_status });
+      return res.status(200).send("Ignored");
+    }
+
+    const db = await connectDB();
+    if (!db) {
+      log("❌ DB not available in webhook");
+      return res.status(500).send("DB unavailable");
+    }
+
+    const collection = db.collection(COLLECTION_NAME);
+    const order = await collection.findOne({
+      instamojoPaymentRequestId: String(payment_request_id || ""),
+    });
+
+    if (!order) {
+      log("❌ Order not found for webhook", { payment_request_id });
+      return res.status(404).send("Order not found");
+    }
+
+    const token = order.accessToken || crypto.randomBytes(32).toString("hex");
+    const baseForLinks = getRequestBaseUrl(req);
+    const postPurchaseLink = `${baseForLinks}/post-purchase?token=${encodeURIComponent(
+      token
+    )}&order=${encodeURIComponent(order.orderId)}`;
+
+    await collection.updateOne(
+      { orderId: order.orderId },
+      {
+        $set: {
+          status: "paid",
+          provider: "instamojo",
+          instamojoStatus: "credit",
+          instamojoPaymentId: payment_id,
+          instamojoPaymentStatus: payment_status,
+          accessToken: token,
+          postPurchaseLink,
+          paidAt: new Date(),
+          verifiedAt: new Date(),
+        },
+      }
+    );
+
+    return res.status(200).send("OK");
+  } catch (err) {
+    log("❌ Instamojo webhook error", err?.message || String(err));
+    return res.status(500).send("Webhook error");
+  }
+});
+
+// ============================================================================
+// PAYTM PAYMENT ROUTES
+// ============================================================================
+
+// Paytm API endpoints
+const PAYTM_INITIATE_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://secure.paytmpayments.com/theia/api/v1/initiateTransaction"
+    : "https://securegw-stage.paytm.in/theia/api/v1/initiateTransaction";
+const PAYTM_PAYMENT_URL =
+  PAYTM_ENV === "PRODUCTION"
+    ? "https://secure.paytmpayments.com/theia/api/v1/showPaymentPage"
+    : "https://securegw-stage.paytm.in/theia/api/v1/showPaymentPage";
+
+// Create Paytm order — initiateTransaction API (correct endpoint)
+app.post("/api/payment/create-order", async (req, res) => {
+  try {
+    const { amount, email, fullName, phoneNumber } = req.body;
+
+    // SENSORAHUB (commented for later use): force Instamojo when request is from sensorahub.com
+    // if (isSensorahubRequest(req)) {
+    //   const instamojoInput = { amount, email, phone: phoneNumber, buyer_name: fullName || email };
+    //   const result = await createInstamojoPayment(instamojoInput, req);
+    //   return res.json(result);
+    // }
+
+    log(`📥 Create order request: amount=${amount}, email=${email}`);
+
+    if (!amount || amount <= 0) {
+      return res
+        .status(400)
+        .json({ error: "Amount is required and must be greater than 0" });
+    }
+
+    const orderId =
+      "ORDER_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 12);
+    const amountStr = Number(amount).toFixed(2);
+    const customerId = email || "CUST_" + Date.now();
+    // IMPORTANT: Callback must match the domain that initiated the payment (samjhona.com).
+    // Using request-derived base prevents misrouting when one backend serves multiple domains.
+    const callbackBase = getRequestBaseUrl(req);
+    const callbackUrl = `${callbackBase}/api/payment/paytm-callback`;
+
+    // Paytm expects websiteName to match the environment.
+    // Staging typically uses WEBSTAGING; Production uses DEFAULT.
+    const websiteName =
+      PAYTM_ENV === "PRODUCTION"
+        ? "DEFAULT"
+        : (PAYTM_WEBSITE || "WEBSTAGING").trim();
+
+    const paytmBody = {
+      requestType: "Payment",
+      mid: PAYTM_MID,
+      websiteName,
+      orderId: orderId,
+      callbackUrl: callbackUrl,
+      txnAmount: { value: amountStr, currency: "INR" },
+      userInfo: { custId: customerId },
+    };
+
+    log(`💰 Creating Paytm txn: ₹${amountStr}, orderId=${orderId}`);
+    log(`   callbackUrl: ${callbackUrl}`);
+
+    const signature = await PaytmChecksum.generateSignature(
+      JSON.stringify(paytmBody),
+      PAYTM_MERCHANT_KEY
+    );
+
+    const apiUrl = `${PAYTM_INITIATE_URL}?mid=${PAYTM_MID}&orderId=${orderId}`;
+    log(`   POST ${apiUrl}`);
+
+    const { data } = await axios.post(
+      apiUrl,
+      { body: paytmBody, head: { signature } },
+      { headers: { "Content-Type": "application/json" }, timeout: 15000 }
+    );
+
+    const resBody = data?.body ?? data;
+    const txnToken = resBody?.txnToken;
+
+    if (!txnToken) {
+      const resultInfo = resBody?.resultInfo || {};
+      const paytmMsg = resultInfo.resultMsg || resultInfo.resultCode || "";
+      log("❌ No txnToken in Paytm response:", JSON.stringify(data));
+      // Fallback: try Instamojo when Paytm fails (e.g. 501, invalid MID)
+      try {
+        const instamojoInput = {
+          amount,
+          email,
+          phone: phoneNumber,
+          buyer_name: fullName || email,
+        };
+        const fallbackResult = await createInstamojoPayment(instamojoInput, req);
+        log("✅ Instamojo fallback succeeded; returning redirectUrl");
+        return res.json(fallbackResult);
+      } catch (instamojoErr) {
+        log("⚠️ Instamojo fallback failed:", instamojoErr?.message || String(instamojoErr));
+      }
+      const details = paytmMsg
+        ? `Paytm: ${paytmMsg} (code: ${resultInfo.resultCode || "—"})`
+        : "No txnToken in response";
+      return res.status(500).json({
+        error: "Failed to create payment token",
+        details,
+        resultInfo,
       });
     }
 
-    let sessionData;
-    try {
-      sessionData = JSON.parse(responseText);
-    } catch (parseErr) {
-      log('❌ Failed to parse Cashfree response:', parseErr);
-      return res.status(500).json({ 
-        error: "Invalid response from payment gateway",
-        details: responseText
-      });
-    }
-    
-    // Save order to MongoDB (optional, don't fail if DB is unavailable)
+    log(`✅ Paytm txnToken received for ${orderId}`);
+
+    // Save order to MongoDB (minimal fields only; do not store large report payloads here)
     try {
       const database = await connectDB();
       if (database) {
         const collection = database.collection(COLLECTION_NAME);
         await collection.insertOne({
           orderId,
-          email,
-          fullName,
-          phoneNumber,
-          amount: orderAmount,
-          paymentSessionId: sessionData.payment_session_id,
+          email: email || "",
+          fullName: fullName || email || "",
+          phoneNumber: phoneNumber || "",
+          amount: Number(amount),
           status: "created",
+          provider: "paytm",
           createdAt: new Date(),
         });
         log(`✅ Order saved to MongoDB: ${orderId}`);
       }
     } catch (dbErr) {
-      log('⚠️ Failed to save order to MongoDB (continuing anyway):', dbErr.message);
+      log(
+        "⚠️ Failed to save order to MongoDB (continuing anyway):",
+        dbErr.message
+      );
     }
 
-    // Cashfree returns payment_session_id in the response
-    const paymentSessionId = sessionData.payment_session_id || sessionData.paymentSessionId || sessionData.session_id;
-    
-    if (!paymentSessionId) {
-      log('❌ No payment session ID in response:', JSON.stringify(sessionData));
-      return res.status(500).json({ 
-        error: "Payment session ID not found in response",
-        details: sessionData
+    // Return txnToken + payment URL to frontend
+    res.json({
+      orderId,
+      txnToken,
+      mid: PAYTM_MID,
+      paytmPaymentUrl: PAYTM_PAYMENT_URL,
+      amount: Number(amount),
+      currency: "INR",
+    });
+  } catch (err) {
+    log("❌ Error creating Paytm order:", err.message);
+    console.error("Paytm createOrder error:", err);
+    res.status(500).json({
+      error: "Failed to create Paytm order",
+      details: err.message,
+    });
+  }
+});
+
+function redirectHtml(url) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url.replace(/"/g, "&quot;")}"></head><body>Redirecting…</body></html>`;
+}
+
+// Paytm callback (user's browser is redirected here after payment; Paytm POSTs form data)
+app.post(
+  "/api/payment/paytm-callback",
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
+
+    // (Paytm callback body - verify route removed)
+    try {
+      const body = { ...req.body };
+      const checksumHash = body.CHECKSUMHASH || body.checksumhash;
+      const orderId = body.ORDERID || body.orderId || body.ORDER_ID;
+
+      log(`📥 Paytm callback: ORDERID=${orderId}, STATUS=${body.STATUS || body.status}`);
+      log(`   RESPCODE=${body.RESPCODE}, RESPMSG=${body.RESPMSG}`);
+      log(`   Full callback body: ${JSON.stringify(body)}`);
+
+      if (!orderId) {
+        log(`❌ Missing orderId in callback`);
+        return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_callback`));
+      }
+
+      const status = (body.STATUS || body.status || "").toUpperCase();
+
+      // If CHECKSUMHASH is missing, we can still handle failures safely
+      // but we MUST have it for successful payments (security)
+      if (!checksumHash) {
+        log(`⚠️ No CHECKSUMHASH in callback (status=${status})`);
+        if (status === "TXN_SUCCESS") {
+          return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_callback`));
+        }
+        // For failures, redirect to failed page without verification
+        return res.send(redirectHtml(`${BASE_URL}/?payment=failed&order=${encodeURIComponent(orderId)}`));
+      }
+
+      // Remove CHECKSUMHASH from body before verifying (must not be part of the signed data)
+      const verifyBody = { ...body };
+      delete verifyBody.CHECKSUMHASH;
+      delete verifyBody.checksumhash;
+
+      const isSignatureValid = PaytmChecksum.verifySignature(verifyBody, PAYTM_MERCHANT_KEY, checksumHash);
+      if (!isSignatureValid) {
+        log(`❌ Invalid checksum in callback for ${orderId}`);
+        return res.status(400).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=invalid_checksum`));
+      }
+
+      log(`✅ Checksum verified for ${orderId}, status=${status}`);
+
+      if (status !== "TXN_SUCCESS") {
+        return res.send(redirectHtml(`${BASE_URL}/?payment=failed&order=${encodeURIComponent(orderId)}`));
+      }
+
+      const txnId = body.TXNID || body.txnId || "";
+      const accessToken = crypto.randomBytes(32).toString("hex");
+      const postPurchaseLink = `${BASE_URL}/post-purchase?token=${encodeURIComponent(accessToken)}&order=${encodeURIComponent(orderId)}`;
+
+      try {
+        const database = await connectDB();
+        if (database) {
+          const collection = database.collection(COLLECTION_NAME);
+          const existingOrder = await collection.findOne({ orderId });
+          const updateData = {
+            status: "paid",
+            paymentId: txnId,
+            verifiedAt: new Date(),
+            postPurchaseLink,
+            accessToken,
+            emailSent: false,
+          };
+          if (!existingOrder?.report && Array.isArray(existingOrder?.cards) && existingOrder.cards.length > 0) {
+            updateData.report = buildStoredReport({ cards: existingOrder.cards, profile: existingOrder.profile });
+          }
+          await collection.updateOne({ orderId }, { $set: updateData });
+          log(`✅ Order ${orderId} marked as paid`);
+          const order = await collection.findOne({ orderId });
+          if (order?.email) {
+            if (order.username) {
+              try {
+                const cleanUsername = order.username.replace(/^@/, "").toLowerCase().trim();
+                await User.findOneAndUpdate(
+                  { username: cleanUsername },
+                  { $set: { paymentDetails: { orderId, paymentId: txnId }, isPaid: true, email: order.email, fullName: order.fullName || "", phoneNumber: order.phoneNumber || "", updatedAt: new Date() } },
+                  { upsert: true }
+                );
+                log(`✅ User updated in Mongoose (Paytm): ${cleanUsername}`);
+              } catch (mongooseErr) {
+                log(`⚠️ Mongoose update failed: ${mongooseErr.message}`);
+              }
+            }
+            sendPostPurchaseEmail(order.email, order.fullName || "Customer", postPurchaseLink)
+              .then(() => collection.updateOne({ orderId }, { $set: { emailSent: true, emailSentAt: new Date() } }).catch(() => { }))
+              .catch((emailErr) => log(`⚠️ Email failed: ${emailErr.message}`));
+          }
+        }
+      } catch (dbErr) {
+        log(`⚠️ DB error in callback: ${dbErr.message}`);
+      }
+
+      // Redirect to /successfully-paid so frontend shows success and restores cards from localStorage (previous working setup)
+      const successRedirectUrl = `${BASE_URL}/successfully-paid`;
+      res.send(redirectHtml(successRedirectUrl));
+    } catch (err) {
+      log(`❌ Paytm callback error: ${err.message}`);
+      res.status(500).send(redirectHtml(`${BASE_URL}/?payment=failed&reason=error`));
+    }
+  }
+);
+
+// (Razorpay verify route removed)
+// Validate post-purchase link endpoint (kept from original - not Cashfree-specific)
+app.get("/api/payment/post-purchase", async (req, res) => {
+  try {
+    const { token, order } = req.query;
+
+    if (!token || !order) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing token or order parameter",
       });
     }
 
-    log(`✅ Payment session created: ${orderId}, Session ID: ${paymentSessionId}`);
-    
-    res.json({
-      success: true,
-      orderId,
-      paymentSessionId: paymentSessionId,
-      paymentData: sessionData,
+    log(`🔍 Validating post-purchase link: order=${order}`);
+
+    try {
+      const database = await connectDB();
+      if (!database) {
+        return res.status(500).json({
+          success: false,
+          error: "Database not available",
+        });
+      }
+
+      const collection = database.collection(COLLECTION_NAME);
+      const orderDoc = await collection.findOne({
+        orderId: order,
+        accessToken: token,
+        status: "paid",
+      });
+
+      if (!orderDoc) {
+        log(
+          `❌ Invalid post-purchase link: order=${order}, token=${token.substring(
+            0,
+            10
+          )}...`
+        );
+        return res.status(404).json({
+          success: false,
+          error: "Invalid or expired link",
+        });
+      }
+
+      log(`✅ Post-purchase link validated: order=${order}`);
+      res.json({
+        success: true,
+        orderId: orderDoc.orderId,
+        email: orderDoc.email,
+        fullName: orderDoc.fullName,
+        // Return stored profile data
+        username: orderDoc.username || null,
+        cards: orderDoc.cards || [],
+        profile: orderDoc.profile || null,
+        report: orderDoc.report || null,
+      });
+    } catch (dbErr) {
+      log(`❌ Database error validating post-purchase link: ${dbErr.message}`);
+      res.status(500).json({
+        success: false,
+        error: "Failed to validate link",
+      });
+    }
+  } catch (error) {
+    log(`❌ Error validating post-purchase link: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to validate link",
     });
-  } catch (err) {
-    log('❌ Error creating payment session:', err.message);
-    res.status(500).json({ error: "Failed to create payment session" });
   }
 });
+
+// ============================================================================
+// COMMENTED OUT: CASHFREE PAYMENT ROUTES (replaced by Razorpay above)
+// ============================================================================
+// app.post("/api/payment/create-session", async (req, res) => { ... });
+// app.get("/api/payment/environment", async (req, res) => { ... });
+// app.get("/api/payment/verify", async (req, res) => { ... });
+// app.post("/api/payment/verify", async (req, res) => { ... });
+// app.get("/api/payment/post-purchase", async (req, res) => { ... });
+// app.get("/api/payment/test-credentials", async (req, res) => { ... });
+
 
 // New endpoint: Serve HTML snapshots from MongoDB
 app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
   const { snapshotId, stepName } = req.params;
-  
+
   try {
     const html = await getSnapshotStep(snapshotId, stepName);
-    
+
     if (!html) {
       return res.status(404).json({ error: "Snapshot not found" });
     }
-    
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
   } catch (err) {
     log(`❌ Error serving snapshot: ${err.message}`);
@@ -293,144 +1307,264 @@ app.get("/api/snapshots/:snapshotId/:stepName", async (req, res) => {
   }
 });
 
+// New endpoint: Get snapshot metadata (including profileData)
+app.get("/api/snapshots/:snapshotId/:stepName/meta", async (req, res) => {
+  const { snapshotId, stepName } = req.params;
+
+  try {
+    const database = await connectDB();
+    if (!database) {
+      return res.status(500).json({ error: "Database not available" });
+    }
+
+    const collection = database.collection("snapshots");
+    const snapshot = await collection.findOne({
+      _id: new ObjectId(snapshotId)
+    });
+
+    if (!snapshot) {
+      return res.status(404).json({ error: "Snapshot not found" });
+    }
+
+    const step = snapshot.steps?.find(s => s.name === stepName);
+    if (!step) {
+      return res.status(404).json({ error: "Step not found" });
+    }
+
+    // Return metadata including profileData
+    res.json({
+      name: step.name,
+      meta: step.meta || {},
+      capturedAt: step.capturedAt || snapshot.createdAt
+    });
+  } catch (err) {
+    log(`❌ Error serving snapshot metadata: ${err.message}`);
+    res.status(500).json({ error: "Failed to retrieve snapshot metadata" });
+  }
+});
+
 app.get("/api/stalkers", async (req, res) => {
   const startTime = Date.now();
   const username = req.query.username;
-  
-  log(`📥 New request received for username: ${username || 'MISSING'}`);
-  
+
+  log(`📥 New request received for username: ${username || "MISSING"}`);
+
   if (!username) {
-    log('❌ Request rejected: username required');
+    log("❌ Request rejected: username required");
     return res.json({ error: "username required" });
   }
 
-  // Cache check disabled - always start a new scrape for fresh data
-  // Check for recent cached snapshot (within last hour)
-  // try {
-  //   const recentSnapshot = await getRecentSnapshot(username, 60); // 60 minutes cache
-  //   if (recentSnapshot) {
-  //     log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
-  //     
-  //     const cachedSteps = recentSnapshot.steps.map(step => ({
-  //       name: step.name,
-  //       htmlPath: `/api/snapshots/${recentSnapshot._id}/${step.name}`,
-  //       meta: step.meta
-  //     }));
-  //     
-  //     return res.json({
-  //       cards: recentSnapshot.cards || [],
-  //       steps: cachedSteps,
-  //       snapshotId: recentSnapshot._id.toString(),
-  //       runId: recentSnapshot.runId,
-  //       cached: true
-  //     });
-  //   }
-  // } catch (cacheErr) {
-  //   log(`⚠️  Error checking cache: ${cacheErr.message}`);
-  //   // Continue with scraping if cache check fails
-  // }
+  // Check for recent cached snapshot (within last 30 minutes)
+  try {
+    const recentSnapshot = await getRecentSnapshot(username, 30); // 30 minutes cache
+    if (recentSnapshot) {
+      log(`✅ Found cached snapshot for ${username} (created ${((Date.now() - recentSnapshot.createdAt) / 1000).toFixed(0)}s ago)`);
+
+      // Mock steps for frontend playback if needed
+      const cachedSteps = (recentSnapshot.steps || []).map(step => ({
+        name: step.name,
+        data: step.data, // Raw JSON data
+        capturedAt: step.capturedAt
+      }));
+
+      return res.json({
+        cards: recentSnapshot.cards || [],
+        steps: cachedSteps,
+        profileData: recentSnapshot.profileData,
+        runId: recentSnapshot.runId,
+        snapshotId: recentSnapshot._id.toString(),
+        cached: true,
+        totalTime: "0.00"
+      });
+    }
+  } catch (cacheErr) {
+    log(`⚠️  Error checking cache: ${cacheErr.message}`);
+    // Continue with scraping if cache check fails
+  }
 
   // Check if client wants SSE streaming (EventSource)
-  const acceptHeader = req.headers.accept || '';
-  const wantsSSE = acceptHeader.includes('text/event-stream') || req.query.stream === 'true';
-  
+  const acceptHeader = req.headers.accept || "";
+  const wantsSSE =
+    acceptHeader.includes("text/event-stream") || req.query.stream === "true";
+
   if (wantsSSE) {
     // Server-Sent Events streaming mode
     log(`📡 Starting SSE streaming for username: ${username}`);
-    
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Cache-Control",
+      "X-Accel-Buffering": "no", // Disable NGINX buffering
     });
+
+    // Send initial connection message
+    res.write(`: connected\n\n`);
+
+    // Flush headers immediately
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
 
     const send = (event, data) => {
       try {
-        res.write(`event: ${event}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        res.write(message);
+        // Force flush to ensure real-time delivery
+        if (typeof res.flush === "function") {
+          res.flush();
+        }
+        log(
+          `📤 SSE event sent: ${event} (${event === "snapshot" ? data.name : "final"
+          })`
+        );
       } catch (err) {
         log(`⚠️ Error sending SSE event: ${err.message}`);
       }
     };
 
     // Use queue to handle concurrent requests
-    scrapeQueue.enqueue(username, async (username) => {
-      return await scrape(username, (step) => {
-        log(`📤 Emitting snapshot via SSE: ${step.name}`);
-        send("snapshot", step);
+    scrapeQueue
+      .enqueue(username, async (username) => {
+        return await scrape(username, (step) => {
+          log(`📤 Emitting snapshot via SSE: ${step.name}`);
+          send("snapshot", step);
+        });
+      })
+      .then((finalResult) => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        log(`✅ Scrape completed successfully in ${duration}s`);
+        log(
+          `📊 Sending final result with ${finalResult.cards?.length || 0} cards`
+        );
+        send("done", finalResult);
+        res.end();
+      })
+      .catch((err) => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        const errorMessage =
+          err?.message || err?.toString() || "Unknown error occurred";
+        log(`❌ Scrape failed after ${duration}s:`, errorMessage);
+        send("error", { error: errorMessage });
+        res.end();
       });
-    })
-    .then((finalResult) => {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      log(`✅ Scrape completed successfully in ${duration}s`);
-      log(`📊 Sending final result with ${finalResult.cards?.length || 0} cards`);
-      send("done", finalResult);
-      res.end();
-    })
-    .catch((err) => {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
-      log(`❌ Scrape failed after ${duration}s:`, errorMessage);
-      send("error", { error: errorMessage });
-      res.end();
-    });
 
     // Handle client disconnect
-    req.on('close', () => {
+    req.on("close", () => {
       log(`🔌 Client disconnected for username: ${username}`);
       res.end();
     });
   } else {
     // Legacy mode: return everything at once (for backward compatibility)
     log(`⏱️  Starting scrape process... (this may take 30-60 seconds)`);
-    
+
     try {
       // Use queue to handle concurrent requests
       const result = await scrapeQueue.enqueue(username, scrape);
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       log(`✅ Scrape completed successfully in ${duration}s`);
-      log(`📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0} snapshots`);
+      log(
+        `📊 Returning ${result.cards?.length || 0} cards and ${result.steps?.length || 0
+        } snapshots`
+      );
       res.json(result);
     } catch (err) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      const errorMessage = err?.message || err?.toString() || 'Unknown error occurred';
+      const errorMessage =
+        err?.message || err?.toString() || "Unknown error occurred";
       log(`❌ Scrape failed after ${duration}s:`, errorMessage);
-      log(`📋 Error details:`, err?.stack || 'No stack trace available');
-      log(`📋 Full error object:`, JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      log(`📋 Error details:`, err?.stack || "No stack trace available");
+      log(
+        `📋 Full error object:`,
+        JSON.stringify(err, Object.getOwnPropertyNames(err))
+      );
       res.json({ error: errorMessage });
     }
   }
 });
 
+// Get system stats endpoint (browsers, tabs, users)
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Get counts from Redis (shared across all PM2 processes)
+    let activeTabs = 0;
+    let activeBrowsers = 0;
+
+    try {
+      activeTabs = Number((await redis.get("active_tabs")) || 0);
+      activeBrowsers = Number((await redis.get("active_browsers")) || 0);
+    } catch (err) {
+      log(`⚠️ Redis error reading stats (returning 0): ${err.message}`);
+      // Continue with 0 values if Redis fails
+    }
+
+    res.json({
+      browsers: {
+        max: 4, // MAX_BROWSERS
+        active: activeBrowsers,
+      },
+      tabs: {
+        active: activeTabs,
+      },
+      users: {
+        active: activeTabs, // Each tab = one active user request
+        total: activeTabs,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    log(`❌ Error getting stats: ${err.message}`);
+    res.status(500).json({
+      error: "Failed to get stats",
+      details: err.message,
+    });
+  }
+});
+
+// Initialize MongoDB on server start (non-blocking)
 // Initialize MongoDB on server start (non-blocking)
 connectDB().catch((err) => {
-  log('⚠️ MongoDB connection failed on startup (will retry on first use):', err.message);
+  log(
+    "⚠️ MongoDB connection failed on startup (will retry on first use):",
+    err.message
+  );
 });
+
+// Initialize Mongoose connection
+connectMongoose();
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  log('🛑 SIGTERM received, closing connections...');
+process.on("SIGTERM", async () => {
+  log("🛑 SIGTERM received, closing connections...");
   await browserPool.close();
   await closeDB();
   process.exit(0);
 });
 
-process.on('SIGINT', async () => {
-  log('🛑 SIGINT received, closing connections...');
+process.on("SIGINT", async () => {
+  log("🛑 SIGINT received, closing connections...");
   await browserPool.close();
   await closeDB();
   process.exit(0);
 });
+
+// Register health + diagnostics routes
+registerHealthRoutes(app);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   log(`🚀 API server started on port ${PORT}`);
-  log(`📍 Endpoint: http://localhost:${PORT}/api/stalkers?username=<instagram_username>`);
-  log(`📍 Snapshot Endpoint: http://localhost:${PORT}/api/snapshots/:snapshotId/:stepName`);
-  log(`📍 Payment Endpoint: http://localhost:${PORT}/api/payment/create-session`);
-  log('⏱️  Expected response time: 30-60 seconds per request');
-  log('🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)');
+  log(
+    `📍 Endpoint: http://localhost:${PORT}/api/stalkers?username=<instagram_username>`
+  );
+  log(
+    `📍 Snapshot Endpoint: http://localhost:${PORT}/api/snapshots/:snapshotId/:stepName`
+  );
+  log(
+    `📍 Payment Endpoint: http://localhost:${PORT}/api/payment/create-session`
+  );
+  log("⏱️  Expected response time: 30-60 seconds per request");
+  log("🗄️  Snapshots stored in MongoDB (auto-deleted after 10 minutes)");
 });
-

@@ -1,14 +1,107 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Instagram Stalker Analyzer</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-    <!-- Cashfree Payment Gateway SDK -->
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Permissions-Policy" content="local-network=(), interest-cohort=()" />
+  <title>Instagram Stalker Analyzer</title>
+
+  <!-- Google Tag Manager - COMMENTED OUT -->
+  <!-- <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-PMRFSQJ9');</script> -->
+  <!-- End Google Tag Manager -->
+
+  <!-- Meta Pixel Code -->
+  <script>
+    !function (f, b, e, v, n, t, s) {
+      if (f.fbq) return; n = f.fbq = function () {
+        n.callMethod ?
+          n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+      };
+      if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+      n.queue = []; t = b.createElement(e); t.async = !0;
+      t.src = v; s = b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t, s)
+    }(window, document, 'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+
+    // Immediately init pixel so it is ready before React mounts.
+    // App.jsx will call init again (idempotent) and fire the specific events.
+    var _pixelId = '1752528628790870';
+    if (window.location.hostname.indexOf('sensorahub') !== -1) {
+      _pixelId = '710646615238495';
+    }
+    fbq('init', _pixelId);
+  </script>
+  <!-- End Meta Pixel Code -->
+</head>
+
+<body>
+  <!-- Facebook Pixel Noscript - DISABLED -->
+  <!--
+    <noscript>
+    <img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=1752528628790870&ev=PageView&noscript=1"/>
+    </noscript>
+    -->
+  <!-- End Facebook Pixel Noscript -->
+  <!-- Google Tag Manager (noscript) - COMMENTED OUT -->
+  <!-- <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PMRFSQJ9"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> -->
+  <!-- End Google Tag Manager (noscript) -->
+  <div id="root"></div>
+
+  <!-- DEBUG: Global error overlay — remove before production deploy -->
+  <script>
+    (function () {
+      var overlay = null;
+      function showOverlay(title, msg, stack) {
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = '_debug_overlay';
+          overlay.style.cssText = [
+            'position:fixed', 'top:0', 'left:0', 'right:0', 'bottom:0',
+            'background:#1a0000', 'color:#ff6b6b', 'font-family:monospace',
+            'font-size:13px', 'padding:24px', 'overflow:auto', 'z-index:99999',
+            'white-space:pre-wrap', 'word-break:break-all'
+          ].join(';');
+          document.body.appendChild(overlay);
+        }
+        overlay.textContent = '🚨 ' + title + '\n\n' + msg + (stack ? '\n\nSTACK:\n' + stack : '');
+      }
+      window.onerror = function (msg, src, line, col, err) {
+        showOverlay('JavaScript Error', msg + '\n' + src + ':' + line + ':' + col, err && err.stack);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        var msg = reason instanceof Error ? reason.message : String(reason);
+        var stack = reason instanceof Error ? reason.stack : '';
+        showOverlay('Unhandled Promise Rejection', msg, stack);
+      });
+      console.error = (function (orig) {
+        return function () {
+          orig.apply(console, arguments);
+          var txt = Array.from(arguments).map(function (a) {
+            return a instanceof Error ? a.message + '\n' + a.stack : String(a);
+          }).join(' ');
+          if (txt.toLowerCase().indexOf('error') !== -1 || txt.toLowerCase().indexOf('uncaught') !== -1) {
+            showOverlay('Console Error', txt);
+          }
+        };
+      })(console.error);
+    })();
+  </script>
+  <!-- END DEBUG overlay -->
+
+  <!-- Cashfree Payment Gateway SDK - Will be loaded dynamically based on environment -->
+  <!-- Fallback: Production SDK (will be replaced if test environment is detected) -->
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js" id="cashfree-sdk-fallback"></script>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
