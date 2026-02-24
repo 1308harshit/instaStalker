@@ -14,6 +14,33 @@ class ScrapeQueue {
     this.processing = new Map(); // username -> Promise<result>
     // Track waiting requests for same username
     this.waiting = new Map(); // username -> [resolve functions]
+
+    // Concurrency limiting (Optimization for 1.5h delay)
+    this.maxConcurrentScrapes = 5;
+    this.activeScrapeCount = 0;
+    this.pendingTasks = []; // Queue for tasks waiting for a slot
+  }
+
+  /**
+   * Internal method to process the next task in the pending queue
+   */
+  _processNext() {
+    if (this.pendingTasks.length > 0 && this.activeScrapeCount < this.maxConcurrentScrapes) {
+      const { resolve } = this.pendingTasks.shift();
+      resolve();
+    }
+  }
+
+  /**
+   * Internal method to wait for a slot if at max concurrency
+   */
+  async _waitForSlot() {
+    if (this.activeScrapeCount < this.maxConcurrentScrapes) {
+      return Promise.resolve();
+    }
+    return new Promise(resolve => {
+      this.pendingTasks.push({ resolve });
+    });
   }
 
   /**
@@ -24,10 +51,10 @@ class ScrapeQueue {
     // Check if already processing this username
     if (this.processing.has(username)) {
       log(`⏳ Username ${username} already being processed, waiting for result...`);
-      
+
       // Wait for the existing scrape to complete
       const existingPromise = this.processing.get(username);
-      
+
       // Add this request to waiting list (for logging)
       if (!this.waiting.has(username)) {
         this.waiting.set(username, []);
@@ -35,7 +62,7 @@ class ScrapeQueue {
       this.waiting.get(username).push(() => {
         log(`✅ Waiting request for ${username} will receive result`);
       });
-      
+
       try {
         const result = await existingPromise;
         log(`✅ Waiting request for ${username} received result`);
@@ -46,9 +73,19 @@ class ScrapeQueue {
       }
     }
 
+    // Wait for a concurrency slot before starting a NEW scrape
+    await this._waitForSlot();
+
+    // Check if another request for the SAME username finished while we were waiting for a slot
+    if (this.processing.has(username)) {
+      this._processNext(); // Hand off slot since we won't use it
+      return await this.processing.get(username);
+    }
+
     // Start new scrape
-    log(`🚀 Starting new scrape for username: ${username}`);
-    
+    this.activeScrapeCount++;
+    log(`🚀 Starting new scrape for username: ${username} (Active: ${this.activeScrapeCount}/${this.maxConcurrentScrapes})`);
+
     const scrapePromise = scrapeFunction(username)
       .then((result) => {
         // Notify waiting requests
@@ -71,7 +108,11 @@ class ScrapeQueue {
       .finally(() => {
         // Remove from processing map
         this.processing.delete(username);
-        log(`✅ Completed scrape for username: ${username}`);
+        this.activeScrapeCount--;
+        log(`✅ Completed scrape for username: ${username} (Active: ${this.activeScrapeCount}/${this.maxConcurrentScrapes})`);
+
+        // Trigger next pending task
+        this._processNext();
       });
 
     // Add to processing map

@@ -2,10 +2,20 @@ const clean = (value = "") => value.replace(/\s+/g, " ").trim();
 
 const extractBackgroundImage = (element) => {
   if (!element) return null;
+  
+  // Handle IMG tags directly (case-insensitive for tagName)
+  const tagName = (element.tagName || "").toUpperCase();
+  if (tagName === "IMG" || element.hasAttribute("src")) {
+    const src = element.getAttribute("src") || "";
+    // Only replace &amp; if we're sure it's an HTML snapshot, but be careful not to double-decode
+    return src.includes("&amp;") ? src.replace(/&amp;/g, "&") : src;
+  }
+
   const style = element.getAttribute("style") || "";
   const match = style.match(/url\((.*?)\)/i);
   if (!match) return null;
-  return match[1].replace(/['"&]/g, "");
+  let url = match[1].replace(/['"]/g, "");
+  return url.replace(/&amp;/g, "&");
 };
 
 const hasBlurClass = (node) => {
@@ -457,7 +467,7 @@ export function parseResultsSnapshot(html) {
     'div[role="group"][aria-roledescription="slide"]'
   ).map((slide) => {
     const titleNode = slide.querySelector("h4");
-    const art = slide.querySelector('div[style*="background-image"]');
+    const art = slide.querySelector('div[style*="background-image"], img');
     const textNodes = queryAll(slide, "p, h2, h5, span.text-sm, span.text-base");
     const badgeNode = slide.querySelector(
       ".text-sm.badge, .text-base.badge, span.font-medium.badge"

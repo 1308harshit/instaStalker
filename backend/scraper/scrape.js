@@ -1,7 +1,12 @@
-import { browserPool } from "./browserPool.js";
-import { elements } from "./selectors.js";
-import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
-import { writeFile } from "fs/promises";
+// ============================================================================
+// API-FIRST ARCHITECTURE REFACTOR
+// MongoDB snapshot saving and HTML generation are commented out.
+// SSE now streams raw JSON data directly to frontend.
+// ============================================================================
+
+// COMMENTED OUT: MongoDB snapshot imports (no longer saving HTML snapshots)
+// import { saveSnapshotStep, saveSnapshotResult } from "../utils/mongodb.js";
+import User from "../models/User.js"; // Import Mongoose User model
 
 const DEBUG_SCRAPE = process.env.DEBUG_SCRAPE === "1";
 
@@ -10,394 +15,361 @@ const log = (message, data = null) => {
   console.log(`[${timestamp}] ${message}`, data || "");
 };
 
+// COMMENTED OUT: escapeHtml - no longer generating HTML
+// const escapeHtml = (s) =>
+//   String(s || "")
+//     .replace(/&/g, "&amp;")
+//     .replace(/</g, "&lt;")
+//     .replace(/>/g, "&gt;")
+//     .replace(/"/g, "&quot;")
+//     .replace(/'/g, "&#39;");
+
+// COMMENTED OUT: proxyImage for HTML - frontend will handle proxying
+// const proxyImage = (url) => {
+//   if (!url || !url.includes("fbcdn.net")) return url;
+//   return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/&amp;/g, "&"))}`;
+// };
+
+// ============================================================================
+// COMMENTED OUT: HTML GENERATION FUNCTIONS
+// These functions built synthetic HTML for parsing. No longer needed with API-first approach.
+// ============================================================================
+
+// /** Build synthetic profile-confirm HTML parseable by parseProfileSnapshot */
+// function buildProfileConfirmHtml(profile) {
+//   const username = profile.username?.startsWith("@")
+//     ? profile.username
+//     : `@${profile.username || ""}`;
+//   let rawAvatar =
+//     (profile.hd_profile_pic_url_info &&
+//       profile.hd_profile_pic_url_info.url) ||
+//     profile.profile_pic_url ||
+//     profile.base64_profile_pic ||
+//     "";
+//   if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
+//     rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
+//   }
+//   const avatar = rawAvatar;
+//   const name = escapeHtml(profile.full_name || username.replace("@", ""));
+//   const proxiedAvatar = proxyImage(avatar);
+//   return `<!DOCTYPE html><html><body>
+//     <div style="background-image: url('${proxiedAvatar}')">
+//       <img src="${proxiedAvatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
+//     </div>
+//     <span>${escapeHtml(username)}</span>
+//     <h1>Hello, ${name}</h1>
+//     <p>Is this your profile?</p>
+//     <button>Continue, the profile is correct</button>
+//     <button>No, I want to correct it</button>
+//     <div style="width: 55%"></div>
+//   </body></html>`;
+// }
+
+// /** Build synthetic processing HTML parseable by parseProcessingSnapshot */
+// function buildProcessingHtml(profile) {
+//   const username = profile.username?.startsWith("@")
+//     ? profile.username
+//     : `@${profile.username || ""}`;
+//   let rawAvatar =
+//     (profile.hd_profile_pic_url_info &&
+//       profile.hd_profile_pic_url_info.url) ||
+//     profile.profile_pic_url ||
+//     profile.base64_profile_pic ||
+//     "";
+//   if (rawAvatar && !/^https?:\/\//i.test(rawAvatar) && !rawAvatar.startsWith("data:")) {
+//     rawAvatar = `data:image/jpeg;base64,${rawAvatar}`;
+//   }
+//   const avatar = rawAvatar;
+//   const proxiedAvatar = proxyImage(avatar);
+//   return `<!DOCTYPE html><html><body>
+//     <div style="background-image: url('${proxiedAvatar}')">
+//       <img src="${proxiedAvatar}" alt="${escapeHtml(username)}" referrerpolicy="no-referrer" />
+//     </div>
+//     <h1>Processing data</h1>
+//     <p>Our robots are analyzing the behavior of your followers</p>
+//     <ul>
+//       <li>Found ${Math.floor(Math.random() * 15) + 5} mentions of ${escapeHtml(username)} in private messages</li>
+//       <li>Our AI detected a high-probability screenshot from a hidden follower</li>
+//       <li>Geo-analysis: 2 people from your region shared your recent stories</li>
+//       <li>Tracker: Someone near your location visited your profile ${Math.floor(Math.random() * 8) + 4} times this week</li>
+//     </ul>
+//   </body></html>`;
+// }
+
+// /** Build synthetic results HTML parseable by parseResultsSnapshot (slider cards) */
+// function buildResultsHtml(cards) {
+//   const slideHtml = cards
+//     .slice(0, 50)
+//     .map((card) => {
+//       const u = (card.username || "").startsWith("@")
+//         ? card.username
+//         : `@${card.username}`;
+//       const img = proxyImage(card.image || "");
+//       return `
+//     <div role="group" aria-roledescription="slide">
+//       <h4>${escapeHtml(u)}</h4>
+//       <div class="result-image" style="width:100%; height:250px; background:#f0f0f0; overflow:hidden;">
+//         <img src="${img}" alt="${escapeHtml(u)}" referrerpolicy="no-referrer" style="width:100%; height:100%; object-fit:cover;" onerror="this.setAttribute('data-error', '1')" />
+//       </div>
+//       <p>visited your profile this week</p>
+//     </div>`;
+//     })
+//     .join("");
+//   return `<!DOCTYPE html><html><body>
+//     <h3>Visited your profile this week between 2 to 7 times:</h3>
+//     <div>${slideHtml}</div>
+//   </body></html>`;
+// }
+
+// COMMENTED OUT: Minimal HTML for placeholder steps
+// const MINIMAL_HTML = "<!DOCTYPE html><html><body></body></html>";
+
+// ============================================================================
+// NEW: Helper to extract best avatar from API data (base64 preferred)
+// ============================================================================
+const getAvatarFromApiData = (data) => {
+  if (!data) return null;
+  // Priority: base64 → profile_pic_url → HD URL
+  if (data.base64_profile_pic) {
+    const raw = String(data.base64_profile_pic).trim();
+    if (raw) {
+      return raw.startsWith("data:") ? raw : `data:image/jpeg;base64,${raw}`;
+    }
+  }
+  if (data.profile_pic_url) {
+    return data.profile_pic_url;
+  }
+  if (data.hd_profile_pic_url_info?.url) {
+    return data.hd_profile_pic_url_info.url;
+  }
+  return null;
+};
+
+// ============================================================================
+// NEW: Fetch with timeout helper
+// ============================================================================
+const fetchWithTimeout = async (url, options = {}, timeout = 60000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request to ${url} timed out after ${timeout}ms`);
+    }
+    throw error;
+  }
+};
+
+// ============================================================================
+// MAIN SCRAPE FUNCTION - API-FIRST ARCHITECTURE
+// ============================================================================
 export async function scrape(username, onStep = null) {
   const startTime = Date.now();
-  log(`🚀 Starting scrape for username: ${username}`);
-  
-  // Use shared browser pool - creates new page from existing browser instance
-  const page = await browserPool.createPage();
-  log('✅ New page created from shared browser');
+  log(`🚀 Starting API-based scrape for username: ${username}`);
+
+  const rawUsername = (username || "").replace(/^@/, "").trim();
+  if (!rawUsername) {
+    throw new Error("Username is required");
+  }
 
   const runId = `${Date.now()}`;
   const steps = [];
   let stepIndex = 0;
-  let snapshotId = null; // Will be set after first save
 
-  const captureStep = async (name, meta = {}) => {
-    try {
-      stepIndex += 1;
-      const html = await page.content();
-      
-      // Save to MongoDB
-      const result = await saveSnapshotStep(username, runId, name, html, meta);
-      
-      if (!result || !result.snapshotId) {
-        log(`⚠️  Failed to save snapshot step "${name}" to MongoDB`);
-        return null;
-      }
+  // ============================================================================
+  // NEW: emitStep - sends raw JSON data via SSE (replaces captureStep)
+  // ============================================================================
+  const emitStep = (name, data = {}) => {
+    stepIndex += 1;
+    const entry = {
+      name,
+      data,  // Raw JSON data instead of htmlPath
+      capturedAt: new Date().toISOString(),
+    };
+    steps.push(entry);
+    log(`📤 Emitting step "${name}" with data`);
 
-      // Update snapshotId if we got it from first save
-      if (!snapshotId && result.snapshotId) {
-        snapshotId = result.snapshotId;
-      }
-
-      const entry = {
-        name,
-        htmlPath: `/api/snapshots/${result.snapshotId}/${name}`, // API endpoint
-        meta: { ...meta, capturedAt: new Date().toISOString() },
-      };
-      steps.push(entry);
-      log(`📝 Snapshot saved for "${name}" to MongoDB (ID: ${result.snapshotId})`);
-      
-      // Emit step immediately if callback provided (for SSE streaming)
-      if (onStep) {
-        onStep(entry);
-      }
-      
-      return entry;
-    } catch (snapshotErr) {
-      log(`⚠️  Failed to capture snapshot for "${name}"`, snapshotErr.message);
-      return null;
+    if (onStep) {
+      onStep(entry);
     }
+
+    return entry;
   };
 
   try {
-    // Step 1: Navigate to page - use domcontentloaded for faster load
-    log('📍 Navigating to page...');
-    await page.goto("https://oseguidorsecreto.com/pv-en", {
-      waitUntil: "domcontentloaded",
-      timeout: 20000,
-    });
-    log('✅ Page loaded');
-    await captureStep("landing", { url: page.url() });
+    // —— API 1: Verify User ——
+    log("📡 Calling verify-user API...");
+    const verifyRes = await fetchWithTimeout(
+      "https://server.oraculoproibido.com/verify-user",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: rawUsername }),
+      },
+      30000 // 30s timeout for verify
+    );
 
-    // Step 2: Find and click "Reveal Stalkers" button immediately (no start button exists)
-    log('🔍 Looking for "Reveal Stalkers" button...');
-    const revealButtonSelector = "button:has-text('Reveal Stalkers')";
-    
-    try {
-      // Wait for button with shorter timeout
-      await page.waitForSelector(revealButtonSelector, { 
-        timeout: 10000,
-        state: 'visible' 
-      });
-      log('✅ "Reveal Stalkers" button found');
-      
-      // Click immediately
-      await page.click(revealButtonSelector);
-      log('✅ Clicked "Reveal Stalkers" button');
-    } catch (err) {
-      log('❌ Error finding "Reveal Stalkers" button:', err.message);
-      const buttons = await page.$$eval('button', buttons => 
-        buttons.map(b => b.textContent?.trim()).filter(Boolean)
+    if (!verifyRes.ok) {
+      const errText = await verifyRes.text();
+      throw new Error(`verify-user API failed (${verifyRes.status}): ${errText}`);
+    }
+
+    const profile = await verifyRes.json();
+    if (!profile || !profile.id) {
+      throw new Error(
+        "verify-user API returned invalid data (missing id)"
       );
-      log('📋 Available buttons on page:', buttons);
-      throw new Error(`Could not find "Reveal Stalkers" button. Available buttons: ${buttons.join(', ')}`);
     }
 
-    // Step 3: Wait for input field and enter username
-    log(`⌨️  Waiting for username input field...`);
-    try {
-      // Wait for input field to appear (after clicking Reveal Stalkers)
-      const input = await page.waitForSelector('input[type="text"], input', { 
-        timeout: 8000,
-        state: 'visible' 
-      });
-      log('✅ Username input found');
-      
-      // Fill username immediately
-      await input.fill(username);
-      log(`✅ Username "${username}" entered`);
-      await captureStep("username-entry", { username });
-    } catch (err) {
-      log('❌ Error finding username input:', err.message);
-      const inputs = await page.$$eval('input, textarea', inputs => 
-        inputs.map(inp => ({
-          type: inp.type,
-          placeholder: inp.placeholder,
-          name: inp.name,
-          id: inp.id,
-          className: inp.className
-        }))
+    log(`✅ Profile verified: ${profile.username} (id: ${profile.id})`);
+
+    // ============================================================================
+    // EMIT STEPS WITH RAW JSON DATA (no more HTML)
+    // ============================================================================
+
+    // Step 1: Landing (no data needed)
+    emitStep("landing", { url: "api" });
+
+    // Step 2: Username entry
+    emitStep("username-entry", { username: rawUsername });
+
+    // Step 3: Analyzing (no data needed)
+    emitStep("analyzing", {});
+
+    // Step 4: Profile confirm - send full profile data
+    const profileData = {
+      username: profile.username,
+      full_name: profile.full_name,
+      profile_pic_url: profile.profile_pic_url,
+      base64_profile_pic: profile.base64_profile_pic,
+      hd_profile_pic_url_info: profile.hd_profile_pic_url_info,
+      avatar: getAvatarFromApiData(profile),
+      follower_count: profile.follower_count,
+      following_count: profile.following_count,
+      is_private: profile.is_private,
+      is_verified: profile.is_verified,
+      id: profile.id,
+    };
+    emitStep("profile-confirm", { profileData });
+
+    // Step 5: Processing
+    emitStep("processing", { profileData });
+
+    // —— API 2: Followers ——
+    log("📡 Calling followers API...");
+    const followersRes = await fetchWithTimeout(
+      "https://server.oraculoproibido.com/followers",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ig: rawUsername,
+          userId: profile.id,
+          isPrivate: !!profile.is_private,
+        }),
+      },
+      120000 // 120s timeout for followers (can be slow)
+    );
+
+    if (!followersRes.ok) {
+      const errText = await followersRes.text();
+      throw new Error(
+        `followers API failed (${followersRes.status}): ${errText}`
       );
-      log('📋 Available inputs on page:', inputs);
-      throw new Error(`Could not find username input. Available inputs: ${JSON.stringify(inputs)}`);
     }
 
-    // Step 4: Click first "Continue" button
-    log('🔍 Looking for Continue button...');
-    try {
-      const continueBtn = await page.waitForSelector(elements.continueBtn, { 
-        timeout: 8000,
-        state: 'visible' 
-      });
-      log('✅ Continue button found');
-      
-      // Click immediately - no wait
-      await continueBtn.click();
-      log('✅ Clicked Continue button');
-      
-      // Minimal wait for page to update (just 100ms)
-      await page.waitForTimeout(100);
-      log("⏳ Waiting for analyzing view...");
-      try {
-        await page.waitForSelector("text=Analyzing", { timeout: 8000 });
-        await captureStep("analyzing");
-      } catch (waitErr) {
-        log("⚠️  Could not capture analyzing view:", waitErr.message);
-      }
-    } catch (err) {
-      log('❌ Error finding Continue button:', err.message);
-      throw new Error(`Could not find Continue button: ${err.message}`);
-    }
+    const followers = await followersRes.json();
+    const followersList = Array.isArray(followers) ? followers : [];
 
-    // Step 5: Click "Continue, the profile is correct" button
-    log('🔍 Looking for profile confirmation button...');
-    try {
-      // Wait for page to update after clicking Continue
-      await page.waitForTimeout(2000);
-      
-      // First, capture the profile-confirm snapshot (we're already on that page)
-      try {
-        const displayedHandle = await page
-          .locator("text=/^@/i")
-          .first()
-          .textContent();
-        await captureStep("profile-confirm", {
-          displayedHandle: displayedHandle?.trim() || null,
-        });
-      } catch (handleErr) {
-        await captureStep("profile-confirm");
-        log("⚠️  Unable to capture profile confirm metadata:", handleErr.message);
-      }
-      
-      // Try to find button using locator API (more flexible)
-      let confirmButton = null;
-      const buttonTexts = [
-        "Continue, the profile is correct",
-        "profile is correct",
-        "Continue",
-      ];
-      
-      for (const buttonText of buttonTexts) {
-        try {
-          log(`🔍 Trying to find button with text: "${buttonText}"`);
-          const locator = page.locator(`button:has-text("${buttonText}")`).first();
-          
-          // Wait for button to be visible
-          await locator.waitFor({ state: 'visible', timeout: 3000 });
-          
-          // Check if it's actually visible
-          const isVisible = await locator.isVisible();
-          if (isVisible) {
-            confirmButton = locator;
-            log(`✅ Profile confirmation button found with text: "${buttonText}"`);
-            break;
-          }
-        } catch (e) {
-          log(`⚠️  Button with text "${buttonText}" not found, trying next...`);
-          continue;
-        }
-      }
-      
-      // If still not found, try to find any visible button
-      if (!confirmButton) {
-        log('🔍 Trying to find any visible button...');
-        try {
-          const allButtons = await page.locator('button').all();
-          for (const btn of allButtons) {
-            const isVisible = await btn.isVisible();
-            if (isVisible) {
-              const text = await btn.textContent();
-              log(`📋 Found visible button with text: "${text?.trim()}"`);
-              confirmButton = btn;
-              break;
-            }
-          }
-        } catch (e) {
-          log('⚠️  Could not find any visible buttons');
-        }
-      }
-      
-      if (!confirmButton) {
-        // Log all buttons for debugging
-        const allButtons = await page.evaluate(() => {
-          const buttons = Array.from(document.querySelectorAll('button'));
-          return buttons.map(b => ({
-            text: b.textContent?.trim(),
-            visible: b.offsetParent !== null,
-            className: b.className,
-            id: b.id,
-            type: b.type
-          }));
-        });
-        log('📋 All buttons on page:', JSON.stringify(allButtons, null, 2));
-        throw new Error('No profile confirmation button found');
-      }
+    log(`✅ Fetched ${followersList.length} followers`);
 
-      // Click the button
-      await confirmButton.click();
-      log('✅ Clicked profile confirmation button');
-      
-      // Wait for page to update
-      await page.waitForTimeout(500);
-    } catch (err) {
-      log('❌ Error finding profile confirmation button:', err.message);
-      // Try to capture the current state for debugging
-      try {
-        await captureStep("profile-confirm-error");
-        log('📸 Captured error state snapshot');
-      } catch (snapshotErr) {
-        log('⚠️  Could not capture error snapshot:', snapshotErr.message);
-      }
-      throw new Error(`Could not find profile confirmation button: ${err.message}`);
-    }
+    // Map to frontend card format with avatar extraction
+    const cards = followersList.map((item) => ({
+      username: (item.username || "").startsWith("@")
+        ? item.username
+        : `@${item.username || ""}`,
+      image: getAvatarFromApiData(item),
+      // Include raw data for frontend flexibility
+      profile_pic_url: item.profile_pic_url,
+      base64_profile_pic: item.base64_profile_pic,
+      full_name: item.full_name,
+    }));
 
-    try {
-      log("⏳ Waiting for processing view...");
-      await page.waitForSelector("text=Processing data", { timeout: 10000 });
-      await captureStep("processing");
-    } catch (procErr) {
-      log("⚠️  Could not capture processing view:", procErr.message);
-    }
+    // Step 6: Results - send followers/cards data
+    emitStep("results", { cards, followersList });
 
-    // Step 6: Wait for analysis to complete and cards to appear (~35 seconds)
-    // Use ultra-aggressive polling - check every 100ms for fastest detection
-    log('⏳ Waiting for analysis to complete (this takes ~35 seconds)...');
-    
-    const analysisStartTime = Date.now();
-    const maxWaitTime = 60000; // Max 60 seconds
-    const pollInterval = 100; // Check every 100ms - ultra fast!
-    let cardsFound = false;
-    let lastLogTime = 0;
-    
-    // Use aggressive polling with minimal overhead
-    while (!cardsFound && (Date.now() - analysisStartTime) < maxWaitTime) {
-      try {
-        // Ultra-fast check using evaluate - single DOM query
-        const result = await page.evaluate((selector) => {
-          const cards = document.querySelectorAll(selector);
-          if (cards.length === 0) return false;
-          
-          // Check if at least one card is visible
-          for (const card of cards) {
-            const rect = card.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) {
-              return true;
-            }
-          }
-          return false;
-        }, elements.finalCard);
-        
-        if (result) {
-          cardsFound = true;
-          const elapsed = ((Date.now() - analysisStartTime) / 1000).toFixed(1);
-          log(`✅ Cards appeared after ${elapsed} seconds!`);
-          break;
-        }
-      } catch (e) {
-        // Continue polling
-      }
-      
-      // Log progress every 3 seconds (less frequent logging = faster)
-      const elapsed = Date.now() - analysisStartTime;
-      if (elapsed - lastLogTime > 3000) {
-        log(`⏳ Still waiting... ${(elapsed / 1000).toFixed(1)}s elapsed`);
-        lastLogTime = elapsed;
-      }
-      
-      // Very short wait before next poll
-      await page.waitForTimeout(pollInterval);
-    }
-    
-    if (!cardsFound) {
-      throw new Error('Cards did not appear within timeout period');
-    }
-
-    await captureStep("results");
-
-    // Cards are already verified in step 6 polling, proceed to extraction
-
-    log('📦 Extracting card data...');
-    const data = await page.evaluate(() => {
-      const cards = [...document.querySelectorAll("div[role='group']")];
-
-      return cards.map((el, index) => {
-        const imageDiv = el.querySelector("div[style*='background-image']");
-        const name = el.querySelector("h4")?.textContent.trim();
-
-        return {
-          username: name,
-          image: imageDiv?.style.backgroundImage
-            .replace(/url\(["']?(.*?)["']?\)/, "$1") || null
-        };
-      });
-    });
-    
-    log(`📊 Found ${data.length} cards in DOM`);
-
-    log(`✅ Successfully extracted ${data.length} cards`);
-    log('📊 Card data:', data);
-
-    try {
-      const viewFullReportBtn = await page.waitForSelector(
-        'button:has-text("View Full Report")',
-        { timeout: 5000 }
-      );
-      await viewFullReportBtn.click();
-      await page.waitForTimeout(500);
-      await captureStep("full-report");
-      log("📸 Captured full report snapshot");
-    } catch (reportErr) {
-      log("ℹ️ View Full Report button not available:", reportErr.message);
-    }
+    // Step 7: Full report
+    emitStep("full-report", { profileData, cards });
 
     if (DEBUG_SCRAPE) {
-      const html = await page.content();
-      await writeFile('debug-latest.html', html, 'utf8');
-      log('📝 Debug HTML saved to debug-latest.html');
+      log("📊 Cards sample:", cards.slice(0, 3));
     }
 
-    await page.close();
-    log('✅ Page closed (browser instance kept alive)');
-    
-    // Save final result to MongoDB with cards
-    await saveSnapshotResult(username, runId, data, steps);
-    
-    // snapshotId should already be set from captureStep, but verify
-    if (!snapshotId) {
-      const { getSnapshotByRunId } = await import("../utils/mongodb.js");
-      const savedSnapshot = await getSnapshotByRunId(username, runId);
-      snapshotId = savedSnapshot?._id?.toString() || null;
+    // Save to MongoDB (Mongoose) - Stores USER Data
+    try {
+      // Use canonical username from profile if available, otherwise raw input
+      const canonicalUsername = (profile.username || rawUsername).replace(/^@/, "").toLowerCase().trim();
+
+      // Check if user already exists and is paid
+      const existingUser = await User.findOne({ username: canonicalUsername });
+
+      if (existingUser && existingUser.isPaid) {
+        log(`ℹ️ User ${canonicalUsername} is already paid. Skipping update to preserve original report.`);
+        // Optionally update only lastSeen or similar field if needed
+        await User.updateOne(
+          { username: canonicalUsername },
+          { $set: { updatedAt: new Date() } }
+        );
+      } else {
+        // Create or Update (if not paid)
+        await User.findOneAndUpdate(
+          { username: canonicalUsername },
+          {
+            $set: {
+              profileData: profile,
+              followers: cards,
+              scrapedAt: new Date(),
+              updatedAt: new Date(),
+              inputUsername: rawUsername.toLowerCase() // Track what the user searched for
+            },
+            $setOnInsert: {
+              username: canonicalUsername,
+              isPaid: false,
+              createdAt: new Date()
+            }
+          },
+          { upsert: true, new: true }
+        );
+        log(`✅ User data saved to MongoDB (Mongoose): ${canonicalUsername}`);
+      }
+    } catch (dbErr) {
+      log(`⚠️ Failed to save user data to MongoDB: ${dbErr.message}`);
     }
-    
-    // Calculate and log total time
+
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log(`⏱️  Total scraping time: ${totalTime} seconds`);
-    
+    log(`✅ Successfully extracted ${cards.length} cards`);
+
     return {
       runId,
-      snapshotId, // Include snapshot ID for frontend
-      steps, // Steps already have correct htmlPath
-      cards: data,
+      steps,
+      cards,
+      profileData, // Include profile data in final result
       totalTime,
     };
   } catch (error) {
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    log('❌ Scraping failed:', error.message);
-    log('📋 Error stack:', error.stack);
+    log("❌ Scraping failed:", error.message);
+    log("📋 Error stack:", error.stack);
     log(`⏱️  Time before failure: ${totalTime} seconds`);
-    
-    // Try to take a screenshot for debugging
-    try {
-      await page.screenshot({ path: 'error-screenshot.png', fullPage: true });
-      log('📸 Error screenshot saved to error-screenshot.png');
-    } catch (screenshotErr) {
-      log('⚠️  Could not take screenshot:', screenshotErr.message);
-    }
-    
-    await page.close();
     throw error;
   }
 }
-

@@ -1,4 +1,7 @@
 node_modules/
 .env
 *.log
-
+id_ed25519
+.pub
+.env.local
+*.pem
